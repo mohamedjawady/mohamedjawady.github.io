@@ -82,6 +82,77 @@ code {
   @apply text-sm;
 }
 
+/* Enhanced code block styling */
+.code-block-container {
+  @apply relative my-6 rounded-lg border border-border/50 overflow-hidden;
+}
+
+.code-block-header {
+  @apply flex items-center justify-between bg-muted/50 px-4 py-2 border-b border-border/50;
+}
+
+.code-block-content {
+  @apply relative overflow-hidden;
+}
+
+/* Line number styling */
+.code-line-numbers {
+  @apply select-none border-r border-border/50 pr-4 text-right text-muted-foreground;
+}
+
+/* Copy button animations */
+.copy-button {
+  @apply opacity-0 transition-opacity duration-200;
+}
+
+.code-block-container:hover .copy-button {
+  @apply opacity-100;
+}
+
+/* Syntax highlighting theme adjustments */
+.language-bash code,
+.language-shell code {
+  @apply text-green-400;
+}
+
+.language-python code .token.comment {
+  @apply text-muted-foreground italic;
+}
+
+.language-javascript code .token.function,
+.language-typescript code .token.function {
+  @apply text-blue-400;
+}
+
+.language-go code .token.keyword {
+  @apply text-purple-400;
+}
+
+/* Terminal-style code blocks */
+.terminal-block {
+  @apply bg-gray-900 text-green-400 font-mono;
+}
+
+.terminal-block::before {
+  content: "$ ";
+  @apply text-yellow-400;
+}
+
+/* Improved code block responsiveness */
+@media (max-width: 768px) {
+  .code-block-container {
+    @apply mx-0 rounded-none border-x-0;
+  }
+  
+  .code-block-header {
+    @apply px-3 py-2 text-sm;
+  }
+  
+  .code-block-content {
+    @apply text-sm;
+  }
+}
+
 /* Prose improvements for blog posts */
 .prose {
   @apply max-w-none;

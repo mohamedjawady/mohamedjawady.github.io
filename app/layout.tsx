@@ -1,0 +1,61 @@
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter, JetBrains_Mono } from "next/font/google"
+import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Header } from "@/components/header"
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+})
+
+export const metadata: Metadata = {
+  title: "0xHabib - Cybersecurity Learning Journey",
+  description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
+  keywords: ["cybersecurity", "malware analysis", "reverse engineering", "networking", "golang", "threat hunting"],
+  authors: [{ name: "Mohamed Habib Jaouadi" }],
+  creator: "Mohamed Habib Jaouadi",
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://0xhabib.dev",
+    title: "0xHabib - Cybersecurity Learning Journey",
+    description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
+    siteName: "0xHabib",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "0xHabib - Cybersecurity Learning Journey",
+    description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
+    creator: "@0xhabib",
+  }
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <div className="min-h-screen bg-background">
+            <Header />
+            <main>{children}</main>
+            <footer className="border-t border-border/40 py-12 px-4">
+              <div className="max-w-6xl mx-auto text-center">
+                <p className="text-muted-foreground">
+                  Built with Love.
+                  <span className="text-green-500 font-mono"> 0xHabib </span>© 2025
+                </p>
+              </div>
+            </footer>
+          </div>
+        </ThemeProvider>
+      </body>
+    </html>
+  )
+}

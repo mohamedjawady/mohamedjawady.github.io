@@ -7,6 +7,8 @@ import { formatDate } from "@/lib/utils"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { TableOfContents } from "@/components/table-of-contents"
+import { Metadata } from "next"
+import { BlogPostStructuredData } from "@/components/structured-data"
 
 interface PostPageProps {
   params: Promise<{ slug: string }>
@@ -19,6 +21,54 @@ export async function generateStaticParams() {
   }))
 }
 
+export async function generateMetadata({ params }: PostPageProps): Promise<Metadata> {
+  const { slug } = await params
+  const post = await getPostBySlug(slug)
+
+  if (!post) {
+    return {
+      title: 'Post Not Found',
+    }
+  }
+
+  const ogImageUrl = `/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+
+  return {
+    title: `${post.title} | 0xHabib`,
+    description: post.description,
+    keywords: post.tags,
+    authors: [{ name: post.author || '0xHabib' }],
+    openGraph: {
+      type: 'article',
+      title: post.title,
+      description: post.description,
+      url: `https://0xhabib.dev/posts/${slug}`,
+      siteName: '0xHabib',
+      publishedTime: post.date,
+      authors: [post.author || '0xHabib'],
+      tags: post.tags,
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: post.title,
+      description: post.description,
+      creator: '@0xhabib',
+      images: [ogImageUrl],
+    },
+    alternates: {
+      canonical: `https://0xhabib.dev/posts/${slug}`,
+    },
+  }
+}
+
 export default async function PostPage({ params }: PostPageProps) {
   const { slug } = await params
   const post = await getPostBySlug(slug)
@@ -27,16 +77,29 @@ export default async function PostPage({ params }: PostPageProps) {
     notFound()
   }
 
+  const ogImageUrl = `/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const postUrl = `https://0xhabib.dev/posts/${slug}`
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      {/* Back Button */}
-      <Link
-        href="/posts"
-        className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors mb-8"
-      >
-        <ArrowLeft className="w-4 h-4 mr-2" />
-        Back to posts
-      </Link>
+    <>
+      <BlogPostStructuredData
+        title={post.title}
+        description={post.description || ''}
+        author={post.author || '0xHabib'}
+        datePublished={post.date}
+        url={postUrl}
+        tags={post.tags}
+        imageUrl={`https://0xhabib.dev${ogImageUrl}`}
+      />
+      <div className="max-w-4xl mx-auto px-4 py-12">
+        {/* Back Button */}
+        <Link
+          href="/posts"
+          className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors mb-8"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to posts
+        </Link>
 
       {/* Post Header */}
       <header className="mb-12">
@@ -78,5 +141,6 @@ export default async function PostPage({ params }: PostPageProps) {
         </article>
       </div>
     </div>
+    </>
   )
 }

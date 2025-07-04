@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   keywords: ["cybersecurity", "malware analysis", "reverse engineering", "networking", "golang", "threat hunting"],
   authors: [{ name: "Mohamed Habib Jaouadi" }],
   creator: "Mohamed Habib Jaouadi",
+  metadataBase: new URL('https://0xhabib.dev'),
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -24,13 +25,33 @@ export const metadata: Metadata = {
     title: "0xHabib - Cybersecurity Learning Journey",
     description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
     siteName: "0xHabib",
+    images: [
+      {
+        url: "/api/og",
+        width: 1200,
+        height: 630,
+        alt: "0xHabib - Cybersecurity Learning Journey",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "0xHabib - Cybersecurity Learning Journey",
     description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
     creator: "@0xhabib",
-  }
+    images: ["/api/og"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
 }
 
 export default function RootLayout({

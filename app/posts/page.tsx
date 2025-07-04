@@ -3,6 +3,31 @@ import { PostCard } from "@/components/post-card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
+import { Metadata } from "next"
+
+export const metadata: Metadata = {
+  title: "All Posts | 0xHabib",
+  description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
+  openGraph: {
+    title: "All Posts | 0xHabib",
+    description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
+    url: "https://0xhabib.dev/posts",
+    images: [
+      {
+        url: "/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
+        width: 1200,
+        height: 630,
+        alt: "All Posts - 0xHabib",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "All Posts | 0xHabib",
+    description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
+    images: ["/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more."],
+  },
+}
 
 export default async function PostsPage() {
   const posts = await getAllPosts()

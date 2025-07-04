@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
               fontSize: 18,
             }}
           >
-            0xhabib.dev
+            0xhabib.tech
           </div>
         </div>
       </div>

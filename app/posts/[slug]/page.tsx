@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
       type: 'article',
       title: post.title,
       description: post.description,
-      url: `https://0xhabib.dev/posts/${slug}`,
+      url: `https://0xhabib.tech/posts/${slug}`,
       siteName: '0xHabib',
       publishedTime: post.date,
       authors: [post.author || '0xHabib'],
@@ -64,7 +64,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
       images: [ogImageUrl],
     },
     alternates: {
-      canonical: `https://0xhabib.dev/posts/${slug}`,
+      canonical: `https://0xhabib.tech/posts/${slug}`,
     },
   }
 }
@@ -78,7 +78,7 @@ export default async function PostPage({ params }: PostPageProps) {
   }
 
   const ogImageUrl = `/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
-  const postUrl = `https://0xhabib.dev/posts/${slug}`
+  const postUrl = `https://0xhabib.tech/posts/${slug}`
 
   return (
     <>
@@ -89,7 +89,7 @@ export default async function PostPage({ params }: PostPageProps) {
         datePublished={post.date}
         url={postUrl}
         tags={post.tags}
-        imageUrl={`https://0xhabib.dev${ogImageUrl}`}
+        imageUrl={`https://0xhabib.tech${ogImageUrl}`}
       />
       <div className="max-w-4xl mx-auto px-4 py-12">
         {/* Back Button */}

@@ -25,12 +25,12 @@ export function BlogPostStructuredData({
     author: {
       '@type': 'Person',
       name: author,
-      url: 'https://0xhabib.dev',
+      url: 'https://0xhabib.tech',
     },
     publisher: {
       '@type': 'Organization',
       name: '0xHabib',
-      url: 'https://0xhabib.dev',
+      url: 'https://0xhabib.tech',
     },
     datePublished: datePublished,
     dateModified: datePublished,
@@ -74,7 +74,7 @@ export function WebsiteStructuredData({ name, description, url }: WebsiteStructu
     author: {
       '@type': 'Person',
       name: 'Mohamed Habib Jaouadi',
-      url: 'https://0xhabib.dev',
+      url: 'https://0xhabib.tech',
     },
     sameAs: [
       'https://twitter.com/0xhabib',

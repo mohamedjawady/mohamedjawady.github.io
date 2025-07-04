@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "All Posts | 0xHabib",
     description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
-    url: "https://0xhabib.dev/posts",
+    url: "https://0xhabib.tech/posts",
     images: [
       {
         url: "/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",

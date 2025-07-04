@@ -17,11 +17,11 @@ export const metadata: Metadata = {
   keywords: ["cybersecurity", "malware analysis", "reverse engineering", "networking", "golang", "threat hunting"],
   authors: [{ name: "Mohamed Habib Jaouadi" }],
   creator: "Mohamed Habib Jaouadi",
-  metadataBase: new URL('https://0xhabib.dev'),
+  metadataBase: new URL('https://0xhabib.tech'),
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://0xhabib.dev",
+    url: "https://0xhabib.tech",
     title: "0xHabib - Cybersecurity Learning Journey",
     description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
     siteName: "0xHabib",

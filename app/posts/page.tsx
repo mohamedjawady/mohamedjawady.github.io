@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     url: getCanonicalUrl("/posts"),
     images: [
       {
-        url: "/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
+        url: `${getCanonicalUrl('')}/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.`,
         width: 1200,
         height: 630,
         alt: "All Posts - 0xHabib",
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "All Posts | 0xHabib",
     description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
-    images: ["/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more."],
+    images: [`${getCanonicalUrl('')}/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.`],
   },
 }
 

@@ -3,9 +3,15 @@
  * Handles both www and non-www domains properly
  */
 export function getBaseUrl(): string {
-  // In production, always use the canonical domain
+  // In production, use the www subdomain as it appears to be the canonical one
   if (process.env.NODE_ENV === 'production') {
-    return 'https://0xhabib.tech'
+    // Check if we have access to headers to determine the actual domain
+    if (typeof window !== 'undefined') {
+      // Client-side: use current domain
+      return `${window.location.protocol}//${window.location.host}`
+    }
+    // Server-side: use the canonical www domain to avoid redirects
+    return 'https://www.0xhabib.tech'
   }
   
   // In development, use localhost

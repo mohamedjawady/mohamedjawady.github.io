@@ -60,6 +60,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
           type: 'image/png',
         },
       ],
+      locale: 'en_US',
     },
     twitter: {
       card: 'summary_large_image',
@@ -70,6 +71,13 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
     },
     alternates: {
       canonical: postUrl,
+    },
+    // Additional meta tags for better social sharing
+    other: {
+      'article:author': post.author || '0xHabib',
+      'article:published_time': post.date,
+      'article:section': 'Technology',
+      'article:tag': post.tags.join(', '),
     },
   }
 }

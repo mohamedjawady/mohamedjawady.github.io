@@ -67,12 +67,7 @@ export default function NotFound() {
             >
               Tags
             </Link>
-            <Link 
-              href="/now" 
-              className="hover:text-green-500 transition-colors underline decoration-dotted"
-            >
-              Now
-            </Link>
+            
           </div>
         </div>
 

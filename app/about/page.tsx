@@ -36,20 +36,15 @@ export default function AboutPage() {
         <h1 className="text-4xl font-bold font-mono mb-6">About Me</h1>
         <div className="prose prose-slate dark:prose-invert max-w-none">
           <p className="text-xl leading-relaxed mb-6">
-            I'm Mohamed Habib Jaouadi, a cybersecurity enthusiast passionate about understanding how systems work, how
-            they break, and how to build them better.
+            IMy name is Mohamed Habib Jaouadi and I have always been a cybersecurity enthusiast who has a passion for understand how systems work, how systems fail, and how to build systems better.
           </p>
 
           <p className="leading-relaxed mb-6">
-            My journey in cybersecurity started with curiosity about how malware operates and has evolved into a
-            comprehensive exploration of offensive security, threat hunting, and secure software development. I believe
-            in learning by doing, breaking things to understand them, and sharing knowledge with the community.
+          I began my journey in cybersecurity focused on malware analysis. This curiosity has since evolved into offensive security, threat hunting, and secure software development. I have learned by doing, usually doing something destructive to aid in understanding complex systems, and by sharing that knowledge with my security community along the way.
           </p>
 
           <p className="leading-relaxed mb-8">
-            This blog serves as my digital notebook where I document discoveries, techniques, tools, and insights from
-            my continuous learning journey. Whether it's reverse engineering a new malware sample, exploring network
-            protocols, or building security tools, I aim to share both the process and the outcomes.
+          This blog will function as my notebook, and will serve as a place to document my findings, techniques, tools, and learning experiences. Whether that experience is finding a way to reverse engineer a new malware sample, learning about different network protocols, or building a new security tool, I want to share both the process and the outcome.
           </p>
         </div>
       </div>
@@ -94,7 +89,7 @@ export default function AboutPage() {
             </p>
             <div className="flex flex-wrap gap-4">
               <a
-                href="https://github.com"
+                href="github.com/mohamedjawady"
                 className="text-green-500 hover:text-green-400 transition-colors"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -102,14 +97,14 @@ export default function AboutPage() {
                 GitHub
               </a>
               <a
-                href="https://linkedin.com"
+                href="https://www.linkedin.com/in/mohamedjawady/"
                 className="text-green-500 hover:text-green-400 transition-colors"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 LinkedIn
               </a>
-              <a href="mailto:contact@example.com" className="text-green-500 hover:text-green-400 transition-colors">
+              <a href="mailto:mjawady31@gmail.com" className="text-green-500 hover:text-green-400 transition-colors">
                 Email
               </a>
             </div>

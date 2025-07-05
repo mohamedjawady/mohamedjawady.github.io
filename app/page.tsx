@@ -72,9 +72,7 @@ export default async function HomePage() {
             Hi, I'm <span className="text-foreground font-semibold">Mohamed Habib Jaouadi</span>
           </p>
           <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Cybersecurity researcher & malware analyst with 4+ years of experience in threat hunting, 
-            reverse engineering, and building security tools. Currently specializing in advanced persistent 
-            threats and automating security workflows.
+          My name is Mohamed Habib Jaouadi and I have always been a cybersecurity enthusiast who has a passion for understand how systems work, how systems fail, and how to build systems better.
           </p>
           
           <div className="flex flex-wrap justify-center gap-2 mb-8">

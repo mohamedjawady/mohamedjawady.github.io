@@ -73,6 +73,8 @@ export default async function HomePage() {
           </p>
           <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
           Cybersecurity enthusiast who has a passion for understand how systems work, how systems fail, and how to build systems better.
+          <br />
+          <br />
           </p>
           
           <div className="flex flex-wrap justify-center gap-2 mb-8">

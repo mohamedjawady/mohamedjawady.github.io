@@ -1,11 +1,12 @@
 import { getAllPosts } from '@/lib/posts'
+import { getCanonicalUrl } from '@/lib/url'
 import { MetadataRoute } from 'next'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const posts = await getAllPosts()
   
   const postUrls = posts.map((post) => ({
-    url: `https://0xhabib.tech/posts/${post.slug}`,
+    url: getCanonicalUrl(`/posts/${post.slug}`),
     lastModified: new Date(post.date),
     changeFrequency: 'monthly' as const,
     priority: 0.8,
@@ -13,31 +14,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     {
-      url: 'https://0xhabib.tech',
+      url: getCanonicalUrl(''),
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 1,
     },
     {
-      url: 'https://0xhabib.tech/posts',
+      url: getCanonicalUrl('/posts'),
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.9,
     },
     {
-      url: 'https://0xhabib.tech/about',
+      url: getCanonicalUrl('/about'),
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.7,
     },
     {
-      url: 'https://0xhabib.tech/now',
+      url: getCanonicalUrl('/now'),
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.6,
     },
     {
-      url: 'https://0xhabib.tech/tags',
+      url: getCanonicalUrl('/tags'),
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.5,

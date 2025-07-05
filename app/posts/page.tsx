@@ -3,6 +3,7 @@ import { PostCard } from "@/components/post-card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
+import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "All Posts | 0xHabib",
     description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
-    url: "https://0xhabib.tech/posts",
+    url: getCanonicalUrl("/posts"),
     images: [
       {
         url: "/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",

@@ -6,6 +6,7 @@ import "katex/dist/katex.min.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Header } from "@/components/header"
 import { Analytics } from "@vercel/analytics/next"
+import { getCanonicalUrl } from "@/lib/url"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({
@@ -13,17 +14,19 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
 })
 
+const baseUrl = getCanonicalUrl('')
+
 export const metadata: Metadata = {
   title: "0xHabib - Cybersecurity Learning Journey",
   description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
   keywords: ["cybersecurity", "malware analysis", "reverse engineering", "networking", "golang", "threat hunting"],
   authors: [{ name: "Mohamed Habib Jaouadi" }],
   creator: "Mohamed Habib Jaouadi",
-  metadataBase: new URL('https://0xhabib.tech'),
+  metadataBase: new URL(baseUrl),
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://0xhabib.tech",
+    url: baseUrl,
     title: "0xHabib - Cybersecurity Learning Journey",
     description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
     siteName: "0xHabib",

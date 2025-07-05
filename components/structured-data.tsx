@@ -1,3 +1,5 @@
+import { getCanonicalUrl } from '@/lib/url'
+
 interface BlogPostStructuredDataProps {
   title: string
   description: string
@@ -17,6 +19,8 @@ export function BlogPostStructuredData({
   tags,
   imageUrl,
 }: BlogPostStructuredDataProps) {
+  const baseUrl = getCanonicalUrl('')
+  
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
@@ -25,12 +29,12 @@ export function BlogPostStructuredData({
     author: {
       '@type': 'Person',
       name: author,
-      url: 'https://0xhabib.tech',
+      url: baseUrl,
     },
     publisher: {
       '@type': 'Organization',
       name: '0xHabib',
-      url: 'https://0xhabib.tech',
+      url: baseUrl,
     },
     datePublished: datePublished,
     dateModified: datePublished,
@@ -65,6 +69,8 @@ interface WebsiteStructuredDataProps {
 }
 
 export function WebsiteStructuredData({ name, description, url }: WebsiteStructuredDataProps) {
+  const baseUrl = getCanonicalUrl('')
+  
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
@@ -74,7 +80,7 @@ export function WebsiteStructuredData({ name, description, url }: WebsiteStructu
     author: {
       '@type': 'Person',
       name: 'Mohamed Habib Jaouadi',
-      url: 'https://0xhabib.tech',
+      url: baseUrl,
     },
     sameAs: [
       'https://twitter.com/0xhabib',

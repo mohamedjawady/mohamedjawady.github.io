@@ -9,6 +9,7 @@ import { notFound } from "next/navigation"
 import { TableOfContents } from "@/components/table-of-contents"
 import { Metadata } from "next"
 import { BlogPostStructuredData } from "@/components/structured-data"
+import { getCanonicalUrl } from "@/lib/url"
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 
@@ -33,7 +34,8 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
     }
   }
 
-  const ogImageUrl = `https://0xhabib.tech/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return {
     title: `${post.title} | 0xHabib`,
@@ -44,7 +46,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
       type: 'article',
       title: post.title,
       description: post.description,
-      url: `https://0xhabib.tech/posts/${slug}`,
+      url: postUrl,
       siteName: '0xHabib',
       publishedTime: post.date,
       authors: [post.author || '0xHabib'],
@@ -67,7 +69,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
       images: [ogImageUrl],
     },
     alternates: {
-      canonical: `https://0xhabib.tech/posts/${slug}`,
+      canonical: postUrl,
     },
   }
 }
@@ -80,8 +82,8 @@ export default async function PostPage({ params }: PostPageProps) {
     notFound()
   }
 
-  const ogImageUrl = `https://0xhabib.tech/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
-  const postUrl = `https://0xhabib.tech/posts/${slug}`
+  const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return (
     <>

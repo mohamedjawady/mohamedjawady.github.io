@@ -23,5 +23,5 @@ export function getBaseUrl(): string {
  */
 export function getCanonicalUrl(path: string): string {
   const baseUrl = getBaseUrl()
-  return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+  return `${baseUrl}${path.startsWith('/') ? path : `${path}`}`
 }

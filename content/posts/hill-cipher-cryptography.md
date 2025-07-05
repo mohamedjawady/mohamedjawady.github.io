@@ -17,22 +17,85 @@ The Hill cipher, invented by mathematician Lester S. Hill in 1929, represents on
 The Hill cipher uses matrix multiplication to encrypt and decrypt messages. It transforms blocks of plaintext into ciphertext using a key matrix, leveraging the mathematical properties of linear transformations in modular arithmetic.
 
 **Key Components:**
-- **Key Matrix (K)**: An n×n invertible matrix
-- **Plaintext Vector (P)**: Numerical representation of text block
-- **Ciphertext Vector (C)**: Encrypted result
-- **Modulus (m)**: Typically 26 for English alphabet
+- **Key Matrix ($K$)**: An $n \times n$ invertible matrix
+- **Plaintext Vector ($\mathbf{p}$)**: Numerical representation of text block
+- **Ciphertext Vector ($\mathbf{c}$)**: Encrypted result
+- **Modulus ($m$)**: Typically 26 for English alphabet
 
 ### The Encryption Formula
 
-```
-C = (K × P) mod m
-```
+The fundamental encryption operation is expressed as:
+
+$$\mathbf{c} \equiv K \cdot \mathbf{p} \pmod{m}$$
 
 Where:
-- C is the ciphertext vector
-- K is the key matrix
-- P is the plaintext vector
-- m is the modulus (26 for English)
+- $\mathbf{c} = [c_1, c_2, \ldots, c_n]^T$ is the ciphertext vector
+- $K$ is the $n \times n$ key matrix
+- $\mathbf{p} = [p_1, p_2, \ldots, p_n]^T$ is the plaintext vector
+- $m = 26$ for the English alphabet
+
+For a $2 \times 2$ key matrix, this expands to:
+
+$$\begin{bmatrix} c_1 \\ c_2 \end{bmatrix} \equiv \begin{bmatrix} k_{11} & k_{12} \\ k_{21} & k_{22} \end{bmatrix} \begin{bmatrix} p_1 \\ p_2 \end{bmatrix} \pmod{26}$$
+
+Which gives us:
+- $c_1 \equiv k_{11}p_1 + k_{12}p_2 \pmod{26}$
+- $c_2 \equiv k_{21}p_1 + k_{22}p_2 \pmod{26}$
+
+### The Decryption Formula
+
+Decryption requires the inverse of the key matrix:
+
+$$\mathbf{p} \equiv K^{-1} \cdot \mathbf{c} \pmod{m}$$
+
+For the key matrix to be invertible modulo 26, its determinant must satisfy:
+
+$$\gcd(\det(K), 26) = 1$$
+
+## Complete Mathematical Example
+
+Let's work through a complete example with the plaintext "HILL" using a $2 \times 2$ key matrix.
+
+### Step 1: Setup
+
+**Plaintext**: HILL  
+**Key Matrix**: $K = \begin{bmatrix} 3 & 2 \\ 5 & 7 \end{bmatrix}$
+
+### Step 2: Convert to Numbers
+
+$$\text{H} = 7, \text{I} = 8, \text{L} = 11, \text{L} = 11$$
+
+**Plaintext blocks**: $\mathbf{p_1} = \begin{bmatrix} 7 \\ 8 \end{bmatrix}$, $\mathbf{p_2} = \begin{bmatrix} 11 \\ 11 \end{bmatrix}$
+
+### Step 3: Verify Key Invertibility
+
+$$\det(K) = 3 \cdot 7 - 2 \cdot 5 = 21 - 10 = 11$$
+
+Since $\gcd(11, 26) = 1$, the matrix is invertible.
+
+### Step 4: Encryption
+
+For the first block:
+$$\mathbf{c_1} = K \cdot \mathbf{p_1} = \begin{bmatrix} 3 & 2 \\ 5 & 7 \end{bmatrix} \begin{bmatrix} 7 \\ 8 \end{bmatrix} = \begin{bmatrix} 37 \\ 91 \end{bmatrix} \equiv \begin{bmatrix} 11 \\ 13 \end{bmatrix} \pmod{26}$$
+
+For the second block:
+$$\mathbf{c_2} = K \cdot \mathbf{p_2} = \begin{bmatrix} 3 & 2 \\ 5 & 7 \end{bmatrix} \begin{bmatrix} 11 \\ 11 \end{bmatrix} = \begin{bmatrix} 55 \\ 132 \end{bmatrix} \equiv \begin{bmatrix} 3 \\ 2 \end{bmatrix} \pmod{26}$$
+
+**Ciphertext**: $[11, 13, 3, 2] \rightarrow$ "LNDC"
+
+### Step 5: Calculate Inverse for Decryption
+
+$$\det(K)^{-1} \equiv 11^{-1} \pmod{26}$$
+
+Using the Extended Euclidean Algorithm: $11 \cdot 19 \equiv 1 \pmod{26}$, so $11^{-1} \equiv 19 \pmod{26}$.
+
+$$K^{-1} \equiv 19 \cdot \begin{bmatrix} 7 & -2 \\ -5 & 3 \end{bmatrix} \equiv \begin{bmatrix} 133 & -38 \\ -95 & 57 \end{bmatrix} \equiv \begin{bmatrix} 3 & 14 \\ 9 & 5 \end{bmatrix} \pmod{26}$$
+
+### Step 6: Verification by Decryption
+
+$$\mathbf{p_1} = K^{-1} \cdot \mathbf{c_1} = \begin{bmatrix} 3 & 14 \\ 9 & 5 \end{bmatrix} \begin{bmatrix} 11 \\ 13 \end{bmatrix} = \begin{bmatrix} 215 \\ 164 \end{bmatrix} \equiv \begin{bmatrix} 7 \\ 8 \end{bmatrix} \pmod{26}$$
+
+This gives us "HI", confirming our encryption was correct! ✓
 
 ## Implementation Walkthrough
 
@@ -81,7 +144,17 @@ print(key_matrix)
 
 ### Step 3: Matrix Determinant and Invertibility
 
-For decryption, the key matrix must be invertible modulo 26:
+For decryption, the key matrix must be invertible modulo 26. This requires that:
+
+$$\gcd(\det(K), 26) = 1$$
+
+For a $2 \times 2$ matrix $K = \begin{bmatrix} a & b \\ c & d \end{bmatrix}$, the determinant is:
+
+$$\det(K) = ad - bc$$
+
+The modular inverse of the determinant must exist. We need to find $\det(K)^{-1} \bmod 26$ such that:
+
+$$\det(K) \cdot \det(K)^{-1} \equiv 1 \pmod{26}$$
 
 ```python
 def mod_inverse(a, m):
@@ -143,6 +216,18 @@ print(f"Ciphertext: {ciphertext}")
 ```
 
 ### Step 5: Matrix Inversion Modulo 26
+
+The inverse of a $2 \times 2$ matrix modulo $m$ is calculated as:
+
+$$K^{-1} \equiv \det(K)^{-1} \cdot \text{adj}(K) \pmod{m}$$
+
+Where the adjugate matrix for $K = \begin{bmatrix} a & b \\ c & d \end{bmatrix}$ is:
+
+$$\text{adj}(K) = \begin{bmatrix} d & -b \\ -c & a \end{bmatrix}$$
+
+Therefore:
+
+$$K^{-1} \equiv \det(K)^{-1} \cdot \begin{bmatrix} d & -b \\ -c & a \end{bmatrix} \pmod{26}$$
 
 ```python
 def matrix_inverse_mod(matrix, mod):
@@ -300,7 +385,47 @@ if __name__ == "__main__":
     print(f"Decrypted: {decrypted}")
 ```
 
-## Cryptanalysis and Security
+## Mathematical Security Analysis
+
+### Key Space Analysis
+
+For an $n \times n$ Hill cipher key matrix over $\mathbb{Z}_{26}$:
+
+**Total possible matrices**: $26^{n^2}$
+
+**Valid key matrices**: Those with $\gcd(\det(K), 26) = 1$
+
+Since $26 = 2 \cdot 13$, a matrix is invertible mod 26 if and only if its determinant is coprime to 26. This significantly reduces the key space.
+
+### Frequency Analysis Resistance
+
+The Hill cipher provides resistance to simple frequency analysis because:
+
+1. **Multiple plaintext letters map to one ciphertext letter**
+2. **Context dependency**: The same letter encrypts differently based on its block position
+3. **Polygraphic nature**: Operates on $n$-grams rather than individual characters
+
+However, it's still vulnerable to **bigram and trigram frequency analysis** for small block sizes.
+
+### Linear Algebra Attack Complexity
+
+For a known-plaintext attack with block size $n$:
+
+- **Required known blocks**: $n$ linearly independent plaintext-ciphertext pairs
+- **Computational complexity**: $O(n^3)$ for matrix inversion
+- **Success probability**: High if attacker has sufficient known pairs
+
+The attack succeeds when the plaintext matrix $\mathbf{P}$ is invertible:
+
+$$\det(\mathbf{P}) \not\equiv 0 \pmod{26}$$
+
+### Differential Cryptanalysis Vulnerability
+
+The linear nature makes Hill cipher vulnerable to differential attacks. If we have two plaintexts $\mathbf{p}$ and $\mathbf{p}'$ with corresponding ciphertexts $\mathbf{c}$ and $\mathbf{c}'$:
+
+$$\mathbf{c} - \mathbf{c}' \equiv K(\mathbf{p} - \mathbf{p}') \pmod{26}$$
+
+This linear relationship can be exploited to recover key information.
 
 ### Strengths
 
@@ -316,7 +441,21 @@ if __name__ == "__main__":
 
 ### Cryptanalysis Example
 
-With known plaintext-ciphertext pairs, an attacker can set up equations:
+With known plaintext-ciphertext pairs, an attacker can set up a system of linear equations. For $n$ pairs of plaintext-ciphertext blocks:
+
+$$C_i = K \cdot P_i \pmod{26} \quad \text{for } i = 1, 2, \ldots, n$$
+
+This can be written in matrix form as:
+
+$$\mathbf{C} = K \cdot \mathbf{P} \pmod{26}$$
+
+Where $\mathbf{C} = [C_1 | C_2 | \ldots | C_n]$ and $\mathbf{P} = [P_1 | P_2 | \ldots | P_n]$.
+
+If $\mathbf{P}$ is invertible, the attacker can recover the key:
+
+$$K \equiv \mathbf{C} \cdot \mathbf{P}^{-1} \pmod{26}$$
+
+This demonstrates the vulnerability of the Hill cipher to known-plaintext attacks.
 
 ```python
 def known_plaintext_attack(plaintext_blocks, ciphertext_blocks):

@@ -9,6 +9,8 @@ import { notFound } from "next/navigation"
 import { TableOfContents } from "@/components/table-of-contents"
 import { Metadata } from "next"
 import { BlogPostStructuredData } from "@/components/structured-data"
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 
 interface PostPageProps {
   params: Promise<{ slug: string }>
@@ -137,7 +139,16 @@ export default async function PostPage({ params }: PostPageProps) {
 
         {/* Post Content */}
         <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none">
-          <MDXRemote source={post.content} components={mdxComponents} />
+          <MDXRemote 
+            source={post.content} 
+            components={mdxComponents}
+            options={{
+              mdxOptions: {
+                remarkPlugins: [remarkMath],
+                rehypePlugins: [rehypeKatex],
+              },
+            }}
+          />
         </article>
       </div>
     </div>

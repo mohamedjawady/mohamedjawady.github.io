@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     url: getCanonicalUrl("/posts"),
     images: [
       {
-        url: `${getCanonicalUrl('')}/api/og?title=All Posts&description=Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.`,
+        url: `${getCanonicalUrl('/api/og')}?title=All Posts&description=Browse all blog posts...`,
         width: 1200,
         height: 630,
         alt: "All Posts - 0xHabib",

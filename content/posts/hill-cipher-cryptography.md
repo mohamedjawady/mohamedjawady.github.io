@@ -2,7 +2,7 @@
 title: "The Hill Cipher: Linear Algebra Meets Cryptography"
 description: "Exploring the Hill cipher, a polygraphic substitution cipher that uses linear algebra and matrix operations for encryption and decryption."
 date: "2025-01-04"
-author: "0xHabib"
+author: "Mohamed Habib Jaouadi"
 tags: ["cryptography", "classical-ciphers", "linear-algebra", "matrix", "encryption"]
 ---
 

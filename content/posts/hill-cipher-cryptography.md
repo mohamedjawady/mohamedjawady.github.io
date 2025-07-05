@@ -209,7 +209,7 @@ def hill_encrypt(plaintext, key_matrix, block_size):
 
 # Example encryption
 plaintext = "ATTACKATDAWN"
-key_matrix = np.array([[6, 24], [1, 16]])  # Must be invertible mod 26
+key_matrix = np.array([[3, 2], [5, 7]])  # This matrix is invertible mod 26
 ciphertext = hill_encrypt(plaintext, key_matrix, 2)
 print(f"Plaintext: {plaintext}")
 print(f"Ciphertext: {ciphertext}")
@@ -371,7 +371,7 @@ class HillCipher:
 # Usage example
 if __name__ == "__main__":
     # Create cipher with 2×2 key matrix
-    key = [[6, 24], [1, 16]]
+    key = [[3, 2], [5, 7]]  # This matrix has det = 11, which is coprime to 26
     cipher = HillCipher(key)
     
     # Encrypt message
@@ -384,6 +384,44 @@ if __name__ == "__main__":
     decrypted = cipher.decrypt(encrypted)
     print(f"Decrypted: {decrypted}")
 ```
+### Troubleshooting: "Invalid key matrix" Error
+
+If you get a `ValueError: Invalid key matrix - not invertible mod 26`, it means that the key matrix you provided cannot be inverted modulo 26, which is a requirement for the Hill cipher to work. A matrix is invertible mod 26 only if:
+- Its determinant is non-zero mod 26.
+- The determinant is coprime to 26 (i.e., gcd(det, 26) == 1). 
+
+Here's how to fix it:
+
+```python
+def check_matrix_validity(matrix):
+    """Check if a matrix is valid for Hill cipher"""
+    det = int(round(np.linalg.det(matrix))) % 26
+    is_valid = gcd(det, 26) == 1
+    
+    print(f"Matrix: {matrix.tolist()}")
+    print(f"Determinant: {det}")
+    print(f"GCD(det, 26): {gcd(det, 26)}")
+    print(f"Valid for Hill cipher: {is_valid}")
+    
+    return is_valid
+
+# Test some matrices
+test_matrices = [
+    np.array([[6, 24], [1, 16]]),  # Invalid: det = 72 % 26 = 20, gcd(20,26) = 2
+    np.array([[3, 2], [5, 7]]),    # Valid: det = 11, gcd(11,26) = 1
+    np.array([[1, 0], [0, 1]]),    # Valid: det = 1, gcd(1,26) = 1 (identity matrix)
+]
+
+for matrix in test_matrices:
+    check_matrix_validity(matrix)
+    print("-" * 40)
+```
+
+**Quick fixes for invalid matrices:**
+1. **Change one element** slightly and recheck
+2. **Use the identity matrix** `[[1,0],[0,1]]` for testing
+3. **Use our proven examples**: `[[3,2],[5,7]]` or `[[7,8],[11,11]]`
+
 
 ## Mathematical Security Analysis
 
@@ -525,6 +563,22 @@ def generate_random_key(size):
         if gcd(det, 26) == 1:  # Check if invertible
             return matrix
 
+# Examples of valid and invalid matrices
+print("Valid matrices (invertible mod 26):")
+valid_examples = [
+    [[3, 2], [5, 7]],    # det = 11, gcd(11,26) = 1 ✓
+    [[7, 8], [11, 11]],  # det = 21, gcd(21,26) = 1 ✓  
+    [[1, 2], [3, 4]],    # det = -2 ≡ 24, gcd(24,26) = 2 ✗ which is not valid
+]
+
+for i, matrix in enumerate(valid_examples):
+    det = (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]) % 26
+    is_valid = gcd(det, 26) == 1
+    print(f"Matrix {i+1}: {matrix}")
+    print(f"  Determinant mod 26: {det}")
+    print(f"  Valid: {is_valid}")
+    print()
+
 # Generate 3×3 key
 key_3x3 = generate_random_key(3)
 print("Generated 3×3 key:")
@@ -562,4 +616,8 @@ It's essential to highlight that the basic principle of using vectors and matric
 
 In conclusion, the Hill cipher's importance as the first application of linear algebra and its geometric interpretations and analyses to cryptography cannot be understated, as this significance can be seen in contemporary secure digital communications' mathematical engines.
 
+## Additional Notes
+
 **Remember!**: While fascinating historically, never use classical ciphers like Hill for actual security - always use modern, well-vetted cryptographic algorithms!
+
+Also `python np.linalg.det()` returns a float; rounding is necessary but can lead to inaccuracies for larger matrices. Use integer methods or sympy for exact arithmetic if precision is critical.

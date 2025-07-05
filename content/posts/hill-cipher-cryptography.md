@@ -8,13 +8,13 @@ tags: ["cryptography", "classical-ciphers", "linear-algebra", "matrix", "encrypt
 
 # The Hill Cipher: Linear Algebra Meets Cryptography
 
-The Hill cipher, invented by mathematician Lester S. Hill in 1929, represents one of the first attempts to apply linear algebra to cryptography. Unlike simple substitution ciphers that work on individual characters, the Hill cipher operates on blocks of text, making it a polygraphic cipher that's significantly more resistant to frequency analysis.
+Invented by mathematician Lester S. Hill in 1929, the Hill cipher is one of the first examples of the application of linear algebra to cryptography. The Hill cipher is a polygraphic cipher, which operates on blocks of text rather than individual characters. This is what makes it much more resistant to frequency analysis than simple substitution ciphers.
 
 ## Mathematical Foundation
 
 ### Basic Concept
 
-The Hill cipher uses matrix multiplication to encrypt and decrypt messages. It transforms blocks of plaintext into ciphertext using a key matrix, leveraging the mathematical properties of linear transformations in modular arithmetic.
+The Hill cipher uses matrix multiplication to encrypt and decrypt messages. The Hill cipher encrypts plain text into ciphertext using a key matrix and is based on the linear transformation properties of modular arithmetic.
 
 **Key Components:**
 - **Key Matrix ($K$)**: An $n \times n$ invertible matrix
@@ -554,18 +554,12 @@ While not secure by modern standards, the Hill cipher serves as an excellent edu
 
 ## Conclusion
 
-The Hill cipher represents a significant milestone in cryptographic history, bridging classical techniques with mathematical rigor. While its linear nature makes it vulnerable to modern attacks, it remains valuable for:
+Although the Hill cipher is not relevantly secure anymore, it was a real advance in the early development of cryptography since it was the first algorithm that utilized linear algebra. In particular, the way Hill used linear algebra was in the form of matrix multiplication over finite fields.
 
-- **Educational purposes**: Teaching linear algebra applications
-- **Historical study**: Understanding cryptographic evolution
-- **Algorithm development**: Foundation for more complex systems
+The Hill cipher was the first algorithm to begin to take the transition away from simple substitution ciphers where the use of letter frequency and similar statistical techniques could still be used to reveal the plaintext, and toward structured and mathematical transformations. 
 
-Key takeaways:
-1. **Mathematical foundation matters**: Solid mathematical principles enhance security
-2. **Linearity can be dangerous**: Linear operations are often vulnerable to analysis
-3. **Key management is critical**: Invertible keys are essential for proper function
-4. **Block processing adds complexity**: Makes frequency analysis more difficult
+It's essential to highlight that the basic principle of using vectors and matrices to transform plaintext is inherently linked to modern algorithms such as the Advanced Encryption Standard (AES). For example, AES heavily relies on linear algebra, including both plain vector calculation and hardened operations (e.g., the mixcolumns operation is matrix multiplication performed on a finite field (GF(2^8)) with the goal of achieving both diffusion and security through structured mathematical transformations). 
 
-The Hill cipher's legacy lives on in modern cryptography, where linear algebra continues to play a crucial role in algorithms like AES and elliptic curve cryptography.
+In conclusion, the Hill cipher's importance as the first application of linear algebra and its geometric interpretations and analyses to cryptography cannot be understated, as this significance can be seen in contemporary secure digital communications' mathematical engines.
 
-🔐 **Remember**: While fascinating historically, never use classical ciphers like Hill for actual security - always use modern, well-vetted cryptographic algorithms!
+**Remember!**: While fascinating historically, never use classical ciphers like Hill for actual security - always use modern, well-vetted cryptographic algorithms!

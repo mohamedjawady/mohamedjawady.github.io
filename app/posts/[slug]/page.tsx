@@ -116,6 +116,12 @@ export default async function PostPage({ params }: PostPageProps) {
             <Clock className="w-4 h-4" />
             <span>{post.readingTime}</span>
           </div>
+          {post.author && (
+            <div className="flex items-center gap-2">
+              <span>by</span>
+              <span className="font-medium text-green-500">{post.author}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2 mb-8">

@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
     }
   }
 
-  const ogImageUrl = `/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const ogImageUrl = `https://0xhabib.tech/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
 
   return {
     title: `${post.title} | 0xHabib`,
@@ -55,6 +55,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
           width: 1200,
           height: 630,
           alt: post.title,
+          type: 'image/png',
         },
       ],
     },
@@ -79,7 +80,7 @@ export default async function PostPage({ params }: PostPageProps) {
     notFound()
   }
 
-  const ogImageUrl = `/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const ogImageUrl = `https://0xhabib.tech/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
   const postUrl = `https://0xhabib.tech/posts/${slug}`
 
   return (
@@ -91,7 +92,7 @@ export default async function PostPage({ params }: PostPageProps) {
         datePublished={post.date}
         url={postUrl}
         tags={post.tags}
-        imageUrl={`https://0xhabib.tech${ogImageUrl}`}
+        imageUrl={ogImageUrl}
       />
       <div className="max-w-4xl mx-auto px-4 py-12">
         {/* Back Button */}

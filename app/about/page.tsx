@@ -36,7 +36,7 @@ export default function AboutPage() {
         <h1 className="text-4xl font-bold font-mono mb-6">About Me</h1>
         <div className="prose prose-slate dark:prose-invert max-w-none">
           <p className="text-xl leading-relaxed mb-6">
-            My name is Mohamed Habib Jaouadi and I have always been a cybersecurity enthusiast who has a passion for understanding how systems work, how systems fail, and how to build systems better.
+            My name is Mohamed Habib Jaouadi and I have always been a cybersecurity enthusiast who has a passion for understanding how systems work, how systems fail, and how to build better systems.
           </p>
 
           <p className="leading-relaxed mb-6">

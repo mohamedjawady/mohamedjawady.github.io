@@ -11,9 +11,9 @@ import { cn } from "@/lib/utils"
 const navigation = [
   { name: "Home", href: "/" },
   { name: "Posts", href: "/posts" },
+  { name: "Visualizations", href: "/visualizations" },
   { name: "Tags", href: "/tags" },
   { name: "About", href: "/about" },
-
 ]
 
 export function Header() {

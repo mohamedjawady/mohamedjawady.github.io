@@ -10,6 +10,8 @@ tags: ["cryptography", "classical-ciphers", "linear-algebra", "matrix", "encrypt
 
 Invented by mathematician Lester S. Hill in 1929, the Hill cipher is one of the first examples of the application of linear algebra to cryptography. The Hill cipher is a polygraphic cipher, which operates on blocks of text rather than individual characters. This is what makes it much more resistant to frequency analysis than simple substitution ciphers.
 
+> **🎯 Interactive Learning**: Want to see the Hill cipher in action? Try our [Hill Cipher Interactive Visualization](/visualizations/hill-cipher) to experiment with different key matrices and see the step-by-step encryption process!
+
 ## Mathematical Foundation
 
 ### Basic Concept
@@ -621,3 +623,17 @@ In conclusion, the Hill cipher's importance as the first application of linear a
 **Remember!**: While fascinating historically, never use classical ciphers like Hill for actual security - always use modern, well-vetted cryptographic algorithms!
 
 Also `python np.linalg.det()` returns a float; rounding is necessary but can lead to inaccuracies for larger matrices. Use integer methods or sympy for exact arithmetic if precision is critical.
+
+---
+
+## Try It Yourself!
+
+Ready to experiment with the Hill cipher? Head over to our [Interactive Hill Cipher Visualization](/visualizations/hill-cipher) where you can:
+
+- Test different key matrices
+- See real-time encryption and decryption
+- Follow step-by-step mathematical operations
+- Understand matrix inverse calculations
+- Experiment with your own plaintext messages
+
+The visualization makes it easy to understand the mathematical concepts discussed in this post through hands-on experimentation!

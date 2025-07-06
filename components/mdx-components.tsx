@@ -1,6 +1,5 @@
 "use client"
 
-import type { MDXComponents } from "mdx/types"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark, oneLight, vscDarkPlus, vs } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { useTheme } from "next-themes"
@@ -9,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useState } from "react"
 import Image from "next/image"
+import { HillCipher } from "@/components/visualizations/hill-cipher"
 
 // Get language display name and icon
 const getLanguageInfo = (lang: string) => {
@@ -131,7 +131,7 @@ function CodeBlock({ children, className, ...props }: any) {
   )
 }
 
-export const mdxComponents: MDXComponents = {
+export const mdxComponents = {
   h1: ({ children }) => (
     <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl mb-6">
       {children}
@@ -247,4 +247,6 @@ export const mdxComponents: MDXComponents = {
     </td>
   ),
   hr: () => <hr className="my-8 border-border/50" />,
+  // Interactive Components
+  HillCipher: () => <HillCipher />,
 }

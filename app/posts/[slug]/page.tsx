@@ -10,9 +10,15 @@ import { TableOfContents } from "@/components/table-of-contents"
 import { Metadata } from "next"
 import { BlogPostStructuredData } from "@/components/structured-data"
 import { getCanonicalUrl } from "@/lib/url"
-import { buildOgImageUrl } from "@/lib/og-url"
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import { HillCipher } from "@/components/visualizations/hill-cipher"
+
+// Component mapping for interactive elements in posts
+const postComponents = {
+  ...mdxComponents,
+  HillCipher: () => <HillCipher />,
+}
 
 interface PostPageProps {
   params: Promise<{ slug: string }>
@@ -35,14 +41,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
     }
   }
 
-  // const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
-  // const ogImageUrl = `${getCanonicalUrl('/api/og/post')}?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
-  const ogImageUrl = buildOgImageUrl({
-    title: post.title,
-    description: post.description || '',
-    author: post.author || '0xHabib',
-    tags: post.tags
-  })
+  const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return {
@@ -98,16 +97,7 @@ export default async function PostPage({ params }: PostPageProps) {
     notFound()
   }
 
-  // const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
-  // const ogImageUrl = `${getCanonicalUrl('/api/og/post')}?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
-  
-  const ogImageUrl = buildOgImageUrl({
-    title: post.title,
-    description: post.description || '',
-    author: post.author || '0xHabib',
-    tags: post.tags
-  })
-  
+  const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return (
@@ -175,7 +165,7 @@ export default async function PostPage({ params }: PostPageProps) {
         <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none">
           <MDXRemote 
             source={post.content} 
-            components={mdxComponents}
+            components={postComponents}
             options={{
               mdxOptions: {
                 remarkPlugins: [remarkMath],

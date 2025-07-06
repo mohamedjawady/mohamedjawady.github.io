@@ -6,9 +6,9 @@ import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
 
 interface VisualizationPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 // Component mapping - maps the component field from frontmatter to actual components
@@ -18,7 +18,8 @@ const visualizationComponents = {
 }
 
 export async function generateMetadata({ params }: VisualizationPageProps): Promise<Metadata> {
-  const visualization = await getVisualizationById(params.id)
+  const { id } = await params
+  const visualization = await getVisualizationById(id)
   
   if (!visualization) {
     return {
@@ -32,7 +33,7 @@ export async function generateMetadata({ params }: VisualizationPageProps): Prom
     openGraph: {
       title: `${visualization.title} | 0xHabib`,
       description: visualization.description,
-      url: getCanonicalUrl(`/visualizations/${params.id}`),
+      url: getCanonicalUrl(`/visualizations/${id}`),
       images: [
         {
           url: `${getCanonicalUrl('/api/og/visualization')}?title=${encodeURIComponent(visualization.title)}&description=${encodeURIComponent(visualization.description)}&author=${encodeURIComponent(visualization.author)}&category=${encodeURIComponent(visualization.category)}&relatedPost=${encodeURIComponent(visualization.relatedPost || '')}&tags=${encodeURIComponent(visualization.tags.join(','))}`,
@@ -52,7 +53,8 @@ export async function generateMetadata({ params }: VisualizationPageProps): Prom
 }
 
 export default async function VisualizationPage({ params }: VisualizationPageProps) {
-  const visualization = await getVisualizationById(params.id)
+  const { id } = await params
+  const visualization = await getVisualizationById(id)
 
   if (!visualization) {
     notFound()

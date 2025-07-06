@@ -2,9 +2,8 @@ import { getPostBySlug, getAllPosts } from "@/lib/posts"
 import { MDXRemote } from "next-mdx-remote/rsc"
 import { mdxComponents } from "@/components/mdx-components"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, ArrowLeft } from "lucide-react"
+import { Calendar, Clock } from "lucide-react"
 import { formatDate } from "@/lib/utils"
-import Link from "next/link"
 import { notFound } from "next/navigation"
 import { TableOfContents } from "@/components/table-of-contents"
 import { Metadata } from "next"
@@ -13,6 +12,7 @@ import { getCanonicalUrl } from "@/lib/url"
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { HillCipher } from "@/components/visualizations/hill-cipher"
+import Image from "next/image"
 
 // Component mapping for interactive elements in posts
 const postComponents = {
@@ -111,71 +111,106 @@ export default async function PostPage({ params }: PostPageProps) {
         tags={post.tags}
         imageUrl={ogImageUrl}
       />
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        {/* Back Button */}
-        <Link
-          href="/posts"
-          className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors mb-8"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to posts
-        </Link>
-
-      {/* Post Header */}
-      <header className="mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">{post.title}</h1>
-
-        <div className="flex items-center gap-4 text-muted-foreground mb-6">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            <span>{formatDate(post.date)}</span>
+      
+      {/* Post Header with Banner Background */}
+      <header className="relative w-full min-h-[75vh] flex items-center justify-center overflow-hidden">
+        {/* Banner Background */}
+        {post.banner && (
+          <div className="absolute inset-0 z-0">
+            <Image
+              src={post.banner}
+              alt={post.bannerAlt || post.title}
+              fill
+              className="object-cover object-center parallax-banner"
+              priority
+              sizes="100vw"
+              quality={95}
+            />
+            {/* Enhanced dark overlay for text readability */}
+            <div className="absolute inset-0 gradient-overlay-dark" />
           </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            <span>{post.readingTime}</span>
-          </div>
-          {post.author && (
-            <div className="flex items-center gap-2">
-              <span>by</span>
-              <span className="font-medium text-green-500">{post.author}</span>
-            </div>
+        )}
+        
+        {/* Fallback gradient background when no banner */}
+        {!post.banner && (
+          <div className="absolute inset-0 z-0 bg-gradient-to-br from-green-600/20 via-blue-600/20 to-purple-600/20 dark:from-green-600/10 dark:via-blue-600/10 dark:to-purple-600/10" />
+        )}
+        
+        {/* Content Container */}
+        <div className="relative z-10 max-w-5xl mx-auto px-6 py-20 text-center">
+          
+          {/* Post Title */}
+          <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-8 leading-tight text-white banner-text-shadow">
+            {post.title}
+          </h1>
+
+          {/* Post Description */}
+          {post.description && (
+            <p className="text-xl md:text-2xl lg:text-3xl text-white/95 leading-relaxed mb-10 max-w-4xl mx-auto banner-text-shadow font-light">
+              {post.description}
+            </p>
           )}
-        </div>
 
-        <div className="flex flex-wrap gap-2 mb-8">
-          {post.tags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="hover:bg-green-500/20 transition-colors">
-              #{tag}
-            </Badge>
-          ))}
-        </div>
+          {/* Post Meta Information */}
+          <div className="flex flex-wrap items-center justify-center gap-4 mb-10">
+            <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
+              <Calendar className="w-4 h-4" />
+              <span className="text-sm font-medium">{formatDate(post.date)}</span>
+            </div>
+            <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
+              <Clock className="w-4 h-4" />
+              <span className="text-sm font-medium">{post.readingTime}</span>
+            </div>
+            {post.author && (
+              <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
+                <span className="text-sm">by</span>
+                <span className="font-semibold text-green-400">{post.author}</span>
+              </div>
+            )}
+          </div>
 
-        {post.description && <p className="text-xl text-muted-foreground leading-relaxed">{post.description}</p>}
+          {/* Tags */}
+          <div className="flex flex-wrap justify-center gap-3">
+            {post.tags.map((tag) => (
+              <Badge 
+                key={tag} 
+                variant="secondary" 
+                className="glass-effect text-white border-white/30 hover:bg-white/20 hover:border-white/50 transition-all duration-300 px-4 py-2 text-sm font-medium hover:scale-105 banner-text-shadow"
+              >
+                #{tag}
+              </Badge>
+            ))}
+          </div>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
-        {/* Table of Contents */}
-        <aside className="lg:col-span-1">
-          <div className="sticky top-24">
-            <TableOfContents content={post.content} />
-          </div>
-        </aside>
+      {/* Main Content */}
+      <div className="bg-background/95 backdrop-blur-sm relative z-10">
+        <div className="max-w-5xl mx-auto px-6 py-20">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
+            {/* Table of Contents */}
+            <aside className="lg:col-span-1">
+              <div className="sticky top-24">
+                <TableOfContents content={post.content} />
+              </div>
+            </aside>
 
-        {/* Post Content */}
-        <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none">
-          <MDXRemote 
-            source={post.content} 
-            components={postComponents}
-            options={{
-              mdxOptions: {
-                remarkPlugins: [remarkMath],
-                rehypePlugins: [rehypeKatex],
-              },
-            }}
-          />
-        </article>
+            {/* Post Content */}
+            <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none prose-lg">
+              <MDXRemote 
+                source={post.content} 
+                components={postComponents}
+                options={{
+                  mdxOptions: {
+                    remarkPlugins: [remarkMath],
+                    rehypePlugins: [rehypeKatex],
+                  },
+                }}
+              />
+            </article>
+          </div>
+        </div>
       </div>
-    </div>
     </>
   )
 }

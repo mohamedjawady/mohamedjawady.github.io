@@ -12,12 +12,12 @@ export function VisualizationCard({ visualization }: VisualizationCardProps) {
     <Link href={`/visualizations/${visualization.id}`} className="group">
       <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border-2 hover:border-primary/50">
         <CardHeader>
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-xl group-hover:text-primary transition-colors line-clamp-2">
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle className="text-xl group-hover:text-primary transition-colors line-clamp-2 flex-1">
               {visualization.title}
             </CardTitle>
             {visualization.relatedPost && (
-              <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+              <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 whitespace-nowrap flex-shrink-0">
                 Post Related
               </Badge>
             )}

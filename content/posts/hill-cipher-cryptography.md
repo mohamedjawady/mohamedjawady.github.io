@@ -4,9 +4,10 @@ description: "Exploring the Hill cipher, a polygraphic substitution cipher that 
 date: "2025-01-04"
 author: "Mohamed Habib Jaouadi"
 tags: ["cryptography", "classical-ciphers", "linear-algebra", "matrix", "encryption"]
+banner: "/banners/posts/hill-cipher.jpg"
+bannerAlt: "The Enigma Machine"
 ---
 
-# The Hill Cipher: Linear Algebra Meets Cryptography
 
 Invented by mathematician Lester S. Hill in 1929, the Hill cipher is one of the first examples of the application of linear algebra to cryptography. The Hill cipher is a polygraphic cipher, which operates on blocks of text rather than individual characters. This is what makes it much more resistant to frequency analysis than simple substitution ciphers.
 

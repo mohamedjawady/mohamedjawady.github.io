@@ -13,6 +13,8 @@ export interface Post {
   tags: string[]
   readingTime: string
   content: string
+  banner?: string
+  bannerAlt?: string
 }
 
 export async function getAllPosts(): Promise<Post[]> {
@@ -40,6 +42,8 @@ export async function getAllPosts(): Promise<Post[]> {
         tags: data.tags || [],
         readingTime: calculateReadingTime(content),
         content,
+        banner: data.banner,
+        bannerAlt: data.bannerAlt,
       }
     })
 

@@ -5,7 +5,7 @@ date: "2025-01-04"
 author: "Mohamed Habib Jaouadi"
 tags: ["cryptography", "classical-ciphers", "linear-algebra", "matrix", "encryption", "interactive"]
 component: "hill-cipher"
-category: "cryptography"
+visibility: "public"
 relatedPost: "hill-cipher-cryptography"
 ---
 

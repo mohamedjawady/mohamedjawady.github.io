@@ -1,4 +1,4 @@
-import { getAllVisualizations, getAllTags } from "@/lib/visualizations"
+import { getVisibleVisualizations, getAllTags } from "@/lib/visualizations"
 import { VisualizationsFilter } from "@/components/visualizations-filter"
 import { Code } from "lucide-react"
 import { getCanonicalUrl } from "@/lib/url"
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     url: getCanonicalUrl("/visualizations"),
     images: [
       {
-        url: `${getCanonicalUrl('/api/og/visualization')}?title=Interactive Visualizations&description=Explore cryptography, algorithms, and cybersecurity through interactive animations&category=Collection&relatedPost=&author=0xHabib&tags=interactive,education,cryptography`,
+        url: `${getCanonicalUrl('/api/og/visualization')}?title=Interactive Visualizations&description=Explore cryptography, algorithms, and cybersecurity through interactive animations&relatedPost=&author=0xHabib&tags=interactive,education,cryptography`,
         width: 1200,
         height: 630,
         alt: "Visualizations - 0xHabib",
@@ -24,12 +24,12 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Visualizations | 0xHabib",
     description: "Interactive visualizations and animations for cryptography, algorithms, and cybersecurity concepts.",
-    images: [`${getCanonicalUrl('')}/api/og/visualization?title=Interactive Visualizations&description=Explore cryptography, algorithms, and cybersecurity through interactive animations&category=Collection&relatedPost=&author=0xHabib&tags=interactive,education,cryptography`],
+    images: [`${getCanonicalUrl('')}/api/og/visualization?title=Interactive Visualizations&description=Explore cryptography, algorithms, and cybersecurity through interactive animations&relatedPost=&author=0xHabib&tags=interactive,education,cryptography`],
   },
 }
 
 export default async function VisualizationsPage() {
-  const visualizations = await getAllVisualizations()
+  const visualizations = await getVisibleVisualizations()
   const allTags = getAllTags(visualizations)
 
   return (

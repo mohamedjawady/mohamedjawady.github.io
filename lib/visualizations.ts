@@ -12,8 +12,7 @@ export interface Visualization {
   author: string
   tags: string[]
   component: string
-  difficulty: string
-  category: string
+  visibility: "public" | "private" | "draft"
   relatedPost?: string
   content: string
 }
@@ -42,8 +41,7 @@ export async function getAllVisualizations(): Promise<Visualization[]> {
         author: data.author || "Anonymous",
         tags: data.tags || [],
         component: data.component || id,
-        difficulty: data.difficulty || "beginner",
-        category: data.category || "general",
+        visibility: data.visibility || "public",
         relatedPost: data.relatedPost || null,
         content,
       }
@@ -57,14 +55,26 @@ export async function getVisualizationById(id: string): Promise<Visualization | 
   return visualizations.find((viz) => viz.id === id) || null
 }
 
-export function getVisualizationsByCategory(visualizations: Visualization[]): Record<string, Visualization[]> {
-  return visualizations.reduce((acc, viz) => {
-    if (!acc[viz.category]) {
-      acc[viz.category] = []
-    }
-    acc[viz.category].push(viz)
-    return acc
-  }, {} as Record<string, Visualization[]>)
+export async function getPublicVisualizations(): Promise<Visualization[]> {
+  const allVisualizations = await getAllVisualizations()
+  return allVisualizations.filter((viz) => viz.visibility === "public")
+}
+
+export async function getDraftVisualizations(): Promise<Visualization[]> {
+  const allVisualizations = await getAllVisualizations()
+  return allVisualizations.filter((viz) => viz.visibility === "draft")
+}
+
+export async function getPrivateVisualizations(): Promise<Visualization[]> {
+  const allVisualizations = await getAllVisualizations()
+  return allVisualizations.filter((viz) => viz.visibility === "private")
+}
+
+export async function getVisibleVisualizations(): Promise<Visualization[]> {
+  const allVisualizations = await getAllVisualizations()
+  return allVisualizations.filter(
+    (viz) => viz.visibility === "public" || viz.visibility === "draft"
+  )
 }
 
 export function getAllTags(visualizations: Visualization[]): string[] {

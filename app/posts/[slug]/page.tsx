@@ -12,12 +12,14 @@ import { getCanonicalUrl } from "@/lib/url"
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { HillCipher } from "@/components/visualizations/hill-cipher"
+import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import Image from "next/image"
 
 // Component mapping for interactive elements in posts
 const postComponents = {
   ...mdxComponents,
   HillCipher: () => <HillCipher />,
+  WindowsAPIFlow: () => <WindowsAPIFlow />,
 }
 
 interface PostPageProps {

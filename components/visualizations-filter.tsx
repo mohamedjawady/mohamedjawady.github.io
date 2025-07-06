@@ -26,7 +26,6 @@ export function VisualizationsFilter({ visualizations, allTags }: Visualizations
         (viz) =>
           viz.title.toLowerCase().includes(query) ||
           viz.description.toLowerCase().includes(query) ||
-          viz.category.toLowerCase().includes(query) ||
           viz.tags.some((tag) => tag.toLowerCase().includes(query))
       )
     }
@@ -38,18 +37,6 @@ export function VisualizationsFilter({ visualizations, allTags }: Visualizations
 
     return filtered
   }, [visualizations, searchQuery, selectedTag])
-
-  // Group filtered visualizations by category
-  const categorizedVisualizations = useMemo(() => {
-    const grouped: Record<string, Visualization[]> = {}
-    filteredVisualizations.forEach((viz) => {
-      if (!grouped[viz.category]) {
-        grouped[viz.category] = []
-      }
-      grouped[viz.category].push(viz)
-    })
-    return grouped
-  }, [filteredVisualizations])
 
   const handleTagClick = (tag: string | null) => {
     setSelectedTag(selectedTag === tag ? null : tag)
@@ -109,19 +96,14 @@ export function VisualizationsFilter({ visualizations, allTags }: Visualizations
         </p>
       </div>
 
-      {/* Visualizations by Category */}
-      {Object.entries(categorizedVisualizations).map(([category, vizs]) => (
-        <div key={category} className="mb-12">
-          <h2 className="text-2xl font-bold font-mono mb-6 text-green-400">
-            {category}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {vizs.map((viz) => (
-              <VisualizationCard key={viz.id} visualization={viz} />
-            ))}
-          </div>
+      {/* Visualizations Grid */}
+      {filteredVisualizations.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+          {filteredVisualizations.map((viz) => (
+            <VisualizationCard key={viz.id} visualization={viz} />
+          ))}
         </div>
-      ))}
+      )}
 
       {/* No results */}
       {filteredVisualizations.length === 0 && (

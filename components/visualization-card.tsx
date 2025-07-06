@@ -28,12 +28,14 @@ export function VisualizationCard({ visualization }: VisualizationCardProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="font-medium">Category:</span>
-              <Badge variant="outline" className="text-xs">
-                {visualization.category}
-              </Badge>
-            </div>
+            {/* Coming Soon Badge for Drafts */}
+            {visualization.visibility === 'draft' && (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300">
+                  Coming Soon
+                </Badge>
+              </div>
+            )}
             
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className="font-medium">By:</span>
@@ -42,14 +44,14 @@ export function VisualizationCard({ visualization }: VisualizationCardProps) {
             
             {visualization.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
-                {visualization.tags.slice(0, 3).map((tag) => (
+                {visualization.tags.slice(0, visualization.visibility === 'draft' ? 2 : 3).map((tag) => (
                   <Badge key={tag} variant="secondary" className="text-xs">
                     {tag}
                   </Badge>
                 ))}
-                {visualization.tags.length > 3 && (
+                {visualization.tags.length > (visualization.visibility === 'draft' ? 2 : 3) && (
                   <Badge variant="secondary" className="text-xs">
-                    +{visualization.tags.length - 3} more
+                    +{visualization.tags.length - (visualization.visibility === 'draft' ? 2 : 3)} more
                   </Badge>
                 )}
               </div>

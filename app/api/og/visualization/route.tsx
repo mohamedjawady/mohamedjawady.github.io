@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   const title = searchParams.get('title') || '0xHabib Visualizations'
   const description = searchParams.get('description') || 'Interactive Visualizations'
   const author = searchParams.get('author') || '0xHabib'
-  const category = searchParams.get('category') || 'Visualization'
   const relatedPost = searchParams.get('relatedPost') || null
   const tags = searchParams.get('tags')?.split(',') || []
 
@@ -74,7 +73,7 @@ export async function GET(request: NextRequest) {
           0xHabib
         </div>
 
-        {/* Category badge */}
+        {/* Interactive badge */}
         <div
           style={{
             display: 'flex',
@@ -90,7 +89,7 @@ export async function GET(request: NextRequest) {
             letterSpacing: '0.5px',
           }}
         >
-          {category} • Interactive Visualization
+          Interactive Visualization
         </div>
 
         {/* Visualization Title - Center stage */}

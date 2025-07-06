@@ -1,8 +1,6 @@
-import { getAllVisualizations, getVisualizationsByCategory, getAllTags } from "@/lib/visualizations"
-import { VisualizationCard } from "@/components/visualization-card"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Search, Code } from "lucide-react"
+import { getAllVisualizations, getAllTags } from "@/lib/visualizations"
+import { VisualizationsFilter } from "@/components/visualizations-filter"
+import { Code } from "lucide-react"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 
@@ -32,7 +30,6 @@ export const metadata: Metadata = {
 
 export default async function VisualizationsPage() {
   const visualizations = await getAllVisualizations()
-  const categorizedVisualizations = getVisualizationsByCategory(visualizations)
   const allTags = getAllTags(visualizations)
 
   return (
@@ -48,48 +45,7 @@ export default async function VisualizationsPage() {
         </div>
       </div>
 
-      {/* Search and Filter */}
-      <div className="mb-8">
-        <div className="relative mb-6">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input placeholder="Search visualizations..." className="pl-10" />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="cursor-pointer hover:bg-green-500/20">
-            All
-          </Badge>
-          {allTags.map((tag) => (
-            <Badge key={tag} variant="outline" className="cursor-pointer hover:bg-green-500/20">
-              #{tag}
-            </Badge>
-          ))}
-        </div>
-      </div>
-
-      {/* Visualizations by Category */}
-      {Object.entries(categorizedVisualizations).map(([category, vizs]) => (
-        <div key={category} className="mb-12">
-          <h2 className="text-2xl font-bold font-mono mb-6 text-green-400">
-            {category}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {vizs.map((viz) => (
-              <VisualizationCard key={viz.id} visualization={viz} />
-            ))}
-          </div>
-        </div>
-      ))}
-
-      {visualizations.length === 0 && (
-        <div className="text-center py-12">
-          <Code className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">No visualizations yet</h3>
-          <p className="text-muted-foreground">
-            Interactive visualizations will appear here as they are created.
-          </p>
-        </div>
-      )}
+      <VisualizationsFilter visualizations={visualizations} allTags={allTags} />
     </div>
   )
 }

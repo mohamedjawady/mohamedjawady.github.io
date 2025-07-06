@@ -27,7 +27,7 @@ interface PostPageProps {
 export async function generateStaticParams() {
   const posts = await getAllPosts()
   return posts
-    .filter(post => post.visibility !== 'private')
+    .filter(post => post.visibility === 'public' || post.visibility === 'draft')
     .map((post) => ({
       slug: post.slug,
     }))
@@ -47,8 +47,10 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return {
-    title: `${post.title} | 0xHabib`,
-    description: post.description,
+    title: `${post.title}${post.visibility === 'draft' ? ' [DRAFT]' : ''} | 0xHabib`,
+    description: post.visibility === 'draft' 
+      ? `[DRAFT] ${post.description || 'Work-in-progress post content'}` 
+      : (post.description || ''),
     keywords: post.tags,
     authors: [{ name: post.author || '0xHabib' }],
     openGraph: {
@@ -114,6 +116,16 @@ export default async function PostPage({ params }: PostPageProps) {
         imageUrl={ogImageUrl}
       />
       
+      {/* Draft Warning Banner */}
+      {post.visibility === 'draft' && (
+        <div className="bg-blue-500 text-white text-center py-4 px-4 font-medium">
+          <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
+            <span className="text-xl animate-pulse">📝</span>
+            <span className="text-lg">COMING SOON: This post is currently being written and will be available soon!</span>
+          </div>
+        </div>
+      )}
+      
       {/* Post Header with Banner Background */}
       <header className="relative w-full min-h-[75vh] flex items-center justify-center overflow-hidden">
         {/* Banner Background */}
@@ -155,14 +167,18 @@ export default async function PostPage({ params }: PostPageProps) {
 
           {/* Post Meta Information */}
           <div className="flex flex-wrap items-center justify-center gap-4 mb-10">
-            <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
-              <Calendar className="w-4 h-4" />
-              <span className="text-sm font-medium">{formatDate(post.date)}</span>
-            </div>
-            <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
-              <Clock className="w-4 h-4" />
-              <span className="text-sm font-medium">{post.readingTime}</span>
-            </div>
+            {post.visibility !== 'draft' && (
+              <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
+                <Calendar className="w-4 h-4" />
+                <span className="text-sm font-medium">{formatDate(post.date)}</span>
+              </div>
+            )}
+            {post.visibility !== 'draft' && (
+              <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">{post.readingTime}</span>
+              </div>
+            )}
             {post.author && (
               <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
                 <span className="text-sm">by</span>
@@ -189,28 +205,35 @@ export default async function PostPage({ params }: PostPageProps) {
       {/* Main Content */}
       <div className="bg-background/95 backdrop-blur-sm relative z-10">
         <div className="max-w-5xl mx-auto px-6 py-20">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
-            {/* Table of Contents */}
-            <aside className="lg:col-span-1">
-              <div className="sticky top-24">
-                <TableOfContents content={post.content} />
-              </div>
-            </aside>
+          {post.visibility === 'draft' ? (
+            /* Draft Content Placeholder */
+            <div className="text-center py-20">
+            </div>
+          ) : (
+            /* Full Content for Published Posts */
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
+              {/* Table of Contents */}
+              <aside className="lg:col-span-1">
+                <div className="sticky top-24">
+                  <TableOfContents content={post.content} />
+                </div>
+              </aside>
 
-            {/* Post Content */}
-            <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none prose-lg">
-              <MDXRemote 
-                source={post.content} 
-                components={postComponents}
-                options={{
-                  mdxOptions: {
-                    remarkPlugins: [remarkMath],
-                    rehypePlugins: [rehypeKatex],
-                  },
-                }}
-              />
-            </article>
-          </div>
+              {/* Post Content */}
+              <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none prose-lg">
+                <MDXRemote 
+                  source={post.content} 
+                  components={postComponents}
+                  options={{
+                    mdxOptions: {
+                      remarkPlugins: [remarkMath],
+                      rehypePlugins: [rehypeKatex],
+                    },
+                  }}
+                />
+              </article>
+            </div>
+          )}
         </div>
       </div>
     </>

@@ -1,8 +1,5 @@
 import { getPublicPosts } from "@/lib/posts"
-import { PostCard } from "@/components/post-card"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Search } from "lucide-react"
+import { PostsFilter } from "@/components/posts-filter"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 
@@ -43,31 +40,7 @@ export default async function PostsPage() {
         </p>
       </div>
 
-      {/* Search and Filter */}
-      <div className="mb-8">
-        <div className="relative mb-6">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input placeholder="Search posts..." className="pl-10" />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="cursor-pointer hover:bg-green-500/20">
-            All
-          </Badge>
-          {allTags.map((tag) => (
-            <Badge key={tag} variant="outline" className="cursor-pointer hover:bg-green-500/20">
-              #{tag}
-            </Badge>
-          ))}
-        </div>
-      </div>
-
-      {/* Posts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {posts.map((post) => (
-          <PostCard key={post.slug} post={post} />
-        ))}
-      </div>
+      <PostsFilter posts={posts} allTags={allTags} />
     </div>
   )
 }

@@ -54,7 +54,22 @@ export async function getAllPosts(): Promise<Post[]> {
 
 export async function getPublicPosts(): Promise<Post[]> {
   const allPosts = await getAllPosts()
-  return allPosts.filter((post) => post.visibility === 'public')
+  return allPosts.filter((post) => post.visibility === 'public' || post.visibility === 'draft')
+}
+
+export async function getDraftPosts(): Promise<Post[]> {
+  const allPosts = await getAllPosts()
+  return allPosts.filter((post) => post.visibility === 'draft')
+}
+
+export async function getPrivatePosts(): Promise<Post[]> {
+  const allPosts = await getAllPosts()
+  return allPosts.filter((post) => post.visibility === 'private')
+}
+
+export async function getNonPublicPosts(): Promise<Post[]> {
+  const allPosts = await getAllPosts()
+  return allPosts.filter((post) => post.visibility !== 'public')
 }
 
 export async function getPostBySlug(slug: string): Promise<Post | null> {
@@ -64,7 +79,7 @@ export async function getPostBySlug(slug: string): Promise<Post | null> {
 
 export async function getPublicPostBySlug(slug: string): Promise<Post | null> {
   const post = await getPostBySlug(slug)
-  return post && post.visibility === 'public' ? post : null
+  return post && (post.visibility === 'public' || post.visibility === 'draft') ? post : null
 }
 
 function calculateReadingTime(content: string): string {

@@ -23,6 +23,11 @@ export const metadata: Metadata = {
   authors: [{ name: "Mohamed Habib Jaouadi" }],
   creator: "Mohamed Habib Jaouadi",
   metadataBase: new URL(baseUrl),
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
   openGraph: {
     type: "website",
     locale: "en_US",

@@ -1,0 +1,32 @@
+digraph ProgrammingLanguageComparison {
+    rankdir=TB;
+    node [fontname="Arial", fontsize=10];
+    edge [fontname="Arial", fontsize=9];
+    
+    // High-level languages
+    python [label="Python\n• Easy to develop\n• Requires interpreter\n• Larger file sizes\n• Easier to analyze", shape=box];
+    csharp [label="C#\n• .NET Framework req.\n• Intermediate language\n• Memory managed\n• Reverse eng. possible", shape=box];
+    powershell [label="PowerShell\n• Windows native\n• Script-based\n• Easy to detect\n• Limited obfuscation", shape=box];
+    
+    // Low-level languages
+    c [label="C\n• Direct API access\n• No dependencies\n• Hard to reverse\n• Small executables", shape=box];
+    cpp [label="C++\n• Object-oriented\n• Direct memory control\n• Advanced features\n• Moderate complexity", shape=box];
+    assembly [label="Assembly\n• Machine code level\n• Maximum control\n• Hardest to reverse\n• Smallest size", shape=box];
+    
+    // Categories
+    highlevel [label="High-Level Languages", shape=ellipse];
+    lowlevel [label="Low-Level Languages", shape=ellipse];
+    
+    // Connections
+    highlevel -> python;
+    highlevel -> csharp;
+    highlevel -> powershell;
+    
+    lowlevel -> c;
+    lowlevel -> cpp;
+    lowlevel -> assembly;
+    
+    // Recommendation
+    recommendation [label="Recommended for\nWindows Malware", shape=diamond];
+    c -> recommendation [penwidth=2];
+}

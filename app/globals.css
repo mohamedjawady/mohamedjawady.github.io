@@ -170,6 +170,61 @@ code {
   @apply bg-transparent p-0;
 }
 
+/* Blog post content styling */
+.prose p {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+/* Center images in blog posts */
+.prose img {
+  margin: 0 auto;
+  display: block;
+}
+
+/* Center diagram containers */
+.prose figure {
+  text-align: center;
+  margin: 2rem auto;
+}
+
+.prose figure img {
+  margin: 0 auto;
+  display: block;
+}
+
+/* Ensure titles and headings remain left-aligned */
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  text-align: left;
+}
+
+/* Keep lists left-aligned for readability */
+.prose ul,
+.prose ol {
+  text-align: left;
+}
+
+/* Keep code blocks left-aligned */
+.prose pre,
+.prose code {
+  text-align: left;
+}
+
+/* Keep tables left-aligned */
+.prose table {
+  text-align: left;
+}
+
+/* Keep blockquotes left-aligned */
+.prose blockquote {
+  text-align: left;
+}
+
 /* Terminal-style enhancements */
 .terminal-green {
   color: #00ff41;

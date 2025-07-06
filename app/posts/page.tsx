@@ -1,4 +1,4 @@
-import { getAllPosts } from "@/lib/posts"
+import { getPublicPosts } from "@/lib/posts"
 import { PostCard } from "@/components/post-card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 }
 
 export default async function PostsPage() {
-  const posts = await getAllPosts()
+  const posts = await getPublicPosts()
   const allTags = Array.from(new Set(posts.flatMap((post) => post.tags)))
 
   return (

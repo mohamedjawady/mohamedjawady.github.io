@@ -26,16 +26,18 @@ interface PostPageProps {
 
 export async function generateStaticParams() {
   const posts = await getAllPosts()
-  return posts.map((post) => ({
-    slug: post.slug,
-  }))
+  return posts
+    .filter(post => post.visibility !== 'private')
+    .map((post) => ({
+      slug: post.slug,
+    }))
 }
 
 export async function generateMetadata({ params }: PostPageProps): Promise<Metadata> {
   const { slug } = await params
   const post = await getPostBySlug(slug)
 
-  if (!post) {
+  if (!post || post.visibility === 'private') {
     return {
       title: 'Post Not Found',
     }
@@ -93,7 +95,7 @@ export default async function PostPage({ params }: PostPageProps) {
   const { slug } = await params
   const post = await getPostBySlug(slug)
 
-  if (!post) {
+  if (!post || post.visibility === 'private') {
     notFound()
   }
 

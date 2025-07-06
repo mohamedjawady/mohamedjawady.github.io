@@ -1,4 +1,4 @@
-import { getAllPosts } from "@/lib/posts"
+import { getPublicPosts } from "@/lib/posts"
 import { PostCard } from "@/components/post-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -7,7 +7,7 @@ import { Github, Linkedin, Terminal, Code2, Shield, Network, Trophy, ArrowRight,
 import Link from "next/link"
 
 export default async function HomePage() {
-  const posts = await getAllPosts()
+  const posts = await getPublicPosts()
   const latestPosts = posts.slice(0, 6)
 
   const stats = [

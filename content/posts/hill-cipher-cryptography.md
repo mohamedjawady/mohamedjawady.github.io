@@ -6,6 +6,7 @@ author: "Mohamed Habib Jaouadi"
 tags: ["cryptography", "classical-ciphers", "linear-algebra", "matrix", "encryption"]
 banner: "/banners/posts/hill-cipher.jpg"
 bannerAlt: "The Enigma Machine"
+visibility: "public"
 ---
 
 

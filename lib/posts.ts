@@ -15,6 +15,7 @@ export interface Post {
   content: string
   banner?: string
   bannerAlt?: string
+  visibility: 'public' | 'private' | 'draft'
 }
 
 export async function getAllPosts(): Promise<Post[]> {
@@ -44,15 +45,26 @@ export async function getAllPosts(): Promise<Post[]> {
         content,
         banner: data.banner,
         bannerAlt: data.bannerAlt,
+        visibility: data.visibility || 'public',
       }
     })
 
   return allPostsData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 }
 
+export async function getPublicPosts(): Promise<Post[]> {
+  const allPosts = await getAllPosts()
+  return allPosts.filter((post) => post.visibility === 'public')
+}
+
 export async function getPostBySlug(slug: string): Promise<Post | null> {
   const posts = await getAllPosts()
   return posts.find((post) => post.slug === slug) || null
+}
+
+export async function getPublicPostBySlug(slug: string): Promise<Post | null> {
+  const post = await getPostBySlug(slug)
+  return post && post.visibility === 'public' ? post : null
 }
 
 function calculateReadingTime(content: string): string {

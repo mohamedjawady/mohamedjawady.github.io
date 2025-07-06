@@ -61,7 +61,7 @@ export async function generateMetadata({ params }: VisualizationPageProps): Prom
       card: "summary_large_image",
       title: `${visualization.title} | 0xHabib`,
       description: visualization.description,
-      images: [`${getCanonicalUrl('')}/api/og/visualization?title=${encodeURIComponent(visualization.title)}&description=${encodeURIComponent(visualization.description)}&author=${encodeURIComponent(visualization.author)}&relatedPost=${encodeURIComponent(visualization.relatedPost || '')}&tags=${encodeURIComponent(visualization.tags.join(','))}`],
+      images: [`${getCanonicalUrl('/api/og/visualization')}?title=${encodeURIComponent(visualization.title)}&description=${encodeURIComponent(visualization.description)}&author=${encodeURIComponent(visualization.author)}&relatedPost=${encodeURIComponent(visualization.relatedPost || '')}&tags=${encodeURIComponent(visualization.tags.join(','))}`],
     },
   }
 }

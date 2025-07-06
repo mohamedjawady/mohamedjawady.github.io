@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Visualizations | 0xHabib",
     description: "Interactive visualizations and animations for cryptography, algorithms, and cybersecurity concepts.",
-    images: [`${getCanonicalUrl('')}/api/og/visualization?title=Interactive Visualizations&description=Explore cryptography, algorithms, and cybersecurity through interactive animations&relatedPost=&author=0xHabib&tags=interactive,education,cryptography`],
+    images: [`${getCanonicalUrl('/api/og/visualization')}?title=Interactive Visualizations&description=Explore cryptography, algorithms, and cybersecurity through interactive animations&relatedPost=&author=0xHabib&tags=interactive,education,cryptography`],
   },
 }
 

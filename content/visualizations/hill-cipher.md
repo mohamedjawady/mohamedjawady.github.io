@@ -9,6 +9,4 @@ visibility: "public"
 relatedPost: "hill-cipher-cryptography"
 ---
 
-# Hill Cipher Interactive Visualization
-
 > **Deep Dive**: More on the Hill Cipher in this blog post: [The Hill Cipher: Linear Algebra Meets Cryptography](/posts/hill-cipher-cryptography)

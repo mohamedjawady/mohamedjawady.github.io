@@ -8,8 +8,6 @@ component: "LagrangeInterpolation"
 visibility: "public"
 ---
 
-# Lagrange Interpolation Visualization
-
 Lagrange interpolation is a method for finding a polynomial that passes through a given set of points. This interactive visualization demonstrates how the Lagrange interpolating polynomial is constructed using basis polynomials and how it perfectly fits through all the given data points.
 
 ## Mathematical Background

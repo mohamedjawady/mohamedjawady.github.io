@@ -78,6 +78,12 @@ export default async function VisualizationPage({ params }: VisualizationPagePro
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
+      {/* Visualization Title */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold mb-4">{visualization.title}</h1>
+        <p className="text-lg text-muted-foreground mb-6">{visualization.description}</p>
+      </div>
+
       {/* Visualization Header with Metadata */}
       <div className="mb-8 pb-6 border-b border-border/50">
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-4">

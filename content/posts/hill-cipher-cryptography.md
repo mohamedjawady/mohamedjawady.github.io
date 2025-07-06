@@ -10,7 +10,7 @@ tags: ["cryptography", "classical-ciphers", "linear-algebra", "matrix", "encrypt
 
 Invented by mathematician Lester S. Hill in 1929, the Hill cipher is one of the first examples of the application of linear algebra to cryptography. The Hill cipher is a polygraphic cipher, which operates on blocks of text rather than individual characters. This is what makes it much more resistant to frequency analysis than simple substitution ciphers.
 
-> **🎯 Interactive Learning**: Want to see the Hill cipher in action? Try our [Hill Cipher Interactive Visualization](/visualizations/hill-cipher) to experiment with different key matrices and see the step-by-step encryption process!
+> **Hill Cipher Visualization**: Want to see the Hill cipher in action? Try the [Hill Cipher Interactive Visualization](/visualizations/hill-cipher).
 
 ## Mathematical Foundation
 
@@ -469,15 +469,15 @@ This linear relationship can be exploited to recover key information.
 
 ### Strengths
 
-1. **Resistance to Frequency Analysis**: Operates on blocks rather than individual characters
-2. **Mathematical Foundation**: Based on solid linear algebra principles
-3. **Scalability**: Can use larger key matrices for increased security
+- **Resistance to Frequency Analysis**: Operates on blocks rather than individual characters
+- **Mathematical Foundation**: Based on solid linear algebra principles
+- **Scalability**: Can use larger key matrices for increased security
 
 ### Vulnerabilities
 
-1. **Known Plaintext Attack**: If attacker knows plaintext-ciphertext pairs, they can solve for the key matrix
-2. **Linear Weakness**: The linear nature makes it vulnerable to mathematical attacks
-3. **Key Space Limitation**: Limited by requirement for invertible matrices mod 26
+- **Known Plaintext Attack**: If attacker knows plaintext-ciphertext pairs, they can solve for the key matrix
+- **Linear Weakness**: The linear nature makes it vulnerable to mathematical attacks
+- **Key Space Limitation**: Limited by requirement for invertible matrices mod 26
 
 ### Cryptanalysis Example
 
@@ -594,13 +594,7 @@ For large texts, consider:
 - Parallel processing for independent blocks
 - Precomputed inverse matrices
 
-## Historical Context and Legacy
-
-The Hill cipher was revolutionary for its time, introducing several concepts that remain relevant:
-
-1. **Block Ciphers**: Influenced modern block cipher design
-2. **Mathematical Cryptography**: Demonstrated the power of mathematical foundations
-3. **Linear Algebra in Security**: Paved the way for modern cryptographic protocols
+## Legacy
 
 While not secure by modern standards, the Hill cipher serves as an excellent educational tool for understanding:
 - Matrix operations in cryptography
@@ -628,12 +622,4 @@ Also `python np.linalg.det()` returns a float; rounding is necessary but can lea
 
 ## Try It Yourself!
 
-Ready to experiment with the Hill cipher? Head over to our [Interactive Hill Cipher Visualization](/visualizations/hill-cipher) where you can:
-
-- Test different key matrices
-- See real-time encryption and decryption
-- Follow step-by-step mathematical operations
-- Understand matrix inverse calculations
-- Experiment with your own plaintext messages
-
-The visualization makes it easy to understand the mathematical concepts discussed in this post through hands-on experimentation!
+Ready to experiment with the Hill cipher? Head over to to [Interactive Hill Cipher Visualization](/visualizations/hill-cipher).

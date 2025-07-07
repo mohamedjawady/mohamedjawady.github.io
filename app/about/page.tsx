@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Shield, Code, Network, Bug, Target, Wrench } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Shield, Code, Network, Bug, Target, Wrench, Download, Eye } from "lucide-react"
 
 export default function AboutPage() {
   const skills = [
@@ -76,6 +77,41 @@ export default function AboutPage() {
             </Badge>
           ))}
         </div>
+      </section>
+
+      {/* Resume */}
+      <section className="mb-12">
+        <h2 className="text-2xl font-bold mb-6">Resume</h2>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="mb-6">
+              Download or view my resume to learn more about my experience, education, and skills.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button asChild className="flex items-center gap-2">
+                <a 
+                  href="/resume.pdf" 
+                  download="Mohamed_Habib_Jaouadi_Resume.pdf"
+                  className="inline-flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Resume
+                </a>
+              </Button>
+              <Button variant="outline" asChild className="flex items-center gap-2">
+                <a 
+                  href="/resume.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2"
+                >
+                  <Eye className="w-4 h-4" />
+                  View Online
+                </a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       {/* Contact */}

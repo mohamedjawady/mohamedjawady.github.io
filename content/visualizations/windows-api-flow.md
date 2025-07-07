@@ -5,12 +5,7 @@ date: "2025-01-07"
 author: "Mohamed Habib Jaouadi"
 tags: ["windows-api", "malware-development", "system-internals", "security", "evasion"]
 component: "WindowsAPIFlow"
-visibility: "draft"
+visibility: "public"
 relatedPost: "malware-development-fundamentals"
 ---
-
-# Windows API Call Flow Visualization
-
-This interactive visualization demonstrates the complete journey of a Windows API call from user to kernel levels.
-
 

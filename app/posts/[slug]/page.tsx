@@ -216,7 +216,7 @@ export default async function PostPage({ params }: PostPageProps) {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
               {/* Table of Contents */}
               <aside className="lg:col-span-1">
-                <div className="sticky top-24">
+                <div className="sticky top-24 max-h-[calc(100vh-6rem)]">
                   <TableOfContents content={post.content} />
                 </div>
               </aside>

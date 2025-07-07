@@ -1,11 +1,13 @@
 "use client"
 
+import React from "react"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark, oneLight, vscDarkPlus, vs } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { useTheme } from "next-themes"
-import { Copy, Check, FileCode, Terminal as TerminalIcon } from "lucide-react"
+import { Copy, Check, FileCode, Terminal as TerminalIcon, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useState } from "react"
 import Image from "next/image"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
@@ -53,6 +55,7 @@ const extractTextFromChildren = (children: any): string => {
 function CodeBlock({ children, className, ...props }: any) {
   const { theme } = useTheme()
   const [copied, setCopied] = useState(false)
+  const [isOpen, setIsOpen] = useState(false) // Start collapsed by default
 
   const match = /language-(\w+)/.exec(className || "")
   const language = match ? match[1] : ""
@@ -67,60 +70,74 @@ function CodeBlock({ children, className, ...props }: any) {
     const langInfo = getLanguageInfo(language)
     
     return (
-      <div className="relative group my-6">
-        {/* Header with language info and copy button */}
-        <div className="flex items-center justify-between bg-muted/50 px-4 py-2 rounded-t-lg border border-border/50">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{langInfo.icon}</span>
-            <Badge variant="secondary" className={`text-xs font-medium ${langInfo.color} text-white`}>
-              {langInfo.name}
-            </Badge>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="my-6">
+        <div className="relative group">
+          {/* Header with language info, toggle, and copy button */}
+          <div className={`flex items-center justify-between bg-muted/50 px-4 py-2 border border-border/50 cursor-pointer hover:bg-muted/70 transition-colors ${isOpen ? 'rounded-t-lg' : 'rounded-lg'}`}>
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center gap-2 flex-1 cursor-pointer">
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:bg-background/80">
+                  {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </Button>
+                <span className="text-lg">{langInfo.icon}</span>
+                <Badge variant="secondary" className={`text-xs font-medium ${langInfo.color} text-white`}>
+                  {langInfo.name}
+                </Badge>
+                {!isOpen && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    Click to expand code
+                  </span>
+                )}
+              </div>
+            </CollapsibleTrigger>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 hover:bg-background/80"
+              onClick={copyToClipboard}
+            >
+              {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+            </Button>
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 w-7 p-0 hover:bg-background/80"
-            onClick={copyToClipboard}
-          >
-            {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-          </Button>
+          
+          {/* Collapsible Code content */}
+          <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+            <div className="relative overflow-hidden rounded-b-lg border border-t-0 border-border/50">
+              <SyntaxHighlighter
+                style={theme === "dark" ? vscDarkPlus : vs}
+                language={language}
+                PreTag="div"
+                showLineNumbers={true}
+                lineNumberStyle={{
+                  minWidth: '3em',
+                  paddingRight: '1em',
+                  color: 'var(--colors-muted-foreground)',
+                  borderRight: '1px solid var(--colors-border)',
+                  marginRight: '1em',
+                  userSelect: 'none'
+                }}
+                codeTagProps={{
+                  style: {
+                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                    fontSize: '0.875rem',
+                    lineHeight: '1.5',
+                  }
+                }}
+                customStyle={{
+                  margin: 0,
+                  padding: '1rem',
+                  backgroundColor: 'transparent',
+                  fontSize: '0.875rem',
+                  lineHeight: '1.5',
+                }}
+                {...props}
+              >
+                {String(children).replace(/\n$/, "")}
+              </SyntaxHighlighter>
+            </div>
+          </CollapsibleContent>
         </div>
-        
-        {/* Code content */}
-        <div className="relative overflow-hidden rounded-b-lg border border-t-0 border-border/50">
-          <SyntaxHighlighter
-            style={theme === "dark" ? vscDarkPlus : vs}
-            language={language}
-            PreTag="div"
-            showLineNumbers={true}
-            lineNumberStyle={{
-              minWidth: '3em',
-              paddingRight: '1em',
-              color: 'var(--colors-muted-foreground)',
-              borderRight: '1px solid var(--colors-border)',
-              marginRight: '1em',
-              userSelect: 'none'
-            }}
-            codeTagProps={{
-              style: {
-                fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                fontSize: '0.875rem',
-                lineHeight: '1.5',
-              }
-            }}
-            customStyle={{
-              margin: 0,
-              padding: '1rem',
-              backgroundColor: 'transparent',
-              fontSize: '0.875rem',
-              lineHeight: '1.5',
-            }}
-            {...props}
-          >
-            {String(children).replace(/\n$/, "")}
-          </SyntaxHighlighter>
-        </div>
-      </div>
+      </Collapsible>
     )
   }
 
@@ -132,40 +149,40 @@ function CodeBlock({ children, className, ...props }: any) {
 }
 
 export const mdxComponents = {
-  h1: ({ children }) => (
+  h1: ({ children }: { children: React.ReactNode }) => (
     <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl mb-6">
       {children}
     </h1>
   ),
-  h2: ({ children }) => (
+  h2: ({ children }: { children: React.ReactNode }) => (
     <h2 className="scroll-m-20 border-b border-border/20 pb-2 text-3xl font-semibold tracking-tight mb-4">
       {children}
     </h2>
   ),
-  h3: ({ children }) => (
+  h3: ({ children }: { children: React.ReactNode }) => (
     <h3 className="scroll-m-20 text-2xl font-semibold tracking-tight mb-4">
       {children}
     </h3>
   ),
-  h4: ({ children }) => (
+  h4: ({ children }: { children: React.ReactNode }) => (
     <h4 className="scroll-m-20 text-xl font-semibold tracking-tight mb-3">
       {children}
     </h4>
   ),
-  h5: ({ children }) => (
+  h5: ({ children }: { children: React.ReactNode }) => (
     <h5 className="scroll-m-20 text-lg font-semibold tracking-tight mb-3">
       {children}
     </h5>
   ),
-  h6: ({ children }) => (
+  h6: ({ children }: { children: React.ReactNode }) => (
     <h6 className="scroll-m-20 text-base font-semibold tracking-tight mb-3">
       {children}
     </h6>
   ),
-  p: ({ children }) => <p className="leading-7 [&:not(:first-child)]:mt-6 mb-4">{children}</p>,
-  ul: ({ children }) => <ul className="my-6 ml-6 list-disc [&>li]:mt-2">{children}</ul>,
-  ol: ({ children }) => <ol className="my-6 ml-6 list-decimal [&>li]:mt-2">{children}</ol>,
-  blockquote: ({ children }) => (
+  p: ({ children }: { children: React.ReactNode }) => <p className="leading-7 [&:not(:first-child)]:mt-6 mb-4">{children}</p>,
+  ul: ({ children }: { children: React.ReactNode }) => <ul className="my-6 ml-6 list-disc [&>li]:mt-2">{children}</ul>,
+  ol: ({ children }: { children: React.ReactNode }) => <ol className="my-6 ml-6 list-decimal [&>li]:mt-2">{children}</ol>,
+  blockquote: ({ children }: { children: React.ReactNode }) => (
     <blockquote className="mt-6 border-l-2 border-green-500 pl-6 italic text-muted-foreground bg-muted/50 py-2 rounded-r-lg">
       {children}
     </blockquote>
@@ -204,7 +221,7 @@ export const mdxComponents = {
       </code>
     )
   },
-  img: ({ src, alt, ...props }) => (
+  img: ({ src, alt, ...props }: { src?: string; alt?: string; [key: string]: any }) => (
     <Image 
       src={src || ""} 
       alt={alt || ""} 
@@ -214,7 +231,7 @@ export const mdxComponents = {
       {...props} 
     />
   ),
-  a: ({ href, children }) => (
+  a: ({ href, children }: { href?: string; children: React.ReactNode }) => (
     <a
       href={href}
       className="font-medium text-green-500 underline underline-offset-4 hover:text-green-400 transition-colors"
@@ -224,24 +241,24 @@ export const mdxComponents = {
       {children}
     </a>
   ),
-  table: ({ children }) => (
+  table: ({ children }: { children: React.ReactNode }) => (
     <div className="my-6 w-full overflow-y-auto">
       <table className="w-full border-collapse border border-border/50 rounded-lg overflow-hidden">
         {children}
       </table>
     </div>
   ),
-  thead: ({ children }) => (
+  thead: ({ children }: { children: React.ReactNode }) => (
     <thead className="bg-muted/50">
       {children}
     </thead>
   ),
-  th: ({ children }) => (
+  th: ({ children }: { children: React.ReactNode }) => (
     <th className="border border-border/50 px-4 py-2 text-left font-semibold">
       {children}
     </th>
   ),
-  td: ({ children }) => (
+  td: ({ children }: { children: React.ReactNode }) => (
     <td className="border border-border/50 px-4 py-2">
       {children}
     </td>

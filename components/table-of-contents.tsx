@@ -147,13 +147,13 @@ export function TableOfContents({ content }: TableOfContentsProps) {
   return (
     <div className="space-y-2">
       <h4 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-4">Table of Contents</h4>
-      <nav className="space-y-1">
+      <nav className="space-y-1 max-h-[calc(100vh-12rem)] overflow-y-auto pr-2 hover:pr-1 transition-all duration-200 toc-scrollbar">
         {headings.map(({ id, text, level }) => (
           <button
             key={id}
             onClick={() => handleClick(text, level)}
             className={cn(
-              "block text-sm transition-colors hover:text-green-500 text-left w-full bg-transparent border-0 p-0",
+              "block text-sm transition-colors hover:text-green-500 text-left w-full bg-transparent border-0 p-0 py-1",
               level === 1 && "font-medium",
               level === 2 && "pl-4",
               level === 3 && "pl-8",

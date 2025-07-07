@@ -2,9 +2,8 @@
 
 import React, { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { ChevronRight, Play, RotateCcw, Code, Shield, Cpu, Database, ChevronDown, ChevronUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { ChevronRight, Play, RotateCcw, Code, Shield, Cpu, Database } from "lucide-react"
 
 interface APIStep {
   id: number
@@ -359,36 +358,7 @@ export function WindowsAPIFlow() {
         </CardContent>
       </Card>
 
-      {/* Educational Notes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
-          <CardHeader>
-            <CardTitle className="text-blue-800 dark:text-blue-300 text-sm">
-              Why Malware Uses Direct Native API
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm space-y-2">
-            <p>• <strong>Reduced Detection Surface:</strong> Fewer API calls to monitor</p>
-            <p>• <strong>Bypass Hooks:</strong> Many security tools hook Windows API, not Native API</p>
-            <p>• <strong>Direct Access:</strong> No parameter validation or conversion overhead</p>
-            <p>• <strong>Stealth:</strong> Less "noisy" in API monitoring tools</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-orange-200 bg-orange-50/50 dark:bg-orange-950/20">
-          <CardHeader>
-            <CardTitle className="text-orange-800 dark:text-orange-300 text-sm">
-              Security Implications
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm space-y-2">
-            <p>• <strong>EDR Evasion:</strong> Harder to detect direct syscalls</p>
-            <p>• <strong>API Hooking Bypass:</strong> Many hooks target higher-level APIs</p>
-            <p>• <strong>Behavioral Analysis:</strong> Unusual API patterns may indicate malware</p>
-            <p>• <strong>Kernel Monitoring:</strong> Requires kernel-level detection mechanisms</p>
-          </CardContent>
-        </Card>
-      </div>
+      
     </div>
   )
 }

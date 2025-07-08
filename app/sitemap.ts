@@ -10,14 +10,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const postUrls = posts.map((post) => ({
     url: getCanonicalUrl(`/posts/${post.slug}`),
     lastModified: new Date(post.date),
-    changeFrequency: 'monthly' as const,
+    changeFrequency: 'daily' as const,
     priority: 0.8,
   }))
 
   const visualizationUrls = visualizations.map((viz) => ({
     url: getCanonicalUrl(`/visualizations/${viz.id}`),
     lastModified: new Date(viz.date),
-    changeFrequency: 'monthly' as const,
+    changeFrequency: 'daily' as const,
     priority: 0.8,
   }))
 
@@ -37,7 +37,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     {
       url: getCanonicalUrl('/visualizations'),
       lastModified: new Date(),
-      changeFrequency: 'weekly',
+      changeFrequency: 'daily',
       priority: 0.9,
     },
     {

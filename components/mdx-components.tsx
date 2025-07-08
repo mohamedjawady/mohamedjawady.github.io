@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useState } from "react"
 import Image from "next/image"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
+import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 
 // Get language display name and icon
 const getLanguageInfo = (lang: string) => {
@@ -266,4 +267,5 @@ export const mdxComponents = {
   hr: () => <hr className="my-8 border-border/50" />,
   // Interactive Components
   HillCipher: () => <HillCipher />,
+  LawOfLargeNumbers: () => <LawOfLargeNumbers />,
 }

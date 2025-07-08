@@ -13,6 +13,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
+import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import Image from "next/image"
 
 // Component mapping for interactive elements in posts
@@ -20,6 +21,7 @@ const postComponents = {
   ...mdxComponents,
   HillCipher: () => <HillCipher />,
   WindowsAPIFlow: () => <WindowsAPIFlow />,
+  LawOfLargeNumbers: () => <LawOfLargeNumbers />,
 }
 
 interface PostPageProps {

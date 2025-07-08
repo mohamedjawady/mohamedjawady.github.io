@@ -1,7 +1,7 @@
 ---
 title: "The Statistics You Learned in School but Never Applied"
 description: "Bridge the gap between academic statistics and real-world engineering. Learn how to apply probability concepts you already know to performance benchmarking and system analysis."
-date: "2025-01-08"
+date: "2025-08-07"
 author: "Mohamed Habib Jaouadi"
 tags: ["performance", "statistics", "benchmarking", "engineering", "systems"]
 banner: "/banners/posts/probability-statistics-benchmarking.jpg"

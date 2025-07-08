@@ -7,14 +7,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const posts = await getAllPosts()
   const visualizations = await getAllVisualizations()
   
-  const postUrls = posts.map((post) => ({
+  // Filter out draft posts and visualizations from sitemap
+  const publishedPosts = posts.filter(post => post.visibility === 'public')
+  const publishedVisualizations = visualizations.filter(viz => viz.visibility === 'public')
+  
+  const postUrls = publishedPosts.map((post) => ({
     url: getCanonicalUrl(`/posts/${post.slug}`),
     lastModified: new Date(post.date),
     changeFrequency: 'daily' as const,
     priority: 0.8,
   }))
 
-  const visualizationUrls = visualizations.map((viz) => ({
+  const visualizationUrls = publishedVisualizations.map((viz) => ({
     url: getCanonicalUrl(`/visualizations/${viz.id}`),
     lastModified: new Date(viz.date),
     changeFrequency: 'daily' as const,
@@ -51,6 +55,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.5,
+    },
+    {
+      url: getCanonicalUrl('/feed.xml'),
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.3,
     },
     ...postUrls,
     ...visualizationUrls,

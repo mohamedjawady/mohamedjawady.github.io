@@ -62,6 +62,16 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
+  alternates: {
+    types: {
+      'application/rss+xml': [
+        {
+          url: '/feed.xml',
+          title: '0xHabib RSS Feed'
+        }
+      ]
+    }
+  },
 }
 
 export default function RootLayout({

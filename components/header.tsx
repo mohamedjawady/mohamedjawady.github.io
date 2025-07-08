@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Terminal, Menu, X } from "lucide-react"
+import { Terminal, Menu, X, Rss } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
@@ -53,6 +53,11 @@ export function Header() {
           </nav>
 
           <div className="flex items-center space-x-2">
+            <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+              <Link href="/feed.xml" target="_blank" rel="noopener noreferrer" title="RSS Feed">
+                <Rss className="w-4 h-4" />
+              </Link>
+            </Button>
             <ThemeToggle />
             <Button variant="ghost" size="sm" className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -77,6 +82,16 @@ export function Header() {
                   {item.name}
                 </Link>
               ))}
+              <Link
+                href="/feed.xml"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 text-sm font-medium transition-colors hover:text-green-500 text-muted-foreground flex items-center gap-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Rss className="w-4 h-4" />
+                RSS Feed
+              </Link>
             </nav>
           </div>
         )}

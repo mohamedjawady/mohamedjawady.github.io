@@ -265,21 +265,21 @@ export function MemoryManagement() {
                     <div
                       key={page.id}
                       className={`
-                        relative border-2 rounded-lg p-3 transition-all duration-500
+                        relative border-2 rounded-lg p-2 transition-all duration-500
                         ${stateColors[page.state]}
                         ${memoryState.isAnimating ? 'animate-pulse' : ''}
                       `}
                     >
-                      <div className="text-xs font-mono mb-1">{page.address}</div>
-                      <div className="text-xs font-semibold mb-2 capitalize">{page.state}</div>
+                      <div className="text-[10px] font-mono mb-1 text-gray-800 dark:text-gray-800">{page.address}</div>
+                      <div className="text-[10px] font-semibold mb-1 capitalize text-gray-800 dark:text-gray-800">{page.state}</div>
                       
                       {page.state === 'committed' && (
                         <div className="space-y-1">
-                          <div className={`w-full h-6 rounded flex items-center justify-center text-xs text-white ${protectionColors[page.protection]}`}>
-                            <ProtectionIcon className="w-3 h-3 mr-1" />
+                          <div className={`w-full h-5 rounded flex items-center justify-center text-[9px] text-gray-800 dark:text-gray-800 ${protectionColors[page.protection]}`}>
+                            <ProtectionIcon className="w-2 h-2 mr-1" />
                             {page.content}
                           </div>
-                          <div className="text-xs text-center">{page.protection.replace('_', '-')}</div>
+                          <div className="text-[9px] text-center text-gray-800 dark:text-gray-800">{page.protection.replace('_', '-')}</div>
                         </div>
                       )}
                       

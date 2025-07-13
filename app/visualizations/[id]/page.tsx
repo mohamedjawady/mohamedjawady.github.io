@@ -4,6 +4,7 @@ import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LagrangeInterpolation } from "@/components/visualizations/lagrange-interpolation"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
+import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
@@ -23,6 +24,7 @@ const visualizationComponents = {
   'WindowsAPIFlow': WindowsAPIFlow,
   'LagrangeInterpolation': LagrangeInterpolation,
   'LawOfLargeNumbers': LawOfLargeNumbers,
+  'MemoryManagement': MemoryManagement,
   // Add more components here as they are created
 }
 

@@ -6,6 +6,7 @@ import "katex/dist/katex.min.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Header } from "@/components/header"
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { getCanonicalUrl } from "@/lib/url"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -100,6 +101,7 @@ export default function RootLayout({
           </div>
         </ThemeProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )

@@ -1,4 +1,4 @@
-import { getPostBySlug, getAllPosts } from "@/lib/posts"
+import { getPostBySlug, getAllPosts, getSeriesNavigation } from "@/lib/posts"
 import { MDXRemote } from "next-mdx-remote/rsc"
 import { mdxComponents } from "@/components/mdx-components"
 import { Badge } from "@/components/ui/badge"
@@ -15,6 +15,7 @@ import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MemoryManagement } from "@/components/visualizations/memory-management"
+import { SeriesNavigation } from "@/components/series-navigation"
 import Image from "next/image"
 
 // Component mapping for interactive elements in posts
@@ -106,6 +107,9 @@ export default async function PostPage({ params }: PostPageProps) {
   if (!post || post.visibility === 'private') {
     notFound()
   }
+
+  // Get series navigation data if post is part of a series
+  const seriesNavigation = post.series ? await getSeriesNavigation(post.slug) : null
 
   const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
@@ -207,6 +211,21 @@ export default async function PostPage({ params }: PostPageProps) {
           </div>
         </div>
       </header>
+
+      {/* Series Navigation */}
+      {seriesNavigation && seriesNavigation.series && (
+        <div className="bg-background/95 backdrop-blur-sm border-b border-border/40">
+          <div className="max-w-5xl mx-auto px-6 py-8">
+            <SeriesNavigation 
+              series={seriesNavigation.series}
+              posts={seriesNavigation.posts}
+              currentIndex={seriesNavigation.currentIndex}
+              previousPost={seriesNavigation.previousPost}
+              nextPost={seriesNavigation.nextPost}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="bg-background/95 backdrop-blur-sm relative z-10">

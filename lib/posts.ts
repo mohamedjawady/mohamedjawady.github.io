@@ -16,6 +16,8 @@ export interface Post {
   banner?: string
   bannerAlt?: string
   visibility: 'public' | 'private' | 'draft'
+  series?: string
+  seriesOrder?: number
 }
 
 export async function getAllPosts(): Promise<Post[]> {
@@ -46,6 +48,8 @@ export async function getAllPosts(): Promise<Post[]> {
         banner: data.banner,
         bannerAlt: data.bannerAlt,
         visibility: data.visibility || 'public',
+        series: data.series,
+        seriesOrder: data.seriesOrder,
       }
     })
 
@@ -80,6 +84,63 @@ export async function getPostBySlug(slug: string): Promise<Post | null> {
 export async function getPublicPostBySlug(slug: string): Promise<Post | null> {
   const post = await getPostBySlug(slug)
   return post && (post.visibility === 'public' || post.visibility === 'draft') ? post : null
+}
+
+export async function getPostsBySeries(series: string): Promise<Post[]> {
+  const allPosts = await getAllPosts()
+  return allPosts
+    .filter((post) => post.series === series && (post.visibility === 'public' || post.visibility === 'draft'))
+    .sort((a, b) => (a.seriesOrder || 0) - (b.seriesOrder || 0))
+}
+
+export async function getSeriesNavigation(currentPostSlug: string): Promise<{
+  series: string | null
+  posts: Post[]
+  currentIndex: number
+  previousPost: Post | null
+  nextPost: Post | null
+} | null> {
+  const currentPost = await getPostBySlug(currentPostSlug)
+  
+  if (!currentPost || !currentPost.series) {
+    return null
+  }
+
+  const seriesPosts = await getPostsBySeries(currentPost.series)
+  const currentIndex = seriesPosts.findIndex(post => post.slug === currentPostSlug)
+  
+  if (currentIndex === -1) {
+    return null
+  }
+
+  return {
+    series: currentPost.series,
+    posts: seriesPosts,
+    currentIndex,
+    previousPost: currentIndex > 0 ? seriesPosts[currentIndex - 1] : null,
+    nextPost: currentIndex < seriesPosts.length - 1 ? seriesPosts[currentIndex + 1] : null,
+  }
+}
+
+export async function getAllSeries(): Promise<Record<string, Post[]>> {
+  const allPosts = await getPublicPosts()
+  const seriesMap: Record<string, Post[]> = {}
+  
+  allPosts.forEach(post => {
+    if (post.series) {
+      if (!seriesMap[post.series]) {
+        seriesMap[post.series] = []
+      }
+      seriesMap[post.series].push(post)
+    }
+  })
+  
+  // Sort posts within each series
+  Object.keys(seriesMap).forEach(series => {
+    seriesMap[series].sort((a, b) => (a.seriesOrder || 0) - (b.seriesOrder || 0))
+  })
+  
+  return seriesMap
 }
 
 function calculateReadingTime(content: string): string {

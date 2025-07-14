@@ -20,6 +20,7 @@ import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
+import { LatestPostsSlider } from "@/components/latest-posts-slider"
 
 // Component mapping for interactive elements in posts
 const postComponents = {
@@ -119,7 +120,7 @@ export default async function PostPage({ params }: PostPageProps) {
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return (
-    <>
+    <div>
       <BlogPostStructuredData
         title={post.title}
         description={post.description || ''}
@@ -265,6 +266,7 @@ export default async function PostPage({ params }: PostPageProps) {
           )}
         </div>
       </div>
-    </>
+      <LatestPostsSlider excludeSlug={post.slug} />
+    </div>
   )
 }

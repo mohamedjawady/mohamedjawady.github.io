@@ -625,3 +625,4 @@ Also `python np.linalg.det()` returns a float; rounding is necessary but can lea
 ## Try It Yourself!
 
 Ready to experiment with the Hill cipher? Head over to to [Interactive Hill Cipher Visualization](/visualizations/hill-cipher).
+

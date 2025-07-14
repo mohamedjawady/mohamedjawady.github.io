@@ -1,7 +1,7 @@
 ---
 title: "The Statistics You Learned in School but Never Applied"
 description: "Bridge the gap between academic statistics and real-world engineering."
-date: "2025-08-07"
+date: "2025-07-14"
 author: "Mohamed Habib Jaouadi"
 tags: ["performance", "statistics", "benchmarking", "engineering", "systems"]
 banner: "/banners/posts/probability-statistics-benchmarking.jpg"

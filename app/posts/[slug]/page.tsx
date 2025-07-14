@@ -18,6 +18,7 @@ import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { SeriesNavigation } from "@/components/series-navigation"
+import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
 
 // Component mapping for interactive elements in posts
@@ -27,6 +28,7 @@ const postComponents = {
   WindowsAPIFlow: () => <WindowsAPIFlow />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MemoryManagement: () => <MemoryManagement />,
+  CollapsibleCode: CollapsibleCode,
 }
 
 interface PostPageProps {

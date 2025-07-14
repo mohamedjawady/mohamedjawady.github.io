@@ -1,21 +1,26 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
+import Image from "next/image"
 import { Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
-import Image from "next/image"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
+import { CollapsibleCode } from "@/components/ui/collapsible-code"
+import { shouldBeCollapsible, shouldBeExpandedByDefault } from "@/lib/code-block-config"
 
-// Simple copy button component for code blocks
-function CopyButton({ text }: { text: string }) {
+// Simple copy button component for regular code blocks
+function SimpleCopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
 
   const copyToClipboard = async () => {
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy text: ', err)
+    }
   }
 
   return (
@@ -24,6 +29,7 @@ function CopyButton({ text }: { text: string }) {
       variant="ghost"
       className="absolute top-2 right-2 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
       onClick={copyToClipboard}
+      title={copied ? "Copied!" : "Copy code"}
     >
       {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
     </Button>
@@ -69,16 +75,47 @@ export const mdxComponents = {
       {children}
     </blockquote>
   ),
-  pre: ({ children, ...props }: any) => (
-    <div className="relative group my-6">
-      <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-sm font-mono border border-border/50" {...props}>
-        {children}
-      </pre>
-      {typeof children === 'string' && (
-        <CopyButton text={children} />
-      )}
-    </div>
-  ),
+  pre: ({ children, ...props }: any) => {
+    // Extract language and content from the code element if present
+    const codeElement = React.Children.toArray(children).find(
+      (child) => React.isValidElement(child) && child.type === 'code'
+    ) as React.ReactElement<any> | undefined
+
+    const className = codeElement?.props?.className as string | undefined
+    const language = className?.replace('language-', '') || undefined
+    const content = typeof codeElement?.props?.children === 'string' 
+      ? codeElement.props.children 
+      : ''
+
+    // Determine if this code block should be collapsible
+    const isCollapsible = shouldBeCollapsible(language, content)
+    const defaultOpen = isCollapsible ? shouldBeExpandedByDefault(language) : true
+    
+    // If not collapsible, render as regular code block
+    if (!isCollapsible) {
+      return (
+        <div className="relative group my-6">
+          <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-sm font-mono border border-border/50" {...props}>
+            {children}
+          </pre>
+          {content && <SimpleCopyButton text={content} />}
+        </div>
+      )
+    }
+
+    // Render as collapsible code block
+    return (
+      <CollapsibleCode 
+        language={language}
+        defaultOpen={defaultOpen}
+        showCopy={true}
+      >
+        <code {...(codeElement?.props || {})}>
+          {codeElement?.props?.children || children}
+        </code>
+      </CollapsibleCode>
+    )
+  },
   code: ({ children, className, ...props }: any) => {
     // For inline code (no className with language)
     if (!className || !className.includes('language-')) {
@@ -142,4 +179,6 @@ export const mdxComponents = {
   // Interactive Components
   HillCipher: () => <HillCipher />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
+  // Custom collapsible code component for manual use
+  CollapsibleCode: CollapsibleCode,
 }

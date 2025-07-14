@@ -6,7 +6,7 @@ author: "Mohamed Habib Jaouadi"
 tags: ["performance", "statistics", "benchmarking", "engineering", "systems"]
 banner: "/banners/posts/probability-statistics-benchmarking.jpg"
 bannerAlt: "Statistics and Probability for Engineering Benchmarks"
-visibility: "draft"
+visibility: "public"
 ---
 
 As engineers, we benchmark everything. Database query performance. API response times. Network latency. Memory usage. CPU utilization. We run these tests, collect numbers, and make decisions that affect millions of users and thousands of servers.
@@ -48,26 +48,40 @@ When you collect benchmark data, descriptive statistics help you understand what
 
 **Mean (Average)**: The sum divided by count. Useful but dangerous when used alone.
 
+<CollapsibleCode language="python" title="Mean calculation example">
+
 ```python
 # Simple but incomplete
 response_times = [120, 125, 130, 128, 2500, 127, 124]
 mean = sum(response_times) / len(response_times)  # 336ms - misleading!
 ```
 
+</CollapsibleCode>
+
 **Median**: The middle value when sorted. More robust against outliers.
+
+<CollapsibleCode language="python" title="Median calculation example">
 
 ```python
 import statistics
 median = statistics.median(response_times)  # 127ms - more representative
 ```
 
+</CollapsibleCode>
+
 **Standard Deviation**: Measures how spread out your data is. Low std dev means consistent performance; high std dev indicates variability.
+
+<CollapsibleCode language="python" title="Standard deviation calculation">
 
 ```python
 std_dev = statistics.stdev(response_times)  # ~900ms - huge variability!
 ```
 
+</CollapsibleCode>
+
 **Percentiles (P50, P95, P99)**: The values below which a certain percentage of observations fall.
+
+<CollapsibleCode language="python" title="Percentile calculations">
 
 ```python
 import numpy as np
@@ -82,6 +96,8 @@ p95 = np.percentile(response_times, 95)  # ~1800ms
 p99 = np.percentile(response_times, 99)  # ~2300ms
 ```
 
+</CollapsibleCode>
+
 **Why percentiles matter**: In production systems, you care more about "What's the worst experience 5% of users will have?" (P95) than "What's the average experience?" Users don't experience averages.
 
 ### Confidence Intervals: Expressing Uncertainty Like an Engineer
@@ -91,6 +107,8 @@ A confidence interval gives you a range of plausible values for your measurement
 Instead of saying "Response time is 150ms," you say "Response time is 150ms ± 15ms with 95% confidence."
 
 Here's the intuitive interpretation: If you repeated your benchmark many times under the same conditions, 95% of those experiments would produce a mean within this range.
+
+<CollapsibleCode language="python" title="Confidence Interval Calculation">
 
 ```python
 import scipy.stats as stats
@@ -109,6 +127,8 @@ print(f"Response time: {np.mean(times):.1f}ms (95% CI: {lower:.1f}-{upper:.1f}ms
 # Output: Response time: 149.5ms (95% CI: 147.2-151.8ms)
 ```
 
+</CollapsibleCode>
+
 **Practical usage**: When comparing two systems, overlapping confidence intervals suggest the difference might not be meaningful. Non-overlapping intervals indicate a likely real difference.
 
 ### Statistical Laws That Save You From Bad Decisions
@@ -118,6 +138,8 @@ print(f"Response time: {np.mean(times):.1f}ms (95% CI: {lower:.1f}-{upper:.1f}ms
 The Law of Large Numbers states that as you collect more samples, your measured average gets closer to the true average of the system.
 
 **Engineering implication**: Running your benchmark 3 times isn't enough. Neither is 10. You need enough samples for the noise to average out.
+
+<CollapsibleCode language="python" title="Law of Large Numbers Simulation">
 
 ```python
 import matplotlib.pyplot as plt
@@ -142,6 +164,8 @@ plt.ylabel('Measured Mean (ms)')
 plt.title('Law of Large Numbers in Action')
 ```
 
+</CollapsibleCode>
+
 **Rule of thumb**: For reasonably stable systems, aim for at least 30-50 samples. For highly variable systems or when detecting small differences, you might need hundreds.
 
 #### Interactive Demonstration: Law of Large Numbers
@@ -157,6 +181,8 @@ The Central Limit Theorem explains why averaging makes sense, even when your und
 **The theorem**: When you take many samples and compute their average, those averages will be normally distributed around the true mean, regardless of the original distribution's shape.
 
 **Engineering implication**: This justifies using confidence intervals and statistical tests based on normal distributions, even when individual response times follow other patterns.
+
+<CollapsibleCode language="python" title="Central Limit Theorem Demonstration">
 
 ```python
 # Even if individual response times are skewed...
@@ -175,11 +201,15 @@ plt.hist(sample_means, bins=50, alpha=0.7)
 plt.title('Distribution of Sample Means (CLT in action)')
 ```
 
+</CollapsibleCode>
+
 **Why you never connected this to engineering work**: Most engineering curricula teach statistics as abstract mathematical concepts—hypothesis testing, normal distributions, confidence intervals—but rarely show how to apply them to real systems. You learned about t-tests in your probability course, but nobody explained how to use them to compare database query performance. You memorized the Central Limit Theorem for exams, but never saw how it justifies your benchmarking methodology.
 
 ## Common Benchmarking Pitfalls and How to Avoid Them
 
 ### Pitfall 1: The Single Run Trap
+
+<CollapsibleCode language="bash" title="Wrong way - Single measurement">
 
 ```bash
 # DON'T do this
@@ -189,9 +219,13 @@ real    0m0.234s
 # Conclusion: "The API takes 234ms" ❌
 ```
 
+</CollapsibleCode>
+
 **The problem**: One measurement tells you almost nothing about system performance. You've captured a single point in a noisy, time-varying system.
 
 **The fix**: Always run multiple iterations and report distributions.
+
+<CollapsibleCode language="python" title="Proper Endpoint Benchmarking">
 
 ```python
 import requests
@@ -220,6 +254,8 @@ results = benchmark_endpoint('https://api.example.com/endpoint')
 print(f"Response time: {results['median']:.1f}ms median, {results['p95']:.1f}ms P95 (n={results['samples']})")
 ```
 
+</CollapsibleCode>
+
 ### Pitfall 2: The Mean-Only Mindset
 
 **The problem**: Reporting only averages hides crucial information about system behavior.
@@ -231,6 +267,8 @@ Consider these two systems:
 Same average, completely different user experience.
 
 **The fix**: Always report percentiles alongside means.
+
+<CollapsibleCode language="python" title="Comprehensive Statistics Functions">
 
 ```python
 def comprehensive_stats(data):
@@ -256,6 +294,8 @@ def print_stats(stats):
     print(f"Range: {stats['min']:.1f}-{stats['max']:.1f}ms")
 ```
 
+</CollapsibleCode>
+
 ### Pitfall 3: Flaky Test Syndrome
 
 **The problem**: Your benchmark results vary wildly between runs, making comparisons impossible.
@@ -267,6 +307,8 @@ def print_stats(stats):
 - Measurement overhead
 
 **The fix**: Control your environment and establish baseline stability.
+
+<CollapsibleCode language="python" title="Stable Benchmarking Functions">
 
 ```python
 def stable_benchmark(func, warmup_runs=10, test_runs=50):
@@ -300,6 +342,8 @@ def check_stability(times, max_cv=0.3):
     return True
 ```
 
+</CollapsibleCode>
+
 ## Practical Guidelines for Robust Benchmarks
 
 ### 1. Planning Your Benchmark
@@ -312,6 +356,8 @@ Before writing any code, ask yourself:
 - **What's my baseline?** (Current system performance under identical conditions)
 
 ### 2. Environment Control
+
+<CollapsibleCode language="python" title="Environment Checking for Benchmarks">
 
 ```python
 # Example: CPU benchmarking with environment checks
@@ -353,9 +399,13 @@ def safe_benchmark(benchmark_func):
     return benchmark_func()
 ```
 
+</CollapsibleCode>
+
 ### 3. Comparing Two Systems Rigorously
 
 When you need to determine if System B is actually better than System A:
+
+<CollapsibleCode language="python" title="Statistical System Comparison">
 
 ```python
 from scipy import stats
@@ -410,11 +460,15 @@ print(f"P-value: {result['p_value']:.4f}")
 print(f"Conclusion: {result['recommendation']}")
 ```
 
+</CollapsibleCode>
+
 ## Real-World Examples
 
 ### Example 1: Database Query Performance
 
 You're optimizing a database query and want to measure the impact of adding an index.
+
+<CollapsibleCode language="python" title="Database Query Benchmarking">
 
 ```python
 import time
@@ -456,9 +510,13 @@ print(f"Improvement: {abs(comparison['percent_change']):.1f}% faster")
 print(f"Statistical significance: p = {comparison['p_value']:.4f}")
 ```
 
+</CollapsibleCode>
+
 ### Example 2: HTTP API Latency Analysis
 
 You're comparing two API implementations to decide which to deploy.
+
+<CollapsibleCode language="python" title="API Benchmarking with Concurrency">
 
 ```python
 import requests
@@ -530,9 +588,13 @@ if api_v1_results and api_v2_results:
     print(f"Conclusion: {comparison['recommendation']}")
 ```
 
+</CollapsibleCode>
+
 ### Example 3: Load Testing and Capacity Planning
 
 You need to determine how many concurrent users your system can handle.
+
+<CollapsibleCode language="python" title="Load Testing Framework">
 
 ```python
 import threading
@@ -627,9 +689,13 @@ def analyze_capacity(load_test_results):
             break
 ```
 
+</CollapsibleCode>
+
 ## Interpreting Distributions Over Time
 
 When monitoring production systems, you need to understand how performance metrics evolve. Here's how to track and interpret trends:
+
+<CollapsibleCode language="python" title="Time Series Performance Analysis">
 
 ```python
 import pandas as pd
@@ -692,11 +758,15 @@ def plot_performance_trends(df, rolling_stats):
     plt.show()
 ```
 
+</CollapsibleCode>
+
 ## Building Your Statistical Toolkit
 
 As an engineer, you don't need to become a statistician, but having the right tools makes all the difference. Here's a practical toolkit:
 
 ### Essential Python Libraries
+
+<CollapsibleCode language="python" title="Required Python Libraries">
 
 ```python
 # Core numerical computing
@@ -716,7 +786,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 ```
 
+</CollapsibleCode>
+
 ### Ready-to-Use Functions
+
+<CollapsibleCode language="python" title="Quick Benchmark Analysis Function">
 
 ```python
 def quick_benchmark_analysis(data_a, data_b, labels=('Baseline', 'Test')):
@@ -765,6 +839,8 @@ def quick_benchmark_analysis(data_a, data_b, labels=('Baseline', 'Test')):
     
     return comparison
 ```
+
+</CollapsibleCode>
 
 ## Conclusion: Making Statistics Work for You
 

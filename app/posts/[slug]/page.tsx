@@ -11,6 +11,8 @@ import { BlogPostStructuredData } from "@/components/structured-data"
 import { getCanonicalUrl } from "@/lib/url"
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import rehypeHighlight from 'rehype-highlight'
+import "@/styles/highlight-js/github-dark.css"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
@@ -252,7 +254,7 @@ export default async function PostPage({ params }: PostPageProps) {
                   options={{
                     mdxOptions: {
                       remarkPlugins: [remarkMath],
-                      rehypePlugins: [rehypeKatex],
+                      rehypePlugins: [rehypeKatex, rehypeHighlight],
                     },
                   }}
                 />

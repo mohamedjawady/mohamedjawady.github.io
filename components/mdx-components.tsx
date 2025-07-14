@@ -1,151 +1,32 @@
 "use client"
 
 import React from "react"
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { oneDark, oneLight, vscDarkPlus, vs } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { useTheme } from "next-themes"
-import { Copy, Check, FileCode, Terminal as TerminalIcon, ChevronDown, ChevronRight } from "lucide-react"
+import { Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useState } from "react"
 import Image from "next/image"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 
-// Get language display name and icon
-const getLanguageInfo = (lang: string) => {
-  const languageMap: Record<string, { name: string; icon: string; color: string }> = {
-    'javascript': { name: 'JavaScript', icon: '🟨', color: 'bg-yellow-500' },
-    'typescript': { name: 'TypeScript', icon: '🔷', color: 'bg-blue-500' },
-    'python': { name: 'Python', icon: '🐍', color: 'bg-green-500' },
-    'go': { name: 'Go', icon: '🐹', color: 'bg-cyan-500' },
-    'rust': { name: 'Rust', icon: '🦀', color: 'bg-orange-500' },
-    'bash': { name: 'Bash', icon: '🐚', color: 'bg-gray-500' },
-    'shell': { name: 'Shell', icon: '💻', color: 'bg-gray-500' },
-    'c': { name: 'C', icon: '⚡', color: 'bg-blue-600' },
-    'cpp': { name: 'C++', icon: '⚡', color: 'bg-blue-600' },
-    'java': { name: 'Java', icon: '☕', color: 'bg-red-500' },
-    'json': { name: 'JSON', icon: '📄', color: 'bg-gray-600' },
-    'yaml': { name: 'YAML', icon: '📋', color: 'bg-red-400' },
-    'sql': { name: 'SQL', icon: '🗃️', color: 'bg-orange-600' },
-    'yara': { name: 'YARA', icon: '🛡️', color: 'bg-purple-500' },
-    'powershell': { name: 'PowerShell', icon: '💙', color: 'bg-blue-700' },
-  }
-  
-  return languageMap[lang.toLowerCase()] || { name: lang.toUpperCase(), icon: '📝', color: 'bg-gray-500' }
-}
-
-// Extract text from React children (same logic as before)
-const extractTextFromChildren = (children: any): string => {
-  let text = ''
-  
-  if (typeof children === 'string') {
-    text = children
-  } else if (Array.isArray(children)) {
-    text = children.map(child => typeof child === 'string' ? child : '').join('')
-  } else if (children && typeof children === 'object' && children.props) {
-    text = children.props.children || ''
-  } else {
-    text = String(children)
-  }
-  
-  return text
-}
-
-function CodeBlock({ children, className, ...props }: any) {
-  const { theme } = useTheme()
+// Simple copy button component for code blocks
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
-  const [isOpen, setIsOpen] = useState(false) // Start collapsed by default
-
-  const match = /language-(\w+)/.exec(className || "")
-  const language = match ? match[1] : ""
 
   const copyToClipboard = async () => {
-    await navigator.clipboard.writeText(String(children).replace(/\n$/, ""))
+    await navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (match) {
-    const langInfo = getLanguageInfo(language)
-    
-    return (
-      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="my-6">
-        <div className="relative group">
-          {/* Header with language info, toggle, and copy button */}
-          <div className={`flex items-center justify-between bg-muted/50 px-4 py-2 border border-border/50 cursor-pointer hover:bg-muted/70 transition-colors ${isOpen ? 'rounded-t-lg' : 'rounded-lg'}`}>
-            <CollapsibleTrigger asChild>
-              <div className="flex items-center gap-2 flex-1 cursor-pointer">
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:bg-background/80">
-                  {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                </Button>
-                <span className="text-lg">{langInfo.icon}</span>
-                <Badge variant="secondary" className={`text-xs font-medium ${langInfo.color} text-white`}>
-                  {langInfo.name}
-                </Badge>
-                {!isOpen && (
-                  <span className="text-xs text-muted-foreground ml-2">
-                    Click to expand code
-                  </span>
-                )}
-              </div>
-            </CollapsibleTrigger>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 w-7 p-0 hover:bg-background/80"
-              onClick={copyToClipboard}
-            >
-              {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-            </Button>
-          </div>
-          
-          {/* Collapsible Code content */}
-          <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-            <div className="relative overflow-hidden rounded-b-lg border border-t-0 border-border/50">
-              <SyntaxHighlighter
-                style={theme === "dark" ? vscDarkPlus : vs}
-                language={language}
-                PreTag="div"
-                showLineNumbers={true}
-                lineNumberStyle={{
-                  minWidth: '3em',
-                  paddingRight: '1em',
-                  color: 'var(--colors-muted-foreground)',
-                  borderRight: '1px solid var(--colors-border)',
-                  marginRight: '1em',
-                  userSelect: 'none'
-                }}
-                codeTagProps={{
-                  style: {
-                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                    fontSize: '0.875rem',
-                    lineHeight: '1.5',
-                  }
-                }}
-                customStyle={{
-                  margin: 0,
-                  padding: '1rem',
-                  backgroundColor: 'transparent',
-                  fontSize: '0.875rem',
-                  lineHeight: '1.5',
-                }}
-                {...props}
-              >
-                {String(children).replace(/\n$/, "")}
-              </SyntaxHighlighter>
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-    )
-  }
-
   return (
-    <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-medium border border-border/50" {...props}>
-      {children}
-    </code>
+    <Button
+      size="sm"
+      variant="ghost"
+      className="absolute top-2 right-2 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+      onClick={copyToClipboard}
+    >
+      {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+    </Button>
   )
 }
 
@@ -188,36 +69,29 @@ export const mdxComponents = {
       {children}
     </blockquote>
   ),
-  pre: ({ children, className, ...props }: any) => {
-    // For MDX Remote, the className is often on the pre element
-    if (className && className.includes('language-')) {
-      return <CodeBlock className={className}>{children}</CodeBlock>
-    }
-    
-    // Check if children is a code element with className
-    if (children && typeof children === 'object' && children.props) {
-      const codeProps = children.props
-      if (codeProps.className && codeProps.className.includes('language-')) {
-        return <CodeBlock className={codeProps.className}>{codeProps.children}</CodeBlock>
-      }
-    }
-    
-    // Fallback for regular pre elements
-    return (
-      <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-sm font-mono" {...props}>
+  pre: ({ children, ...props }: any) => (
+    <div className="relative group my-6">
+      <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-sm font-mono border border-border/50" {...props}>
         {children}
       </pre>
-    )
-  },
+      {typeof children === 'string' && (
+        <CopyButton text={children} />
+      )}
+    </div>
+  ),
   code: ({ children, className, ...props }: any) => {
-    // Handle fenced code blocks that come directly as code elements
-    if (className && className.includes('language-')) {
-      return <CodeBlock className={className}>{children}</CodeBlock>
+    // For inline code (no className with language)
+    if (!className || !className.includes('language-')) {
+      return (
+        <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-medium border border-border/50" {...props}>
+          {children}
+        </code>
+      )
     }
     
-    // Handle inline code
+    // For code blocks, just return the code element - rehype-highlight will handle styling
     return (
-      <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-medium border border-border/50" {...props}>
+      <code className={className} {...props}>
         {children}
       </code>
     )

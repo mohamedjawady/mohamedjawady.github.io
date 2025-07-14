@@ -6,7 +6,7 @@ author: "Mohamed Habib Jaouadi"
 tags: ["performance", "statistics", "benchmarking", "engineering", "systems"]
 banner: "/banners/posts/probability-statistics-benchmarking.jpg"
 bannerAlt: "Statistics and Probability for Engineering Benchmarks"
-visibility: "public"
+visibility: "draft"
 ---
 
 As engineers, we benchmark everything. Database query performance. API response times. Network latency. Memory usage. CPU utilization. We run these tests, collect numbers, and make decisions that affect millions of users and thousands of servers.

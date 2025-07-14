@@ -6,20 +6,20 @@ author: "Mohamed Habib Jaouadi"
 tags: ["performance", "statistics", "benchmarking", "engineering", "systems"]
 banner: "/banners/posts/probability-statistics-benchmarking.jpg"
 bannerAlt: "Statistics and Probability for Engineering Benchmarks"
-visibility: "draft"
+visibility: "public"
 ---
 
-As engineers, we benchmark everything. Database query performance. API response times. Network latency. Memory usage. CPU utilization. We run these tests, collect numbers, and make decisions that affect millions of users and thousands of servers.
+As engineers, we measure everything. The performance of database queries, the response time of APIs, network latency, memory usage, CPU utilization, etc...
 
-But here's the uncomfortable truth: most of us are flying blind when it comes to interpreting those numbers correctly.
+We conduct these benchmarks, gather numbers, and subsequently make changes that affect millions of end-users and thousands of servers. But, the uncomfortable truth is that most of us are operating in a fog when it comes to understanding those numbers properly.
 
-You've probably seen this scenario play out: Two engineers benchmark the same system and get different results. One claims the new caching layer improved response times by 15%. The other insists it made things worse. Both have data. Both are confident. Both could be wrong.
+You've likely observed this scenario before: Two engineers benchmark the same system and get different results. One claims the new caching layer increased response time by 15%.The other disagrees and says it worsened performance. Both have numbers, both have confidence, and both could be wrong. 
 
-The missing piece? A solid understanding of probability and statistics as they apply to real-world engineering systems.
+What is missing? A good understanding of probability and statistics as they relate to real-world engineering systems.
 
 ## Why Probabilistic Thinking Matters in System Benchmarks
 
-Real-world systems are inherently noisy and non-deterministic. Your web server doesn't respond in exactly 150ms every time. Your database doesn't always take precisely 2.3ms to execute a query. Your network doesn't have a constant 5ms latency.
+In the real world, systems are noisy and non-deterministic. Your web server has variability in the way it responds, at times taking a little over the 150ms you expect. Factors like CPU load, network traffic, and background processes can cause small performance variations. That’s just how real systems behave and there's always some level of variability and randomness involved.
 
 Instead, these systems exhibit:
 
@@ -27,9 +27,9 @@ Instead, these systems exhibit:
 - **Environmental noise**: Network congestion, disk I/O contention, CPU scheduling
 - **Measurement uncertainty**: Timer resolution, system call overhead, instrumentation impact
 
-Without statistical tools to handle this variability, we end up making poor engineering decisions based on incomplete or misinterpreted data.
+The point of the story is, without statistical tools to handle this variability, we will make bad engineering decisions based on poor or misinterpreted data.
 
-Consider this real example: An engineer benchmarks two API endpoints and sees these results:
+Here's a real example: An engineer benchmarks two API endpoints and gets these results:
 
 ```
 Endpoint A: 145ms, 152ms, 148ms, 151ms, 149ms
@@ -53,7 +53,7 @@ When you collect benchmark data, descriptive statistics help you understand what
 ```python
 # Simple but incomplete
 response_times = [120, 125, 130, 128, 2500, 127, 124]
-mean = sum(response_times) / len(response_times)  # 336ms - misleading!
+mean = sum(response_times) / len(response_times)  # 464.85ms - misleading!
 ```
 
 </CollapsibleCode>
@@ -102,16 +102,15 @@ p99 = np.percentile(response_times, 99)  # ~2300ms
 
 ### Confidence Intervals: Expressing Uncertainty Like an Engineer
 
-A confidence interval gives you a range of plausible values for your measurement, accounting for uncertainty.
+A confidence interval provides a range of plausible values for your measurement, considering uncertainty. Instead of saying "Response time is 150ms," you say "Response time is 150ms ± 15ms (95% confidence)." 
 
-Instead of saying "Response time is 150ms," you say "Response time is 150ms ± 15ms with 95% confidence."
-
-Here's the intuitive interpretation: If you repeated your benchmark many times under the same conditions, 95% of those experiments would produce a mean within this range.
+An intuitive way to think about it is this: if you repeated your experiment many times, and each time calculated a 95% confidence interval, then about 95% of those intervals would contain the true (but unknown) mean response time.
 
 <CollapsibleCode language="python" title="Confidence Interval Calculation">
 
 ```python
 import scipy.stats as stats
+import numpy as np
 
 def confidence_interval(data, confidence=0.95):
     n = len(data)
@@ -124,7 +123,7 @@ def confidence_interval(data, confidence=0.95):
 times = [145, 152, 148, 151, 149, 147, 153, 146, 150, 154]
 lower, upper = confidence_interval(times)
 print(f"Response time: {np.mean(times):.1f}ms (95% CI: {lower:.1f}-{upper:.1f}ms)")
-# Output: Response time: 149.5ms (95% CI: 147.2-151.8ms)
+# Output: Response time: 149.5ms (95% CI: 147.3-151.7ms)
 ```
 
 </CollapsibleCode>
@@ -137,36 +136,49 @@ print(f"Response time: {np.mean(times):.1f}ms (95% CI: {lower:.1f}-{upper:.1f}ms
 
 The Law of Large Numbers states that as you collect more samples, your measured average gets closer to the true average of the system.
 
+<div style={{textAlign: 'center', margin: '1.5em 0'}}>
+
+$$
+\lim_{n \to \infty} \frac{1}{n} \sum_{i=1}^n X_i = \mu
+$$
+
+</div>
+
+Where $X_i$ are independent, identically distributed random variables with expected value $\mu$.
+
 **Engineering implication**: Running your benchmark 3 times isn't enough. Neither is 10. You need enough samples for the noise to average out.
 
 <CollapsibleCode language="python" title="Law of Large Numbers Simulation">
 
 ```python
 import matplotlib.pyplot as plt
-import random
+import numpy as np
 
 def simulate_response_times(n_samples):
-    # Simulate a system with true mean of 150ms, std dev of 20ms
-    return [random.gauss(150, 20) for _ in range(n_samples)]
+    return np.random.normal(loc=150, scale=20, size=n_samples)
 
-sample_sizes = [5, 10, 50, 100, 500, 1000]
-measured_means = []
+# Generate 100 log-spaced sample sizes from 10 to 20,000
+sample_sizes = np.logspace(np.log10(10), np.log10(20000), num=100, dtype=int)
+measured_means = [np.mean(simulate_response_times(n)) for n in sample_sizes]
 
-for n in sample_sizes:
-    samples = simulate_response_times(n)
-    measured_means.append(np.mean(samples))
-
-# Plot how the measured mean converges to the true mean (150ms)
-plt.plot(sample_sizes, measured_means, 'o-')
-plt.axhline(y=150, color='r', linestyle='--', label='True mean')
-plt.xlabel('Sample Size')
+plt.figure(figsize=(10, 6))
+plt.plot(sample_sizes, measured_means, '-', color='blue', label='Measured mean') 
+plt.scatter(sample_sizes, measured_means, color='blue', s=20)
+plt.axhline(y=150, color='r', linestyle='--', label='True mean (150ms)')
+plt.xscale('log')
+plt.xlabel('Sample Size (log scale)')
 plt.ylabel('Measured Mean (ms)')
 plt.title('Law of Large Numbers in Action')
+plt.legend()
+plt.grid(True, which='both', linestyle=':', linewidth=0.5)
+plt.tight_layout()
+plt.show()
+
 ```
 
 </CollapsibleCode>
 
-**Rule of thumb**: For reasonably stable systems, aim for at least 30-50 samples. For highly variable systems or when detecting small differences, you might need hundreds.
+**Rule of thumb**: For stable systems, collecting 30 to 50 samples is usually enough to get a reliable average. If your system is noisy or you're trying to detect small performance differences, you may need hundreds of samples to get meaningful results.
 
 #### Interactive Demonstration: Law of Large Numbers
 
@@ -177,6 +189,16 @@ See how sample size affects the reliability of your benchmark results:
 #### Central Limit Theorem: Why Averages Work
 
 The Central Limit Theorem explains why averaging makes sense, even when your underlying data isn't normally distributed.
+
+<div style={{textAlign: 'center', margin: '1.5em 0'}}>
+
+$$
+\frac{\overline{X}_n - \mu}{\sigma/\sqrt{n}} \xrightarrow{d} N(0,1)
+$$
+
+</div>
+
+Where $\overline{X}_n$ is the sample mean, $\mu$ is the population mean, $\sigma$ is the standard deviation, and $N(0,1)$ is the standard normal distribution.
 
 **The theorem**: When you take many samples and compute their average, those averages will be normally distributed around the true mean, regardless of the original distribution's shape.
 
@@ -203,7 +225,7 @@ plt.title('Distribution of Sample Means (CLT in action)')
 
 </CollapsibleCode>
 
-**Why you never connected this to engineering work**: Most engineering curricula teach statistics as abstract mathematical concepts—hypothesis testing, normal distributions, confidence intervals—but rarely show how to apply them to real systems. You learned about t-tests in your probability course, but nobody explained how to use them to compare database query performance. You memorized the Central Limit Theorem for exams, but never saw how it justifies your benchmarking methodology.
+**Why you never connected this to engineering work**: While most engineering programs teach statistics as the study of abstract mathematical ideas (such as hypothesis testing, normal distributed models, confidence intervals, etc...) , they rarely teach the application of statistical concepts to actual real-world systems. Maybe you learned t-tests in your probability class (but nobody ever told you how to apply them to query performance comparisons). You memorized the Central Limit Theorem for your exams, but no one explained how it validates your benchmarking approach.
 
 ## Common Benchmarking Pitfalls and How to Avoid Them
 
@@ -368,17 +390,17 @@ def check_environment():
     """Verify the system is suitable for benchmarking"""
     warnings = []
     
-    # Check CPU usage
+    # Check CPU throughput
     cpu_percent = psutil.cpu_percent(interval=1)
     if cpu_percent > 20:
         warnings.append(f"High CPU usage: {cpu_percent:.1f}%")
     
-    # Check memory usage
+    # Check memory throughput
     memory = psutil.virtual_memory()
     if memory.percent > 80:
         warnings.append(f"High memory usage: {memory.percent:.1f}%")
     
-    # Check for background processes
+    # Check background processes
     high_cpu_procs = [p for p in psutil.process_iter(['pid', 'name', 'cpu_percent']) 
                       if p.info['cpu_percent'] > 5]
     if high_cpu_procs:
@@ -389,7 +411,7 @@ def check_environment():
 def safe_benchmark(benchmark_func):
     warnings = check_environment()
     if warnings:
-        print("⚠️  Environment warnings:")
+        print("Environment warnings:")
         for warning in warnings:
             print(f"   {warning}")
         proceed = input("Continue anyway? (y/N): ")
@@ -421,17 +443,17 @@ def compare_systems(system_a_data, system_b_data, alpha=0.05):
     - practical_significance: Whether difference is large enough to matter
     """
     
-    # Calculate basic statistics
+    # determine basic stats
     mean_a = np.mean(system_a_data)
     mean_b = np.mean(system_b_data)
     difference = mean_b - mean_a
     
-    # Perform t-test
+    # t-test
     t_stat, p_value = stats.ttest_ind(system_a_data, system_b_data)
     is_significant = p_value < alpha
     
     # Check practical significance (is the difference large enough to care about?)
-    # Rule of thumb: difference should be at least 5% of baseline
+    # difference should be at least 5% of baseline
     practical_threshold = abs(mean_a * 0.05)
     practical_significance = abs(difference) > practical_threshold
     
@@ -448,7 +470,7 @@ def compare_systems(system_a_data, system_b_data, alpha=0.05):
                          else 'no meaningful difference'
     }
 
-# Example usage
+# example
 baseline_latencies = [145, 152, 148, 151, 149, 147, 153, 146, 150, 154, 148, 151]
 optimized_latencies = [138, 142, 140, 144, 141, 139, 145, 138, 143, 146, 140, 143]
 
@@ -483,26 +505,24 @@ def benchmark_query(connection, query, n_runs=100):
         cursor = connection.execute(query)
         results = cursor.fetchall()
         end = time.perf_counter()
-        times.append((end - start) * 1000)  # Convert to milliseconds
+        times.append((end - start) * 1000)
         
     return times
 
-# Setup test database
+# test db setup
 conn = sqlite3.connect(':memory:')
 conn.execute('CREATE TABLE users (id INTEGER, name TEXT, email TEXT)')
-# ... populate with test data ...
+# here you populate with test data ...
 
-# Benchmark without index
+# without index, do a benchmark
 query = "SELECT * FROM users WHERE email = 'test@example.com'"
 before_times = benchmark_query(conn, query)
 
-# Add index
 conn.execute('CREATE INDEX idx_email ON users(email)')
 
-# Benchmark with index
+# benchmark with index
 after_times = benchmark_query(conn, query)
 
-# Compare results
 comparison = compare_systems(before_times, after_times)
 print(f"Query performance before index: {np.median(before_times):.2f}ms median")
 print(f"Query performance after index: {np.median(after_times):.2f}ms median")
@@ -549,7 +569,7 @@ def benchmark_api_endpoint(url, payload=None, n_requests=200, concurrency=10):
                 'error': str(e)
             }
     
-    # Run concurrent requests
+    # run concurrent requests
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [executor.submit(single_request) for _ in range(n_requests)]
@@ -569,7 +589,7 @@ def benchmark_api_endpoint(url, payload=None, n_requests=200, concurrency=10):
         'stats': comprehensive_stats(latencies)
     }
 
-# Compare two API versions
+# Compare both versions
 api_v1_results = benchmark_api_endpoint('https://api-v1.example.com/endpoint')
 api_v2_results = benchmark_api_endpoint('https://api-v2.example.com/endpoint')
 
@@ -610,7 +630,7 @@ def load_test(target_function, max_concurrency=100, test_duration=60):
     for concurrency in range(10, max_concurrency + 1, 10):
         print(f"Testing with {concurrency} concurrent users...")
         
-        # Shared queue for results
+        # utilize shared queue for results
         result_queue = queue.Queue()
         threads = []
         start_time = time.time()
@@ -619,7 +639,7 @@ def load_test(target_function, max_concurrency=100, test_duration=60):
             while time.time() - start_time < test_duration:
                 try:
                     latency_start = time.perf_counter()
-                    success = target_function()  # Your function returns True/False
+                    success = target_function()  # returns True/False
                     latency_end = time.perf_counter()
                     
                     result_queue.put({
@@ -627,7 +647,7 @@ def load_test(target_function, max_concurrency=100, test_duration=60):
                         'latency': (latency_end - latency_start) * 1000,
                         'success': success
                     })
-                    time.sleep(0.1)  # Small delay between requests
+                    time.sleep(0.1)
                 except Exception as e:
                     result_queue.put({
                         'timestamp': time.time(),
@@ -636,25 +656,25 @@ def load_test(target_function, max_concurrency=100, test_duration=60):
                         'error': str(e)
                     })
         
-        # Start worker threads
+        # start workers
         for _ in range(concurrency):
             thread = threading.Thread(target=worker)
             thread.start()
             threads.append(thread)
         
-        # Wait for test duration
+        # to wait for tests to complete
         time.sleep(test_duration)
         
-        # Collect results
+        # collect results
         test_results = []
         while not result_queue.empty():
             test_results.append(result_queue.get())
         
-        # Wait for threads to finish
+        # waiting for threads to finish
         for thread in threads:
             thread.join()
         
-        # Analyze this concurrency level
+        # inspect concurrency level
         successful_results = [r for r in test_results if r['success']]
         latencies = [r['latency'] for r in successful_results if r['latency']]
         
@@ -680,16 +700,17 @@ def analyze_capacity(load_test_results):
               f"{result['p95_latency']:.0f}ms P95, "
               f"{result['throughput']:.1f} req/s")
         
-        # Look for degradation signals
+        # Look for degradation
         if result['success_rate'] < 0.95 or result['p95_latency'] > 1000:
-            print(f"⚠️  System showing stress at {result['concurrency']} concurrent users")
+            print(f"System showing stress at {result['concurrency']} concurrent users")
             if i > 0:
                 prev = load_test_results[i-1]
-                print(f"💡 Recommended capacity: {prev['concurrency']} concurrent users")
+                print(f"Recommended capacity: {prev['concurrency']} concurrent users")
             break
 ```
 
 </CollapsibleCode>
+
 
 ## Interpreting Distributions Over Time
 
@@ -726,7 +747,7 @@ def analyze_time_series_performance(timestamps, latencies, window_size='1H'):
     
     return df, rolling_stats
 
-# Example: Plot performance trends
+# plot performance trends
 def plot_performance_trends(df, rolling_stats):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
     
@@ -769,19 +790,19 @@ As an engineer, you don't need to become a statistician, but having the right to
 <CollapsibleCode language="python" title="Required Python Libraries">
 
 ```python
-# Core numerical computing
+# core numerical computing
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
-# Visualization
+# visualization
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# For more advanced statistical tests
+# =more advanced statistical tests
 from scipy.stats import ttest_ind, mannwhitneyu, chi2_contingency
 
-# For time series analysis
+# =time series analysis
 import pandas as pd
 from datetime import datetime, timedelta
 ```
@@ -801,7 +822,7 @@ def quick_benchmark_analysis(data_a, data_b, labels=('Baseline', 'Test')):
     print(f"BENCHMARK COMPARISON: {labels[0]} vs {labels[1]}")
     print(f"{'='*50}")
     
-    # Basic statistics
+    # basic statistics
     stats_a = comprehensive_stats(data_a)
     stats_b = comprehensive_stats(data_b)
     
@@ -811,22 +832,22 @@ def quick_benchmark_analysis(data_a, data_b, labels=('Baseline', 'Test')):
     print(f"\n{labels[1]} Statistics:")
     print_stats(stats_b)
     
-    # Statistical comparison
+    # statistical comparison
     comparison = compare_systems(data_a, data_b)
     print(f"\nComparison:")
     print(f"Difference: {comparison['difference']:.2f} ({comparison['percent_change']:+.1f}%)")
     print(f"Statistical significance: p = {comparison['p_value']:.4f}")
     print(f"Conclusion: {comparison['recommendation']}")
     
-    # Visual comparison
+    # visual comparison
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
-    # Box plot
+    # box plot
     ax1.boxplot([data_a, data_b], labels=labels)
     ax1.set_ylabel('Response Time (ms)')
     ax1.set_title('Distribution Comparison')
     
-    # Histogram
+    # histogram
     ax2.hist(data_a, alpha=0.7, bins=20, label=labels[0], density=True)
     ax2.hist(data_b, alpha=0.7, bins=20, label=labels[1], density=True)
     ax2.set_xlabel('Response Time (ms)')
@@ -844,31 +865,16 @@ def quick_benchmark_analysis(data_a, data_b, labels=('Baseline', 'Test')):
 
 ## Conclusion: Making Statistics Work for You
 
-Statistics isn't just academic theory—it's a practical engineering discipline that helps you make better decisions about the systems you build and maintain.
+Statistics isn't merely a theoretical construct that resides in the ivory tower of academia. Real Statistics endures the test of evaluation and helps make more informed decisions based on the systems you build and operate.
 
-The key insights to remember:
+Sample size is very important. The Law of Large Numbers is not an academic theory; it is the reason we need a large number of samples in order to trust our benchmarks. The larger the sample size, the more reliable the results are.
 
-1. **Embrace uncertainty**: Real systems are noisy. Use confidence intervals to quantify and communicate that uncertainty.
+Just because you only look at averages doesn’t mean everything else isn’t available to see, understand, and use as well. I'm talking about the whole distribution, particularly slow experiences captured by high percentiles like P95 and P99 that matter most to users.
 
-2. **Sample size matters**: The Law of Large Numbers isn't just theory—it's the foundation of reliable benchmarking. More samples = more confidence.
-
-3. **Distributions tell the story**: Means hide important information. Always look at percentiles, especially P95 and P99 for user-facing systems.
-
-4. **Statistical significance ≠ practical significance**: A statistically significant 1% improvement might not be worth the engineering effort to implement.
-
-5. **Control your environment**: Consistent, repeatable benchmark conditions are essential for meaningful comparisons.
-
-The next time you're benchmarking a system, ask yourself:
-
-- Am I collecting enough samples?
-- Am I reporting the right metrics (percentiles, not just means)?
-- Can I quantify the uncertainty in my measurements?
-- Is the difference I'm seeing meaningful or just noise?
-
-These statistical tools won't make your systems faster, but they'll help you understand whether your optimization efforts are actually working. In a world where engineering decisions affect millions of users and cost thousands of dollars in infrastructure, that understanding is invaluable.
-
-Remember: every number you collect is a sample from a distribution. Your job as an engineer is to understand what that distribution is telling you about your system's true behavior.
+Lastly, maintain consistency across your testing environment. If you cannot replicate your benchmark environment, you won't learn anything.
 
 ---
+### Points to remember
+- Before you run any benchmark, ask yourself if you have enough samples, if you’re looking at the right metrics, if you can measure uncertainty, and whether the differences you see actually matter. These tools won’t speed up your systems by themselves, but they’ll help you know if your work is making a real difference  and that kind of clarity is priceless.
 
-*This post scratches the surface of statistical methods for engineering. For deeper dives into specific techniques like A/B testing, time series analysis, or advanced experimental design, the principles covered here provide a solid foundation to build upon.*
+- Before you benchmark anything, consider if you have sufficient samples, if you are drawing the right contextual metrics, if you can quantify uncertainty, and if the differences you observe are consequential. These types of tools will not make your systems faster, but they can tell you if your action is positively impacting system performance, and that kind of knowledge is valuable!

@@ -1,6 +1,7 @@
 {
-    "name": "0xHabib",
-    "short_name": "0xH",
+    "name": "0xHabib - Cybersecurity Learning Journey",
+    "short_name": "0xHabib",
+    "description": "Documenting what I break, build, and learn in security, malware analysis, and networking.",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",
@@ -15,5 +16,7 @@
     ],
     "theme_color": "#ffffff",
     "background_color": "#ffffff",
-    "display": "standalone"
+    "display": "standalone",
+    "start_url": "/",
+    "scope": "/"
 }

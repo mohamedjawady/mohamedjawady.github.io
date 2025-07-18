@@ -17,6 +17,7 @@ import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MemoryManagement } from "@/components/visualizations/memory-management"
+import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
@@ -29,6 +30,7 @@ const postComponents = {
   WindowsAPIFlow: () => <WindowsAPIFlow />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MemoryManagement: () => <MemoryManagement />,
+  MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   CollapsibleCode: CollapsibleCode,
 }
 

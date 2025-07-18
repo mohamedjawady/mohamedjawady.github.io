@@ -5,6 +5,7 @@ import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LagrangeInterpolation } from "@/components/visualizations/lagrange-interpolation"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MemoryManagement } from "@/components/visualizations/memory-management"
+import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
@@ -25,6 +26,7 @@ const visualizationComponents = {
   'LagrangeInterpolation': LagrangeInterpolation,
   'LawOfLargeNumbers': LawOfLargeNumbers,
   'MemoryManagement': MemoryManagement,
+  'MalwareDetectionMechanisms': MalwareDetectionMechanisms,
   // Add more components here as they are created
 }
 

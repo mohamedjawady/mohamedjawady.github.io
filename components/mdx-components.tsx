@@ -6,6 +6,7 @@ import { Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
+import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import { shouldBeCollapsible, shouldBeExpandedByDefault } from "@/lib/code-block-config"
 
@@ -179,6 +180,7 @@ export const mdxComponents = {
   // Interactive Components
   HillCipher: () => <HillCipher />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
+  MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   // Custom collapsible code component for manual use
   CollapsibleCode: CollapsibleCode,
 }

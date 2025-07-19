@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: NotePageProps): Promise<Metad
       url: `/notes/${note.id}`,
       images: [
         {
-          url: `/api/og/note?title=${encodeURIComponent(note.title)}&source=${encodeURIComponent(note.source)}&type=${note.type}&difficulty=${note.difficulty}`,
+          url: `/api/og/note?title=${encodeURIComponent(note.title)}&description=${encodeURIComponent(note.description)}&source=${encodeURIComponent(note.source)}&type=${note.type}&difficulty=${note.difficulty}&tags=${encodeURIComponent(note.tags.join(','))}`,
           width: 1200,
           height: 630,
           alt: note.title,
@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: NotePageProps): Promise<Metad
       card: 'summary_large_image',
       title: `${note.title} | Learning Notes`,
       description: note.description,
-      images: [`/api/og/note?title=${encodeURIComponent(note.title)}&source=${encodeURIComponent(note.source)}&type=${note.type}&difficulty=${note.difficulty}`],
+      images: [`/api/og/note?title=${encodeURIComponent(note.title)}&description=${encodeURIComponent(note.description)}&source=${encodeURIComponent(note.source)}&type=${note.type}&difficulty=${note.difficulty}&tags=${encodeURIComponent(note.tags.join(','))}`],
     },
     alternates: {
       canonical: `/notes/${note.id}`,

@@ -8,6 +8,7 @@ import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
+import { GccDebuggingCheatsheet } from "@/components/cheatsheets/gcc-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import { LinkPreview } from "@/components/link-preview"
 import { shouldBeCollapsible, shouldBeExpandedByDefault } from "@/lib/code-block-config"
@@ -180,6 +181,7 @@ export const mdxComponents = {
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
+  GccDebuggingCheatsheet: () => <GccDebuggingCheatsheet />,
   // Custom collapsible code component for manual use
   CollapsibleCode: CollapsibleCode,
 }

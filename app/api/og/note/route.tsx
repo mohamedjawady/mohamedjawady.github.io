@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
           fontSize: 60,
           fontWeight: 700,
           position: 'relative',
-          padding: '80px',
+          padding: '60px',
         }}
       >
         {/* Background pattern similar to posts */}
@@ -67,10 +67,11 @@ export async function GET(request: NextRequest) {
             backgroundClip: 'text',
             WebkitBackgroundClip: 'text',
             color: 'transparent',
-            fontSize: 48,
+            fontSize: 40,
             fontWeight: 900,
-            marginBottom: 40,
+            marginBottom: 30,
             textAlign: 'center',
+            lineHeight: 1,
           }}
         >
           0xHabib Notes
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
           style={{
             display: 'flex',
             gap: 16,
-            marginBottom: 32,
+            marginBottom: 24,
             alignItems: 'center',
           }}
         >
@@ -122,10 +123,10 @@ export async function GET(request: NextRequest) {
           style={{
             display: 'flex',
             color: '#ffffff',
-            fontSize: title.length > 60 ? 42 : title.length > 40 ? 48 : 56,
+            fontSize: title.length > 60 ? 36 : title.length > 40 ? 42 : 48,
             fontWeight: 700,
             lineHeight: 1.1,
-            marginBottom: 24,
+            marginBottom: 20,
             textAlign: 'center',
             maxWidth: '90%',
           }}
@@ -139,9 +140,9 @@ export async function GET(request: NextRequest) {
             style={{
               display: 'flex',
               color: colors.primary,
-              fontSize: 24,
+              fontSize: 20,
               lineHeight: 1.3,
-              marginBottom: 24,
+              marginBottom: 16,
               textAlign: 'center',
               maxWidth: '80%',
             }}
@@ -156,14 +157,14 @@ export async function GET(request: NextRequest) {
             style={{
               display: 'flex',
               color: '#a3a3a3',
-              fontSize: 28,
+              fontSize: 22,
               lineHeight: 1.3,
-              marginBottom: 32,
+              marginBottom: 24,
               textAlign: 'center',
               maxWidth: '80%',
             }}
           >
-            {description.length > 120 ? description.substring(0, 120) + '...' : description}
+            {description.length > 100 ? description.substring(0, 100) + '...' : description}
           </div>
         )}
 
@@ -173,8 +174,8 @@ export async function GET(request: NextRequest) {
             style={{
               display: 'flex',
               flexWrap: 'wrap',
-              gap: 16,
-              marginBottom: 40,
+              gap: 12,
+              marginBottom: 24,
               justifyContent: 'center',
               maxWidth: '80%',
             }}
@@ -187,9 +188,9 @@ export async function GET(request: NextRequest) {
                   backgroundColor: colors.bg,
                   border: `2px solid ${colors.border}`,
                   color: colors.primary,
-                  padding: '12px 20px',
+                  padding: '8px 16px',
                   borderRadius: 8,
-                  fontSize: 20,
+                  fontSize: 16,
                   fontWeight: 600,
                 }}
               >
@@ -204,7 +205,7 @@ export async function GET(request: NextRequest) {
           style={{
             display: 'flex',
             color: '#525252',
-            fontSize: 24,
+            fontSize: 20,
             textAlign: 'center',
             marginTop: 'auto',
           }}

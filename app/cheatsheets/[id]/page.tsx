@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, User, Tag, BookOpen, Signal } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { getCheatsheetById, getAllCheatsheets } from "@/lib/cheatsheets"
+import { getCanonicalUrl } from "@/lib/url"
 import { formatDistanceToNow } from "date-fns"
 
 interface CheatsheetPageProps {
@@ -59,6 +60,16 @@ export async function generateMetadata({ params }: CheatsheetPageProps): Promise
       title: cheatsheet.title,
       description: cheatsheet.description,
       type: "article",
+      url: getCanonicalUrl(`/cheatsheets/${id}`),
+      images: {
+        url: `${getCanonicalUrl('/api/og/cheatsheet')}?title=${encodeURIComponent(cheatsheet.title)}&description=${encodeURIComponent(cheatsheet.description)}&category=${encodeURIComponent(cheatsheet.category)}&difficulty=${encodeURIComponent(cheatsheet.difficulty)}&author=${encodeURIComponent(cheatsheet.author)}&tags=${encodeURIComponent(cheatsheet.tags.join(','))}`,
+      },
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: cheatsheet.title,
+      description: cheatsheet.description,
+      images: [`${getCanonicalUrl('/api/og/cheatsheet')}?title=${encodeURIComponent(cheatsheet.title)}&description=${encodeURIComponent(cheatsheet.description)}&category=${encodeURIComponent(cheatsheet.category)}&difficulty=${encodeURIComponent(cheatsheet.difficulty)}&author=${encodeURIComponent(cheatsheet.author)}&tags=${encodeURIComponent(cheatsheet.tags.join(','))}`],
     },
   }
 }

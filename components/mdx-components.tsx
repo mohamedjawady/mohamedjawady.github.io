@@ -9,6 +9,7 @@ import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numb
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
+import { LinkPreview } from "@/components/link-preview"
 import { shouldBeCollapsible, shouldBeExpandedByDefault } from "@/lib/code-block-config"
 
 // Simple copy button component for regular code blocks
@@ -146,14 +147,9 @@ export const mdxComponents = {
     />
   ),
   a: ({ href, children }: { href?: string; children: React.ReactNode }) => (
-    <a
-      href={href}
-      className="font-medium text-green-500 underline underline-offset-4 hover:text-green-400 transition-colors"
-      target={href?.startsWith("http") ? "_blank" : undefined}
-      rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
-    >
+    <LinkPreview href={href || "#"}>
       {children}
-    </a>
+    </LinkPreview>
   ),
   table: ({ children }: { children: React.ReactNode }) => (
     <div className="my-6 w-full overflow-y-auto">

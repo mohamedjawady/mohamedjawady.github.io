@@ -1,7 +1,7 @@
 ---
 title: "Linux System Calls Reference"
-description: "Comprehensive reference for Linux system calls. Essential for systems programming, covering file I/O, process management, memory operations, networking, and signal handling."
-date: "2025-01-19"
+description: "Reference for Linux system calls. Essential for systems programming, covering file I/O, process management, memory operations, networking, and signal handling."
+date: "2025-07-19"
 author: "0xHabib"
 tags: ["linux", "system-calls", "c", "systems-programming", "kernel", "unix"]
 component: "linux-system-calls"
@@ -12,7 +12,7 @@ difficulty: "advanced"
 
 # Linux System Calls Cheatsheet
 
-This comprehensive cheatsheet covers essential Linux system calls used in systems programming. From basic file operations to advanced networking and memory management, these are the building blocks of Linux applications.
+This cheatsheet covers essential Linux system calls used in systems programming. From basic file operations to advanced networking and memory management, these are the building blocks of Linux applications.
 
 ## What Are System Calls?
 

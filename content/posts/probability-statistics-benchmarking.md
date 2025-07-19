@@ -290,7 +290,7 @@ Same average, completely different user experience.
 
 **The fix**: Always report percentiles alongside means.
 
-<CollapsibleCode language="python" title="Comprehensive Statistics Functions">
+<CollapsibleCode language="python" title="Statistics Functions">
 
 ```python
 def comprehensive_stats(data):

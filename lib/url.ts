@@ -50,7 +50,7 @@ export function isInternalUrl(url: string): boolean {
  * Parse internal URL to get content type and identifier
  */
 export function parseInternalUrl(url: string): {
-  type: 'post' | 'note' | 'cheatsheet' | 'visualization' | 'other'
+  type: 'post' | 'note' | 'cheatsheet' | 'visualization' | 'study-deck' | 'other'
   id: string | null
   path: string
 } | null {
@@ -79,6 +79,11 @@ export function parseInternalUrl(url: string): {
     const visualizationMatch = path.match(/^\/visualizations\/([^\/]+)$/)
     if (visualizationMatch) {
       return { type: 'visualization', id: visualizationMatch[1], path }
+    }
+    
+    const studyDeckMatch = path.match(/^\/study-decks\/([^\/]+)$/)
+    if (studyDeckMatch) {
+      return { type: 'study-deck', id: studyDeckMatch[1], path }
     }
     
     return { type: 'other', id: null, path }

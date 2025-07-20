@@ -3,6 +3,7 @@ import { getPostBySlug } from '@/lib/posts'
 import { getNoteById } from '@/lib/notes'
 import { getCheatsheetById } from '@/lib/cheatsheets'
 import { getVisualizationById } from '@/lib/visualizations'
+import { getStudyDeckById } from '@/lib/study-decks'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
@@ -87,6 +88,26 @@ export async function GET(request: NextRequest) {
               tags: content.tags,
               relatedPost: content.relatedPost,
               visibility: content.visibility
+            }
+          })
+        }
+        break
+
+      case 'study-deck':
+        content = getStudyDeckById(id)
+        if (content) {
+          return NextResponse.json({
+            title: content.title,
+            description: content.description,
+            type: 'study-deck',
+            metadata: {
+              date: content.createdDate,
+              tags: content.tags,
+              category: content.category,
+              difficulty: content.difficulty,
+              cardCount: content.cards.length,
+              estimatedTime: content.estimatedTime,
+              sourceNote: content.sourceNote
             }
           })
         }

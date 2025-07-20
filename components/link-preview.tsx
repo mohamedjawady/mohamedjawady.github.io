@@ -46,6 +46,8 @@ const TypeIcon = ({ type }: { type: string }) => {
       return <Monitor {...iconProps} />
     case 'reading':
       return <BookOpen {...iconProps} />
+    case 'study-deck':
+      return <GraduationCap {...iconProps} />
     default:
       return <FileText {...iconProps} />
   }

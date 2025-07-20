@@ -2,6 +2,7 @@ import { getAllPosts } from '@/lib/posts'
 import { getAllVisualizations } from '@/lib/visualizations'
 import { getAllCheatsheets } from '@/lib/cheatsheets'
 import { getAllNotes } from '@/lib/notes'
+import { getAllStudyDecks } from '@/lib/study-decks'
 import { getCanonicalUrl } from '@/lib/url'
 import { MetadataRoute } from 'next'
 
@@ -10,12 +11,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const visualizations = await getAllVisualizations()
   const cheatsheets = await getAllCheatsheets()
   const notes = getAllNotes()
+  const studyDecks = getAllStudyDecks()
   
   // Filter out draft posts, visualizations, cheatsheets, and notes from sitemap
   const publishedPosts = posts.filter(post => post.visibility === 'public')
   const publishedVisualizations = visualizations.filter(viz => viz.visibility === 'public')
   const publishedCheatsheets = cheatsheets.filter(sheet => sheet.visibility === 'public')
   const publishedNotes = notes.filter(note => note.visible)
+  // All study decks are considered published (no visibility filter needed based on current schema)
+  const publishedStudyDecks = studyDecks
   
   const postUrls = publishedPosts.map((post) => ({
     url: getCanonicalUrl(`/posts/${post.slug}`),
@@ -41,6 +45,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const noteUrls = publishedNotes.map((note) => ({
     url: getCanonicalUrl(`/notes/${note.id}`),
     lastModified: note.publishedDate ? new Date(note.publishedDate) : new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }))
+
+  const studyDeckUrls = publishedStudyDecks.map((deck) => ({
+    url: getCanonicalUrl(`/study-decks/${deck.id}`),
+    lastModified: new Date(deck.lastUpdated),
     changeFrequency: 'weekly' as const,
     priority: 0.7,
   }))
@@ -77,6 +88,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
+      url: getCanonicalUrl('/study-decks'),
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
       url: getCanonicalUrl('/about'),
       lastModified: new Date(),
       changeFrequency: 'monthly',
@@ -98,5 +115,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...visualizationUrls,
     ...cheatsheetUrls,
     ...noteUrls,
+    ...studyDeckUrls,
   ]
 }

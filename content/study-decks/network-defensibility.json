@@ -1,0 +1,330 @@
+{
+  "id": "network-defensibility",
+  "title": "Network Defensibility: Building a Monitored and Secure Infrastructure",
+  "description": "Study cards covering Network Security Monitoring (NSM), Continuous Security Monitoring (CSM), and defensible network architecture principles",
+  "sourceNote": "network-defensibility",
+  "category": "security",
+  "tags": ["network-security", "nsm", "csm", "monitoring", "siem", "threat-hunting"],
+  "difficulty": "intermediate",
+  "estimatedTime": "45-60 minutes",
+  "totalCards": 35,
+  "createdDate": "2025-07-20",
+  "lastUpdated": "2025-07-20",
+  "cards": [
+    {
+      "id": "nd-001",
+      "type": "definition",
+      "category": "fundamentals",
+      "front": "What are the two critical pillars that form the foundation of network defensibility?",
+      "back": "**Network Security Monitoring (NSM)**: Monitoring network traffic and communications\n\n**Continuous Security Monitoring (CSM)**: Monitoring endpoints and host-based activities\n\nBoth pillars work together to provide comprehensive visibility across the entire infrastructure.",
+      "tags": ["nsm", "csm", "fundamentals"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-002",
+      "type": "list",
+      "category": "framework",
+      "front": "List the Seven Pillars of Defensible Networks according to Richard Bejtlich's framework.",
+      "back": "1. **Monitored** - Deploy comprehensive monitoring\n2. **Inventoried** - Maintain complete asset inventory\n3. **Controlled** - Implement strict access controls\n4. **Claimed** - Establish clear ownership\n5. **Minimized** - Reduce attack surface\n6. **Assessed** - Regular vulnerability identification\n7. **Current** - Maintain up-to-date systems",
+      "tags": ["bejtlich", "framework", "pillars"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-003",
+      "type": "concept",
+      "category": "nsm",
+      "front": "What are the four key questions that Network Security Monitoring (NSM) should answer?",
+      "back": "• **Who is talking to whom?** (Source and destination analysis)\n• **What are they saying?** (Content and protocol analysis)\n• **What services are being used?** (Application layer visibility)\n• **Can we record the exchanges?** (Full packet capture capabilities)",
+      "tags": ["nsm", "questions", "monitoring"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-004",
+      "type": "technical",
+      "category": "nsm",
+      "front": "Describe the difference between Layer 3/4 and Layer 7 NSM data collection.",
+      "back": "**Layer 3/4 (Network/Transport)**:\n- NetFlow and flow-based data\n- Bandwidth utilization and traffic volume\n- Source/destination IP addresses and ports\n- Protocol usage and connection patterns\n- Timing and duration of communications\n\n**Layer 7 (Application)**:\n- Transaction and content data\n- DNS queries and responses\n- HTTP/HTTPS requests and responses\n- SSL/TLS certificate information\n- Application-specific protocol details",
+      "tags": ["nsm", "layers", "data-collection"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-005",
+      "type": "checklist",
+      "category": "nsm",
+      "front": "What are the four essential NSM capabilities that your implementation should provide?",
+      "back": "✅ **High-level bandwidth statistics and traffic flows**\n- Monitor for unusual data volumes (e.g., 1TB transfer)\n\n✅ **Domain access visibility**\n- DNS logging through firewalls, proxies, or Zeek\n\n✅ **Full packet data retrieval**\n- PCAP storage for forensic analysis\n\n✅ **Malicious encrypted traffic detection**\n- SSL/TLS certificate analysis\n- JA3/JA4 fingerprinting",
+      "tags": ["nsm", "capabilities", "requirements"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-006",
+      "type": "definition",
+      "category": "csm",
+      "front": "What is Continuous Security Monitoring (CSM) and what does it focus on?",
+      "back": "**CSM** focuses on endpoint and host-based monitoring to understand what's happening on individual systems.\n\nIt provides visibility into:\n- Process execution and system behavior\n- File and registry changes\n- User activities and privilege usage\n- Application and service status\n- System configuration changes",
+      "tags": ["csm", "endpoints", "monitoring"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-007",
+      "type": "concept",
+      "category": "csm",
+      "front": "What are the five key questions that CSM should answer about endpoints?",
+      "back": "• **What ports are listening and why?**\n• **Are there any unauthorized applications running?**\n• **Have critical system files been modified?**\n• **Have malicious scripts been executed?**\n• **Do systems have unauthorized startup items?**",
+      "tags": ["csm", "questions", "endpoints"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-008",
+      "type": "comparison",
+      "category": "nsm-vs-csm",
+      "front": "Compare the advantages of Network Data vs Endpoint Data in security monitoring.",
+      "back": "**Network Data Advantages:**\n- Detects lateral movement between systems\n- Identifies C2 communications\n- Reveals data exfiltration attempts\n- Provides communication context and timing\n\n**Endpoint Data Advantages:**\n- Shows process execution details\n- Reveals activity inside encrypted connections\n- Identifies persistence mechanisms\n- Provides user and privilege context",
+      "tags": ["nsm", "csm", "comparison", "advantages"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-009",
+      "type": "scenario",
+      "category": "integration",
+      "front": "Scenario: You detect a connection to a suspicious IP address. How would NSM and CSM data work together to provide complete context?",
+      "back": "**NSM Detection**: Connection to suspicious IP address\n\n**CSM Investigation**:\n- Reveals `calc.exe` (not from Microsoft) initiated the connection\n- Shows malicious process spawned the fake calc.exe\n- Identifies persistence mechanisms created\n- Provides user context and privilege escalation\n\n**Combined Intelligence**: Complete attack timeline from initial execution to network communication",
+      "tags": ["nsm", "csm", "scenario", "investigation"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "nd-010",
+      "type": "technical",
+      "category": "tools",
+      "front": "Describe the role and capabilities of Zeek (formerly Bro) in NSM.",
+      "back": "**Zeek** is a network traffic analysis tool that:\n- Converts live traffic or PCAPs into structured logs\n- Generates protocol-specific logs (HTTP, DNS, SSL, etc.)\n- Records activity without bias (excellent for threat hunting)\n- Integrates well with SIEM platforms\n- Provides deep packet inspection and analysis\n- Supports custom scripting for specialized detection",
+      "tags": ["zeek", "bro", "tools", "nsm"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-011",
+      "type": "technical",
+      "category": "tools",
+      "front": "What is Suricata and how does it complement NSM capabilities?",
+      "back": "**Suricata** is an Intrusion Detection/Prevention System (IDS/IPS) that:\n- Provides signature-based detection\n- Offers behavioral detection capabilities\n- Generates both alerts and flow data\n- Can operate in IDS or IPS mode\n- Supports multi-threading for high performance\n- Integrates with other NSM tools",
+      "tags": ["suricata", "ids", "ips", "tools"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-012",
+      "type": "list",
+      "category": "csm",
+      "front": "What are the three main categories of CSM data sources?",
+      "back": "**1. Host-Based Logs:**\n- Windows Event Logs (Security, System, Application)\n- Sysmon (Enhanced Windows logging)\n- Linux System Logs (Syslog, auditd, authentication)\n\n**2. Security Tools:**\n- Antivirus/EDR logs\n- HIDS/HIPS alerts\n- Vulnerability scanner output\n\n**3. System Monitoring:**\n- File/Registry integrity monitoring\n- Process and service monitoring\n- Autorun items and persistence mechanisms",
+      "tags": ["csm", "data-sources", "logs"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-013",
+      "type": "concept",
+      "category": "architecture",
+      "front": "Why is data centralization critical for effective security monitoring?",
+      "back": "**The Challenge:**\n- Multiple security tools with separate interfaces\n- Different data formats (binary, XML, proprietary)\n- Lack of correlation between network and endpoint events\n- Inefficient investigation workflows\n\n**The Solution:**\n- Convert everything to text-based logs\n- Centralized SIEM platform for correlation\n- Unified investigation workflows\n- Cross-domain event correlation",
+      "tags": ["centralization", "siem", "architecture"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-014",
+      "type": "process",
+      "category": "architecture",
+      "front": "Describe the network traffic processing pipeline for centralized logging.",
+      "back": "1. **Raw Traffic Capture**: PCAP files from network taps/spans\n2. **Traffic Analysis Tools**: Zeek or Suricata convert PCAP to structured logs\n3. **SIEM Ingestion**: Text-based logs fed into central platform\n4. **Forensic Reference**: Original PCAP retained for detailed analysis\n\nThis pipeline ensures both real-time analysis and forensic capabilities.",
+      "tags": ["pipeline", "pcap", "processing", "siem"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "nd-015",
+      "type": "architecture",
+      "category": "implementation",
+      "front": "Describe the data collection architecture showing the flow from endpoints and network devices to the SIEM.",
+      "back": "```\n[Endpoints] → [Log Agents] → [SIEM Platform] ← [Flow Receivers] ← [Network Devices]\n     ↓              ↓              ↑              ↓              ↓\n[Event Logs]   [Text Logs]   [Correlation]   [Text Logs]   [Flow Data]\n     ↓              ↓         [Analytics]         ↓              ↓\n[File Changes] [Process Info] [Alerting]   [Traffic Logs] [Bandwidth Stats]\n```\n\nCentralized correlation enables comprehensive threat detection and investigation.",
+      "tags": ["architecture", "data-flow", "siem", "correlation"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "nd-016",
+      "type": "concept",
+      "category": "coverage",
+      "front": "What are the four key areas for network coverage in a defensible architecture?",
+      "back": "**1. Perimeter Monitoring**: Internet ingress/egress points\n**2. DMZ Visibility**: External-facing services and applications\n**3. Internal Segmentation**: East-west traffic between network segments\n**4. Critical Asset Monitoring**: High-value servers and databases\n\nEach area provides unique threat detection capabilities.",
+      "tags": ["coverage", "network", "monitoring-points"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-017",
+      "type": "concept",
+      "category": "coverage",
+      "front": "What types of endpoints should be included in CSM coverage?",
+      "back": "**• Workstations**: User devices and laptops\n**• Servers**: Both on-premises and cloud instances\n**• IoT Devices**: Network-connected operational technology\n**• Mobile Devices**: BYOD and corporate mobile assets\n\nComprehensive endpoint coverage ensures no blind spots in the environment.",
+      "tags": ["coverage", "endpoints", "assets"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-018",
+      "type": "concept",
+      "category": "storage",
+      "front": "Explain the three-tier data retention strategy for security monitoring.",
+      "back": "**Hot Data**: Recent logs for active investigation (30-90 days)\n- Fast access, high performance storage\n\n**Warm Data**: Historical logs for trend analysis (6-12 months)\n- Moderate access speed, cost-effective storage\n\n**Cold Data**: Long-term archival for compliance (1-7 years)\n- Slower access, lowest cost storage\n\n**PCAP Storage**: High-value traffic captures (limited by storage costs)",
+      "tags": ["retention", "storage", "data-lifecycle"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-019",
+      "type": "tools",
+      "category": "siem",
+      "front": "Name four major SIEM platforms and their key characteristics.",
+      "back": "**• Splunk**: Enterprise log management and analytics\n**• Elastic Stack**: Open-source log aggregation and search\n**• IBM QRadar**: Security intelligence platform\n**• Microsoft Sentinel**: Cloud-native SIEM solution\n\nEach platform has different strengths in cost, scalability, and features.",
+      "tags": ["siem", "platforms", "tools"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-020",
+      "type": "tools",
+      "category": "nsm-tools",
+      "front": "List four essential NSM tools and their primary functions.",
+      "back": "**• Zeek**: Network traffic analysis and logging\n**• Suricata**: IDS/IPS with NSM capabilities\n**• Wireshark**: Packet analysis and forensics\n**• Security Onion**: Integrated NSM platform\n\nThese tools provide comprehensive network visibility and analysis capabilities.",
+      "tags": ["nsm", "tools", "monitoring"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-021",
+      "type": "tools",
+      "category": "csm-tools",
+      "front": "Identify four key CSM tools for endpoint monitoring.",
+      "back": "**• Sysmon**: Enhanced Windows endpoint logging\n**• Osquery**: SQL-based endpoint visibility\n**• OSSEC**: Host-based intrusion detection\n**• Wazuh**: Open-source security monitoring platform\n\nThese tools provide deep endpoint visibility and behavioral monitoring.",
+      "tags": ["csm", "endpoint-tools", "monitoring"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-022",
+      "type": "tools",
+      "category": "log-processing",
+      "front": "What are four tools for log processing and collection?",
+      "back": "**• Logstash**: Log processing and transformation\n**• Fluentd**: Unified logging layer\n**• rsyslog**: High-performance log processing\n**• Windows Event Forwarding**: Native Windows log collection\n\nThese tools normalize and forward logs from various sources to central platforms.",
+      "tags": ["log-processing", "collection", "tools"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-023",
+      "type": "metrics",
+      "category": "measurement",
+      "front": "What are the four key metrics for measuring network defensibility?",
+      "back": "**• Mean Time to Detection (MTTD)**: How quickly you identify threats\n**• Mean Time to Response (MTTR)**: How quickly you contain incidents\n**• Coverage Percentage**: Proportion of assets under monitoring\n**• Alert Quality**: Ratio of true positives to false positives\n\nThese metrics help assess and improve security monitoring effectiveness.",
+      "tags": ["metrics", "measurement", "kpis"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-024",
+      "type": "concept",
+      "category": "improvement",
+      "front": "What are the four key areas for continuous improvement in network defensibility?",
+      "back": "**1. Regular assessment** of monitoring gaps\n**2. Tuning detection rules** and thresholds\n**3. Expanding coverage** to new assets and technologies\n**4. Training security teams** on new tools and techniques\n\nContinuous improvement ensures the monitoring program evolves with threats.",
+      "tags": ["improvement", "continuous", "security"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "nd-025",
+      "type": "definition",
+      "category": "framework",
+      "front": "Define what it means for a network to be 'Monitored' in the defensible network framework.",
+      "back": "**Monitored** means deploying comprehensive monitoring across both network and endpoint layers to capture security-relevant events and traffic patterns.\n\nThis includes:\n- Network traffic analysis\n- Endpoint activity logging\n- Real-time alerting capabilities\n- Historical data retention for investigation",
+      "tags": ["monitored", "framework", "visibility"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-026",
+      "type": "definition",
+      "category": "framework",
+      "front": "What does it mean for a network to be 'Inventoried' according to defensible network principles?",
+      "back": "**Inventoried** means maintaining complete asset inventory following frameworks like CIS Top 20 controls to know what devices, services, and applications exist in your environment.\n\nKey components:\n- Hardware and software inventory\n- Network device mapping\n- Service and application catalog\n- Regular inventory updates and validation",
+      "tags": ["inventoried", "framework", "assets"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-027",
+      "type": "definition",
+      "category": "framework",
+      "front": "Explain what 'Controlled' means in the context of defensible networks.",
+      "back": "**Controlled** means implementing strict access controls for both ingress and egress traffic, managing who can access what resources and when.\n\nThis includes:\n- Network segmentation and firewall rules\n- Identity and access management\n- Privilege controls and least-privilege principles\n- Traffic filtering and inspection",
+      "tags": ["controlled", "framework", "access-control"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-028",
+      "type": "definition",
+      "category": "framework",
+      "front": "What does 'Claimed' mean in defensible network architecture?",
+      "back": "**Claimed** means establishing clear ownership and responsibility for all services, applications, and network segments within your infrastructure.\n\nKey aspects:\n- Designated system owners\n- Clear responsibility matrices\n- Accountability for security posture\n- Defined escalation procedures\n- Regular ownership reviews",
+      "tags": ["claimed", "framework", "ownership"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-029",
+      "type": "definition",
+      "category": "framework",
+      "front": "How is a network 'Minimized' in defensible architecture?",
+      "back": "**Minimized** means reducing attack surface by eliminating unnecessary services, closing unused ports, and implementing least-privilege principles.\n\nImplementation:\n- Disable unnecessary services and protocols\n- Close unused network ports\n- Remove unnecessary software\n- Minimize user privileges\n- Regular attack surface assessments",
+      "tags": ["minimized", "framework", "attack-surface"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-030",
+      "type": "definition",
+      "category": "framework",
+      "front": "What does it mean for a network to be 'Assessed' in defensible architecture?",
+      "back": "**Assessed** means regularly identifying weaknesses through vulnerability assessments, penetration testing, and defense validation exercises.\n\nActivities include:\n- Regular vulnerability scans\n- Penetration testing\n- Red team exercises\n- Security control validation\n- Risk assessments and gap analysis",
+      "tags": ["assessed", "framework", "testing"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-031",
+      "type": "definition",
+      "category": "framework",
+      "front": "Explain what 'Current' means in the defensible network framework.",
+      "back": "**Current** means maintaining up-to-date systems with timely patching and remediation of known vulnerabilities.\n\nThis involves:\n- Regular patch management\n- Vulnerability remediation processes\n- System and software updates\n- Configuration management\n- Change control procedures",
+      "tags": ["current", "framework", "patching"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "nd-032",
+      "type": "technical",
+      "category": "dns",
+      "front": "Why is DNS logging critical for NSM and what attack techniques does it help detect?",
+      "back": "**DNS Logging Importance:**\n- Reveals domain access patterns\n- Detects DNS tunneling for data exfiltration\n- Identifies command and control communications\n- Tracks domain reputation and malicious domains\n\n**Detection Capabilities:**\n- DNS over HTTPS (DoH) bypass attempts\n- Domain generation algorithms (DGA)\n- Fast-flux networks\n- DNS amplification attacks",
+      "tags": ["dns", "logging", "detection", "c2"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "nd-033",
+      "type": "technical",
+      "category": "encryption",
+      "front": "How can NSM detect malicious activity in encrypted traffic?",
+      "back": "**SSL/TLS Certificate Analysis:**\n- Certificate validation and reputation\n- Self-signed certificate detection\n- Certificate chain analysis\n\n**Behavioral Analysis:**\n- Traffic timing and volume patterns\n- Connection frequency and duration\n- JA3/JA4 fingerprinting for client/server identification\n\n**Metadata Inspection:**\n- SNI (Server Name Indication) analysis\n- Certificate transparency logs\n- TLS handshake anomalies",
+      "tags": ["encryption", "tls", "behavioral-analysis", "ja3"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "nd-034",
+      "type": "integration",
+      "category": "correlation",
+      "front": "Provide an example of how NSM and CSM data correlation enhances threat detection beyond what either could achieve alone.",
+      "back": "**Scenario**: Detecting lateral movement attack\n\n**NSM Contribution:**\n- Unusual SMB traffic between workstations\n- New network connections from compromised host\n- Timing and volume of data transfers\n\n**CSM Contribution:**\n- Process creation events showing remote execution\n- Credential usage and privilege escalation\n- File system changes and persistence mechanisms\n\n**Correlated Intelligence:**\n- Complete attack timeline with process causality\n- Identification of compromised credentials\n- Full scope of affected systems and data",
+      "tags": ["correlation", "lateral-movement", "integration", "detection"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "nd-035",
+      "type": "strategic",
+      "category": "implementation",
+      "front": "What is the key principle for building a defensible network that goes beyond just deploying security tools?",
+      "back": "**Holistic Integration Approach:**\n\nBuilding a defensible network requires creating an **integrated monitoring ecosystem** that provides actionable intelligence to security teams while maintaining operational efficiency and cost-effectiveness.\n\n**Key Elements:**\n- Comprehensive monitoring (NSM + CSM)\n- Strategic tool deployment with purpose\n- Centralized data analysis and correlation\n- Continuous improvement and adaptation\n- Focus on operational efficiency, not just tool accumulation\n\nThe goal is visibility and control that enables effective threat detection, investigation, and response.",
+      "tags": ["strategy", "integration", "holistic", "ecosystem"],
+      "difficulty": "advanced"
+    }
+  ]
+}

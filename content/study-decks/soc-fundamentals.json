@@ -1,0 +1,177 @@
+{
+  "id": "soc-fundamentals",
+  "title": "SOC Fundamentals & Best Practices",
+  "description": "Essential knowledge for Security Operations Center fundamentals, organizational structure, processes, and key industry insights",
+  "sourceNote": "soc-fundamentals",
+  "category": "security",
+  "tags": ["soc", "security-operations", "incident-response", "threat-intelligence", "verizon-dbir", "mandiant"],
+  "difficulty": "intermediate",
+  "estimatedTime": "25-35 minutes",
+  "totalCards": 18,
+  "createdDate": "2025-07-20",
+  "lastUpdated": "2025-07-20",
+  "cards": [
+    {
+      "id": "soc-001",
+      "type": "definition",
+      "category": "fundamentals",
+      "front": "What is the primary mission of a Security Operations Center (SOC)?",
+      "back": "A SOC serves as the front line of organizational cybersecurity defense, responsible for:\n\n• **Continuous monitoring** of security events and threats\n• **Detection and analysis** of potential security incidents\n• **Incident response** and containment\n• **Threat intelligence** collection and analysis\n• **Security improvement** through lessons learned\n\nThe SOC provides 24/7 security monitoring and rapid response capabilities to protect organizational assets.",
+      "tags": ["soc", "mission", "purpose"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "soc-002",
+      "type": "process",
+      "category": "workflow",
+      "front": "What are the five core processes that make up the SOC workflow?",
+      "back": "**1. Collection** - Gathering security data from various sources\n**2. Detection** - Identifying potential security threats and anomalies\n**3. Triage** - Prioritizing and categorizing security events\n**4. Investigation** - Deep analysis of confirmed incidents\n**5. Improvement** - Learning from incidents to enhance security posture\n\nThis cyclical process ensures continuous security monitoring and organizational learning.",
+      "tags": ["soc", "workflow", "process"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-003",
+      "type": "comparison",
+      "category": "organization",
+      "front": "Compare Tiered vs Tierless SOC organizational models.",
+      "back": "**Tiered Model:**\n• Clear hierarchy (Tier 1, 2, 3) with defined responsibilities\n• Structured escalation paths\n• Specialized roles and expertise levels\n• Traditional approach with proven effectiveness\n\n**Tierless Model:**\n• Flat organizational structure\n• Cross-trained analysts handle various tasks\n• More flexible resource allocation\n• Faster decision-making and reduced handoffs\n• Requires highly skilled, versatile analysts",
+      "tags": ["soc", "organization", "models"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-004",
+      "type": "list",
+      "category": "documentation",
+      "front": "What are the five types of SOC documentation framework components?",
+      "back": "**1. Policies** - High-level organizational directives and governance\n**2. Standards** - Specific technical requirements and configurations\n**3. Procedures** - Step-by-step operational instructions\n**4. Guidelines** - Best practice recommendations and suggestions\n**5. Playbooks** - Incident-specific response workflows and decision trees\n\nThis framework ensures consistent, documented, and repeatable SOC operations.",
+      "tags": ["soc", "documentation", "framework"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "soc-005",
+      "type": "technical",
+      "category": "reports",
+      "front": "What are the two essential annual security reports that SOC professionals should study?",
+      "back": "**Verizon Data Breach Investigations Report (DBIR)**:\n• Annual comprehensive analysis of security incidents\n• Global data breach trends and statistics\n• Attack vector analysis and industry comparisons\n\n**Mandiant M-Trends Report**:\n• Advanced threat intelligence insights\n• Incident response findings from Google Cloud Security\n• APT group activities and techniques\n• Dwell time and detection metrics\n\nBoth reports provide crucial threat landscape awareness for SOC operations.",
+      "tags": ["verizon-dbir", "mandiant", "reports", "threat-intelligence"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-006",
+      "type": "scenario",
+      "category": "metrics",
+      "front": "A SOC manager needs to demonstrate value to executive leadership. What key metrics should they focus on?",
+      "back": "**Primary Metrics:**\n• **Mean Time to Detection (MTTD)** - Speed of threat identification\n• **Mean Time to Response (MTTR)** - Speed of incident containment\n• **False Positive Rate** - Quality of detection capabilities\n• **Coverage Percentage** - Scope of monitored assets\n\n**Business Value Metrics:**\n• **Prevented losses** from blocked attacks\n• **Compliance adherence** rates\n• **Security posture improvement** trends\n• **Cost per incident** and operational efficiency\n\nCommunicate in business terms with clear ROI demonstration.",
+      "tags": ["soc", "metrics", "communication", "roi"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-007",
+      "type": "definition",
+      "category": "2025-trends",
+      "front": "According to Verizon DBIR 2025, what major trend has doubled compared to the previous year?",
+      "back": "**Third-party involvement in breaches has doubled**, driven primarily by:\n\n• **Vulnerability exploitation** in third-party systems\n• **Business interruptions** affecting supply chain security\n• **Increased attack surface** through vendor relationships\n• **Lateral movement** from compromised partners\n\nThis trend highlights the critical importance of supply chain security and third-party risk management in modern SOC operations.",
+      "tags": ["verizon-dbir", "2025-trends", "third-party", "supply-chain"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-008",
+      "type": "technical",
+      "category": "2025-trends",
+      "front": "What concerning vulnerability management statistic was revealed in Verizon DBIR 2025?",
+      "back": "**Less than half of perimeter-device vulnerabilities were fully remediated** by organizations, with almost half remaining unresolved.\n\nThis reveals critical gaps in:\n• **Patch management processes**\n• **Vulnerability prioritization**\n• **Resource allocation** for security maintenance\n• **Risk assessment** capabilities\n\nSOCs must emphasize vulnerability management as a core preventive control.",
+      "tags": ["verizon-dbir", "vulnerability-management", "patching"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-009",
+      "type": "technical",
+      "category": "2025-trends",
+      "front": "What percentage of Mandiant M-Trends 2025 investigations showed evidence of data theft?",
+      "back": "**37% of investigations** showed evidence of data theft, which is consistent with 2023 levels.\n\nAdditional data theft trends:\n• **11% involved data theft extortion** without ransomware\n• **6% involved multi-faceted extortion** (both data theft and ransomware)\n• Focus on **high-value data** including personnel information\n• **Geopolitical targeting** of sensitive content\n\nSOCs must monitor for data exfiltration indicators beyond traditional malware signatures.",
+      "tags": ["mandiant", "data-theft", "statistics", "extortion"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-010",
+      "type": "technical",
+      "category": "apt-groups",
+      "front": "Which APT group conducted selective data theft focusing on personnel data and geopolitical content in 2025?",
+      "back": "**APT28 (Russian)** conducted selective data theft operations targeting:\n\n• **Personnel data** from targeted organizations\n• **Geopolitical content** relevant to Russian interests\n• **Strategic intelligence** gathering\n• **Selective targeting** rather than mass data collection\n\nThis represents sophisticated, nation-state level intelligence gathering rather than opportunistic cybercrime.",
+      "tags": ["apt28", "russian", "data-theft", "geopolitical"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-011",
+      "type": "technical",
+      "category": "apt-groups",
+      "front": "What tools did APT41 (Chinese) use for systematic large-scale data exfiltration in 2025?",
+      "back": "**APT41 (Chinese)** used:\n\n• **SQLULDR2** - Database unloading utility for data extraction\n• **PINEGROVE** - Custom data exfiltration tool\n• **OneDrive** - Cloud storage for data staging and exfiltration\n\nThis demonstrates:\n• **Living off the land** techniques using legitimate cloud services\n• **Custom tooling** for specific data extraction needs\n• **Systematic approach** to large-scale data theft\n• **Cloud infrastructure abuse** for data exfiltration",
+      "tags": ["apt41", "chinese", "sqluldr2", "pinegrove", "onedrive"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-012",
+      "type": "concept",
+      "category": "frameworks",
+      "front": "How do NIST Cybersecurity Framework and MITRE ATT&CK complement SOC operations?",
+      "back": "**NIST Cybersecurity Framework**:\n• Provides **risk management structure** (Identify, Protect, Detect, Respond, Recover)\n• Enables **strategic planning** and governance\n• Supports **compliance** and organizational alignment\n\n**MITRE ATT&CK Framework**:\n• Offers **tactical knowledge base** of adversary techniques\n• Enables **threat hunting** and detection engineering\n• Supports **gap analysis** and security control mapping\n\n**Together**: NIST provides strategic direction while ATT&CK provides tactical implementation guidance.",
+      "tags": ["nist", "mitre-attack", "frameworks", "strategy"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-013",
+      "type": "process",
+      "category": "incident-response",
+      "front": "What is the relationship between SOC operations and incident response?",
+      "back": "**SOC Role in IR**:\n• **Detection** - Initial identification of security events\n• **Triage** - Determining severity and impact\n• **Initial containment** - Immediate threat mitigation\n• **Evidence collection** - Preserving forensic data\n• **Escalation** - Involving specialized IR teams\n\n**IR Enhancement of SOC**:\n• **Lessons learned** improve detection capabilities\n• **IOCs** enhance monitoring rules\n• **Playbook refinement** based on real incidents\n• **Threat intelligence** feeds back into detection",
+      "tags": ["incident-response", "detection", "containment"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-014",
+      "type": "concept",
+      "category": "threat-intelligence",
+      "front": "How should SOCs incorporate threat intelligence into their operations?",
+      "back": "**Threat Intelligence Integration**:\n\n**Strategic Level**:\n• Industry threat trends and campaign analysis\n• Executive briefings on threat landscape\n• Long-term security planning and investment\n\n**Tactical Level**:\n• IOCs and TTPs for detection rule creation\n• Attribution and campaign tracking\n• Threat hunting hypothesis development\n\n**Operational Level**:\n• Real-time threat feeds for automated blocking\n• Incident context and attribution\n• Priority scoring for security events",
+      "tags": ["threat-intelligence", "strategic", "tactical", "operational"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-015",
+      "type": "checklist",
+      "category": "best-practices",
+      "front": "What are the essential components of effective SOC communication?",
+      "back": "**Internal Communication**:\n✅ Regular team briefings and shift handovers\n✅ Incident status updates and escalation notifications\n✅ Threat intelligence sharing and analysis\n✅ Cross-team collaboration tools and processes\n\n**External Communication**:\n✅ Executive dashboards with business metrics\n✅ Compliance reporting and audit evidence\n✅ Vendor and partner security coordination\n✅ Customer and stakeholder incident notifications\n\n**Documentation**:\n✅ Standard operating procedures and playbooks\n✅ Incident reports and lessons learned\n✅ Training materials and knowledge base",
+      "tags": ["communication", "reporting", "documentation"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-016",
+      "type": "concept",
+      "category": "continuous-improvement",
+      "front": "How should SOCs implement continuous improvement processes?",
+      "back": "**Improvement Cycle**:\n\n**1. Measurement**:\n• KPI tracking and trend analysis\n• Performance benchmarking\n• Customer satisfaction surveys\n\n**2. Analysis**:\n• Root cause analysis of incidents\n• Process gap identification\n• Technology effectiveness assessment\n\n**3. Implementation**:\n• Process optimization initiatives\n• Technology upgrades and tuning\n• Training and skill development\n\n**4. Validation**:\n• Testing new procedures\n• Measuring improvement impact\n• Stakeholder feedback collection",
+      "tags": ["improvement", "measurement", "optimization"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-017",
+      "type": "scenario",
+      "category": "challenges",
+      "front": "A SOC is experiencing high false positive rates affecting analyst efficiency. What systematic approach should be taken?",
+      "back": "**Systematic False Positive Reduction**:\n\n**1. Analysis Phase**:\n• Categorize false positives by source and type\n• Identify top 5 sources generating 80% of false positives\n• Analyze root causes (tuning, context, correlation)\n\n**2. Improvement Phase**:\n• Tune detection rules with better context\n• Implement additional correlation rules\n• Adjust severity and priority scoring\n• Add environmental context and baselines\n\n**3. Validation Phase**:\n• A/B testing of rule changes\n• Monitor true positive retention rates\n• Measure analyst productivity improvements\n• Document changes and lessons learned",
+      "tags": ["false-positives", "tuning", "efficiency", "analysis"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-018",
+      "type": "strategic",
+      "category": "future",
+      "front": "What key trends should SOCs prepare for based on 2025 threat landscape insights?",
+      "back": "**Critical Preparation Areas**:\n\n**Supply Chain Security**:\n• Enhanced third-party monitoring and assessment\n• Vendor security requirement enforcement\n• Supply chain incident response procedures\n\n**Cloud Security**:\n• Multi-cloud monitoring capabilities\n• Cloud-native security tool integration\n• Container and serverless security\n\n**AI/ML Integration**:\n• Automated threat detection and response\n• Behavioral analytics and anomaly detection\n• AI-assisted threat hunting and analysis\n\n**Skills Evolution**:\n• Cloud security expertise\n• Threat intelligence analysis\n• Automation and orchestration capabilities",
+      "tags": ["future", "trends", "preparation", "evolution"],
+      "difficulty": "advanced"
+    }
+  ]
+}

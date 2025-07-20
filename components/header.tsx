@@ -14,6 +14,7 @@ const navigation = [
   { name: "Visualizations", href: "/visualizations" },
   { name: "Cheatsheets", href: "/cheatsheets" },
   { name: "Notes", href: "/notes" },
+  { name: "Study Decks", href: "/study-decks" },
   { name: "Tags", href: "/tags" },
   { name: "About", href: "/about" },
 ]

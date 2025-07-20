@@ -16,7 +16,7 @@ visible: true
 
 ## What Makes a Network Defensible?
 
-A truly defensible network goes beyond just deploying security tools—it requires a comprehensive approach that combines visibility, control, and continuous assessment. The foundation of network defensibility rests on two critical pillars:
+A truly defensible network goes beyond just deploying security tools. It requires a comprehensive approach that combines visibility, control, and continuous assessment. The foundation of network defensibility rests on two critical pillars:
 
 - **Network Security Monitoring (NSM)**: Monitoring network traffic and communications
 - **Continuous Security Monitoring (CSM)**: Monitoring endpoints and host-based activities

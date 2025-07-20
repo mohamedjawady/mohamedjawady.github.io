@@ -189,13 +189,7 @@ Most SIEM platforms work best with text-based log data, so conversion is essenti
 
 ### Data Collection Architecture
 
-```
-[Endpoints] → [Log Agents] → [SIEM Platform] ← [Flow Receivers] ← [Network Devices]
-     ↓              ↓              ↑              ↓              ↓
-[Event Logs]   [Text Logs]   [Correlation]   [Text Logs]   [Flow Data]
-     ↓              ↓         [Analytics]         ↓              ↓
-[File Changes] [Process Info] [Alerting]   [Traffic Logs] [Bandwidth Stats]
-```
+![Data Collection Architecture](/diagrams/data-collection-architecture.svg)
 
 ## Implementation Best Practices
 

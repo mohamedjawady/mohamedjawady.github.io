@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Copy, CheckCircle, Shield, Search, Monitor, Database, AlertTriangle, Network, Eye, Lock, Target, CheckSquare, RefreshCw } from 'lucide-react'
+import { DataCollectionArchitectureDiagram } from '@/components/diagrams/DataCollectionArchitectureDiagram'
 
 export function NetworkDefensibilityNotes() {
   const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({})
@@ -538,15 +539,8 @@ export function NetworkDefensibilityNotes() {
               </div>
             </div>
 
-            <div className="bg-muted/50 p-4 rounded-lg font-mono text-sm">
-              <div className="text-center mb-2 font-semibold">Data Collection Architecture</div>
-              <div className="whitespace-pre text-xs">
-{`[Endpoints] → [Log Agents] → [SIEM Platform] ← [Flow Receivers] ← [Network Devices]
-     ↓              ↓              ↑              ↓              ↓
-[Event Logs]   [Text Logs]   [Correlation]   [Text Logs]   [Flow Data]
-     ↓              ↓         [Analytics]         ↓              ↓
-[File Changes] [Process Info] [Alerting]   [Traffic Logs] [Bandwidth Stats]`}
-              </div>
+            <div className="my-6">
+              <DataCollectionArchitectureDiagram />
             </div>
           </CardContent>
         </Card>

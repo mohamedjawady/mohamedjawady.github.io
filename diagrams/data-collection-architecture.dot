@@ -1,0 +1,88 @@
+digraph DataCollectionArchitecture {
+    // Graph settings
+    rankdir=TB;
+    bgcolor="white";
+    splines=ortho;
+    nodesep=0.8;
+    ranksep=1.2;
+    concentrate=true;
+    
+    // Node styling
+    node [shape=box, style="filled,rounded", fontname="Arial", fontsize=12, margin=0.2];
+    edge [fontname="Arial", fontsize=10, color="#475569", penwidth=2];
+    
+    // Define node groups with subgraphs for better layout
+    
+    // Component layer
+    subgraph cluster_components {
+        label="Data Collection Components";
+        style="rounded,filled";
+        fillcolor="#f8fafc";
+        color="#e2e8f0";
+        fontname="Arial Bold";
+        fontsize=14;
+        
+        endpoints [label="Endpoints", fillcolor="#ffffff", color="#475569"];
+        logagents [label="Log Agents", fillcolor="#ffffff", color="#475569"];
+        siem [label="SIEM Platform", fillcolor="#3b82f6", fontcolor="white", color="#1d4ed8", penwidth=3];
+        flowreceivers [label="Flow Receivers", fillcolor="#ffffff", color="#475569"];
+        networkdevices [label="Network Devices", fillcolor="#ffffff", color="#475569"];
+    }
+    
+    // Data types layer
+    subgraph cluster_datatypes {
+        label="Data Types";
+        style="rounded,filled";
+        fillcolor="#e0f2fe";
+        color="#0284c7";
+        fontname="Arial Bold";
+        fontsize=14;
+        
+        eventlogs [label="Event Logs", fillcolor="#0ea5e9", fontcolor="white", color="#0284c7"];
+        textlogs1 [label="Text Logs", fillcolor="#0ea5e9", fontcolor="white", color="#0284c7"];
+        correlation [label="Correlation", fillcolor="#22c55e", fontcolor="white", color="#16a34a"];
+        textlogs2 [label="Text Logs", fillcolor="#0ea5e9", fontcolor="white", color="#0284c7"];
+        flowdata [label="Flow Data", fillcolor="#0ea5e9", fontcolor="white", color="#0284c7"];
+    }
+    
+    // Processing layer
+    subgraph cluster_processing {
+        label="Processing & Analytics";
+        style="rounded,filled";
+        fillcolor="#dcfce7";
+        color="#16a34a";
+        fontname="Arial Bold";
+        fontsize=14;
+        
+        analytics [label="Analytics", fillcolor="#22c55e", fontcolor="white", color="#16a34a"];
+        alerting [label="Alerting", fillcolor="#22c55e", fontcolor="white", color="#16a34a"];
+    }
+    
+    // Define the layout order
+    {rank=same; endpoints; logagents; siem; flowreceivers; networkdevices;}
+    {rank=same; eventlogs; textlogs1; correlation; textlogs2; flowdata;}
+    {rank=same; analytics; alerting;}
+    
+    // Horizontal data flows (corrected unidirectional flows)
+    endpoints -> logagents [xlabel="logs"];
+    logagents -> siem [xlabel="processed logs"];
+    networkdevices -> flowreceivers [xlabel="network data"];
+    flowreceivers -> siem [xlabel="flow data"];
+    
+    // Vertical flows to data types
+    endpoints -> eventlogs [style=dashed, color="#64748b"];
+    logagents -> textlogs1 [style=dashed, color="#64748b"];
+    siem -> correlation [dir=both, color="#8b5cf6", penwidth=3, xlabel="bidirectional"];
+    flowreceivers -> textlogs2 [style=dashed, color="#64748b"];
+    networkdevices -> flowdata [style=dashed, color="#64748b"];
+    
+    // Processing flows
+    correlation -> analytics [color="#16a34a"];
+    correlation -> alerting [color="#16a34a"];
+    
+    // Title
+    labelloc="t";
+    label="Data Collection Architecture";
+    fontname="Arial Bold";
+    fontsize=18;
+}

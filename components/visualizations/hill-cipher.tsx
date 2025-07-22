@@ -364,11 +364,11 @@ export function HillCipher() {
             </CardHeader>
             <CardContent className="text-blue-800 dark:text-blue-200">
               <ul className="space-y-2 text-sm">
-                <li>• <strong>Encryption:</strong> C = K × P (mod 26)</li>
-                <li>• <strong>Decryption:</strong> P = K⁻¹ × C (mod 26)</li>
-                <li>• The key matrix must be invertible modulo 26</li>
-                <li>• Text is processed in 2-letter blocks</li>
-                <li>• Odd-length messages are padded with 'X'</li>
+                <li><strong>Encryption:</strong> C = K × P (mod 26)</li>
+                <li><strong>Decryption:</strong> P = K⁻¹ × C (mod 26)</li>
+                <li>The key matrix must be invertible modulo 26</li>
+                <li>Text is processed in 2-letter blocks</li>
+                <li>Odd-length messages are padded with 'X'</li>
               </ul>
             </CardContent>
           </Card>

@@ -64,10 +64,10 @@ export function DataCollectionArchitectureDiagram() {
         <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
           <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-3">Key Data Flows</h3>
           <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-300">
-            <li>• <strong>Network Devices → Flow Receivers → SIEM:</strong> Unidirectional network flow data collection</li>
-            <li>• <strong>Endpoints → Log Agents → SIEM:</strong> Unidirectional log data processing pipeline</li>
-            <li>• <strong>SIEM ↔ Correlation:</strong> Correlation and analysis</li>
-            <li>• <strong>Correlation → Analytics/Alerting:</strong> Processing outputs for monitoring and response</li>
+            <li><strong>Network Devices → Flow Receivers → SIEM:</strong> Unidirectional network flow data collection</li>
+            <li><strong>Endpoints → Log Agents → SIEM:</strong> Unidirectional log data processing pipeline</li>
+            <li><strong>SIEM ↔ Correlation:</strong> Correlation and analysis</li>
+            <li><strong>Correlation → Analytics/Alerting:</strong> Processing outputs for monitoring and response</li>
           </ul>
         </div>
       </div>

@@ -1,0 +1,213 @@
+{
+  "id": "security-operations-workflow",
+  "title": "Security Operations Center (SOC) Workflow and Incident Management",
+  "description": "Comprehensive study deck covering SOC operations from event collection to incident management, including alert handling, SIEM processes, and IMS integration",
+  "sourceNote": "security-operations-workflow",
+  "category": "security",
+  "tags": ["SOC", "incident-management", "alerts", "SIEM", "security-operations", "IMS", "threat-intelligence", "workflow", "nist"],
+  "difficulty": "intermediate",
+  "estimatedTime": "30-40 minutes",
+  "totalCards": 22,
+  "createdDate": "2025-07-22",
+  "lastUpdated": "2025-07-22",
+  "cards": [
+    {
+      "id": "soc-workflow-001",
+      "type": "definition",
+      "category": "fundamentals",
+      "front": "According to NIST SP800-61, what are the three key definitions that form the foundation of SOC operations?",
+      "back": "**Events**: Any observable occurrence in a system or network\n\n**Alerts**: An event of interest that may be unwanted or unauthorized\n\n**Incidents**: A violation or imminent threat of violation of computer security policies, acceptable use policies, or standard security practices (only if the alert is a true positive)\n\nThis hierarchy helps SOC analysts properly classify and prioritize security activities.",
+      "tags": ["nist", "definitions", "events", "alerts", "incidents"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "soc-workflow-002",
+      "type": "process",
+      "category": "workflow",
+      "front": "What is the complete SOC data flow pipeline from initial events to incident management?",
+      "back": "**Endpoint/Network Events → Logs → SIEM (Analysis + Enrichment + Rules) → Alerts → Triage/Incident Management**\n\n**SIEM Processing Functions:**\n• Analysis: Pattern recognition and correlation\n• Enrichment: Integration with threat intelligence\n• Analytic Rules: Automated detection logic\n\nThis pipeline transforms raw events into actionable security intelligence.",
+      "tags": ["workflow", "siem", "data-flow", "pipeline"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-003",
+      "type": "strategy",
+      "category": "collection",
+      "front": "What are the three main event collection strategies, and which is recommended?",
+      "back": "**1. Input-Driven**: Collect everything since you don't know what you need\n• Pro: Comprehensive coverage\n• Con: High cost and noise\n\n**2. Output-Driven**: Collect only what you specifically want\n• Pro: Cost-effective\n• Con: May miss important events\n\n**3. Hybrid Approach (Recommended)**: Collect what you think you need while continuously removing noise\n• Balances coverage with cost management\n• Allows for iterative improvement",
+      "tags": ["collection-strategy", "budget", "noise-reduction"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-004",
+      "type": "comparison",
+      "category": "alerts",
+      "front": "Compare signature-based alerts vs anomaly-based alerts in terms of characteristics and handling.",
+      "back": "**Signature-Based Alerts (Blacklist):**\n• Known evil indicators (domains, C2 patterns, exploit kits)\n• Higher likelihood of finding true threats\n• Should always be investigated\n• Require continuous tuning to reduce false positives\n\n**Anomaly-Based Alerts:**\n• Identify deviations from normal behavior\n• Examples: out-of-hours logins, large file uploads\n• Require deep understanding of normal baseline\n• May need pre-triage before ticket generation\n• Need enrichment to produce higher fidelity",
+      "tags": ["alerts", "signatures", "anomalies", "detection"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-005",
+      "type": "technical",
+      "category": "alert-routing",
+      "front": "What are the two main alert routing strategies and their trade-offs?",
+      "back": "**1. Pre-SIEM Filtering:**\n• Triage alerts before they reach the SIEM\n• Advantage: Custom-built triage tools\n• Disadvantage: Limited data scope for context\n\n**2. SIEM-Centric Processing:**\n• Send all alerts to SIEM first\n• Sub-options: SIEM built-in triage or external IMS\n• Advantage: Full data enrichment capabilities\n• Allows correlation with all available data sources\n\nSIEM-centric approach generally provides better context for decision-making.",
+      "tags": ["alert-routing", "siem", "triage", "architecture"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-workflow-006",
+      "type": "list",
+      "category": "tools",
+      "front": "What are the six required SOC solutions for effective security operations?",
+      "back": "**1. Alert and Incident Tracking**: Monitor all potential security incidents\n**2. Threat Intelligence Collection**: Organize and access threat data\n**3. Log Management**: Collect and search network/endpoint logs\n**4. Correlation and Alerting**: Automated threat detection\n**5. Investigation Automation**: Streamline response actions\n**6. Knowledge Repository**: Centralized documentation and procedures\n\nThese form the core technology stack for modern SOC operations.",
+      "tags": ["soc-tools", "technology-stack", "requirements"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "soc-workflow-007",
+      "type": "comparison",
+      "category": "ims",
+      "front": "Compare the three categories of Incident Management Systems (IMS) with examples.",
+      "back": "**Commercial Security-Oriented:**\n• Resilient, Archer, ServiceNow, CyberCPR\n• Purpose-built for security workflows\n\n**Traditional Ticketing:**\n• BMC Remedy, RT (Request Tracker), Redmine\n• General IT service management adapted for security\n\n**Open Source Security-Oriented:**\n• TheHive, RTIR, FIR (Fast Incident Response)\n• Free alternatives with security-specific features\n\nCommercial is not always better than open-source - test carefully before choosing.",
+      "tags": ["ims", "sirp", "tools", "comparison"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-008",
+      "type": "technical",
+      "category": "ims-features",
+      "front": "What are the essential and advanced features to look for in an Incident Management System?",
+      "back": "**Essential Features:**\n• Rich text documentation with inline media\n• Indicator database integration\n• Bulk operations (mass close/edit)\n• Hierarchical ticket relationships\n• API access for automation\n\n**Advanced Features:**\n• Tagging/attack cycle alignment\n• Keyboard navigation for efficiency\n• Built-in knowledge base/wiki\n• Workflow customization\n• Activity wall for collaboration\n\nThe IMS will be a primary tool - analyst satisfaction is crucial.",
+      "tags": ["ims", "features", "usability", "automation"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-009",
+      "type": "process",
+      "category": "investigation",
+      "front": "What is the three-step analyst response process when an alert fires?",
+      "back": "**1. Initial Assessment:**\n• Verify alert validity\n• Consider rule type (signature vs anomaly)\n• Determine alert fidelity level\n\n**2. Context Gathering:**\n• Enrich with additional information\n• Correlate with other logs and activities\n• Consider broader context of the activity\n\n**3. Determination and Action:**\n• Make malicious/benign determination\n• If malicious: create incident and escalate\n• Document findings and actions taken",
+      "tags": ["investigation", "analyst-workflow", "process"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-010",
+      "type": "technical",
+      "category": "thehive",
+      "front": "How does TheHive implement automatic case creation and what components are involved?",
+      "back": "**Automatic Case Creation Workflow:**\n1. **Event Collection**: SIEM processes events and generates alerts\n2. **Alert Transfer**: Alerts automatically sent to TheHive for triage\n3. **Case Population**: New case created with parsed alert fields (IPs, domains, usernames, hostnames)\n4. **Context Addition**: Additional info pulled from available sources\n5. **Task Creation**: Tasks created from designated case templates (playbooks)\n\n**Key Components**: Cases, Tasks, Work logs, Observables (IOCs), Cortex analyzers for enrichment",
+      "tags": ["thehive", "case-management", "automation", "workflow"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-workflow-011",
+      "type": "concept",
+      "category": "philosophy",
+      "front": "Why is the statement 'anomaly ≠ malicious but reverse is true' important for SOC analysts?",
+      "back": "**Key Insight**: Not all anomalies are malicious, but all malicious activity creates anomalies.\n\n**Implications for SOC Operations:**\n• Anomaly-based alerts require careful triage\n• Cannot assume every deviation indicates an attack\n• Must understand normal business operations\n• Enrichment and context are critical\n• However, true attacks will always create some form of anomaly\n\nThis principle guides how analysts approach behavioral detection systems.",
+      "tags": ["anomalies", "philosophy", "detection", "analysis"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-012",
+      "type": "problem",
+      "category": "challenges",
+      "front": "What problems arise from high alert volume, and what causes this issue?",
+      "back": "**Problems from High Alert Volume:**\n• Ignoring alerts due to overwhelm\n• Alert fatigue among analysts\n• Reduced response quality\n• Important alerts buried in noise\n\n**Root Causes:**\n• Low bar for generating alerts\n• Poorly tuned detection rules\n• Inadequate threat intelligence sources\n• Lack of baseline understanding\n• Insufficient noise reduction processes\n\n**Solution**: Continuous tuning, quality over quantity approach to alerting.",
+      "tags": ["alert-volume", "alert-fatigue", "tuning"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-013",
+      "type": "technical",
+      "category": "soc-stack",
+      "front": "What are the four core SOC technology components and their primary functions?",
+      "back": "**1. SIEM (Security Information and Event Management):**\n• Log collection, indexing, search, correlation, and alerting\n\n**2. IMS/SIRP (Incident Management System/Security Incident Response Platform):**\n• Tracking alerts, incident status, and associated indicators\n\n**3. TIP (Threat Intelligence Platform):**\n• Collection of indicators and higher-level intelligence info\n\n**4. SOAR (Security Orchestration, Automation and Response):**\n• Automation of common tasks and orchestration of workflow\n\nPlus: Knowledge Database for SOC documents, playbooks, and use cases.",
+      "tags": ["siem", "ims", "tip", "soar", "technology-stack"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "soc-workflow-014",
+      "type": "scenario",
+      "category": "best-practices",
+      "front": "A new SOC is being established. What key success factors should be prioritized?",
+      "back": "**Collection Strategy:**\n• Balance comprehensive coverage with cost management\n• Implement continuous noise reduction\n• Focus on high-value security events\n\n**Alert Management:**\n• Proper classification of signature vs anomaly alerts\n• Adequate enrichment and correlation capabilities\n• Efficient triage processes to prevent analyst fatigue\n\n**Tool Selection:**\n• Test IMS solutions thoroughly before selection\n• Ensure analyst satisfaction with primary tools\n• Prioritize automation and API access for scalability\n\n**Process Optimization:**\n• Implement standardized naming conventions\n• Develop comprehensive playbooks and templates\n• Maintain updated knowledge bases",
+      "tags": ["best-practices", "soc-setup", "success-factors"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-workflow-015",
+      "type": "definition",
+      "category": "data-types",
+      "front": "What are the key characteristics of transaction data vs alert data in SOC operations?",
+      "back": "**Transaction Data (Event Logs):**\n• Records of events (CSM and NSM data)\n• Example: Sysmon logs capturing system activities\n• High volume, detailed forensic information\n• Foundation for correlation and analysis\n\n**Alert Data:**\n• Potentially actionable data requiring decision\n• Can be standalone logs or SIEM-generated alerts\n• Must decide routing: logs only, IDS console, or ticketing\n• Often ends up in console for triage\n\nUnderstanding data types helps design proper collection and processing workflows.",
+      "tags": ["data-types", "events", "alerts", "transaction-data"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-016",
+      "type": "technical",
+      "category": "enrichment",
+      "front": "Why is enrichment and correlation critical in the SOC workflow, and what does it accomplish?",
+      "back": "**Purpose of Enrichment and Correlation:**\n• Eliminates needless investigative work\n• Provides context for better decision-making\n• Reduces false positives through additional data\n• Enables analysts to make informed determinations\n\n**What Enrichment Provides:**\n• Threat intelligence context\n• Historical activity patterns\n• Asset and user information\n• Geolocation and reputation data\n• Related indicators and campaigns\n\n**Result**: Higher fidelity alerts that analysts can act on with confidence.",
+      "tags": ["enrichment", "correlation", "context", "threat-intelligence"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-017",
+      "type": "process",
+      "category": "case-management",
+      "front": "How does TheHive organize and manage security cases from creation to resolution?",
+      "back": "**Case Organization:**\n• Incidents organized and assigned by case type\n• Cases follow pre-made case templates (playbooks)\n• Standardized workflow ensures consistency\n\n**Case Structure:**\n• Cases contain specific tasks to be completed\n• Tasks have associated work logs for documentation\n• Cases can have observables (IOCs) assigned\n• Observables enriched by Cortex analyzers\n\n**Workflow Benefits:**\n• Structured approach to incident handling\n• Clear accountability and progress tracking\n• Automated enrichment of indicators\n• Template-driven consistency",
+      "tags": ["thehive", "case-management", "observables", "playbooks"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-018",
+      "type": "strategy",
+      "category": "tool-selection",
+      "front": "What guidance should SOC managers follow when selecting an Incident Management System?",
+      "back": "**Key Selection Criteria:**\n• Test systems carefully before choosing one\n• Commercial is not always better than open-source\n• This will be one of your main tools - analysts MUST enjoy using it\n• Consider analyst satisfaction as a primary factor\n\n**Evaluation Focus:**\n• User experience and workflow efficiency\n• Integration capabilities with existing tools\n• Customization and automation options\n• Support and community resources\n• Total cost of ownership\n\n**Remember**: A tool that analysts dislike will impact SOC effectiveness regardless of features.",
+      "tags": ["tool-selection", "ims", "analyst-satisfaction", "evaluation"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-workflow-019",
+      "type": "list",
+      "category": "resources",
+      "front": "What are the essential reading materials and resources for SOC professionals?",
+      "back": "**NIST Publications:**\n• NIST SP800-61: Computer Security Incident Handling Guide\n\n**Industry Studies:**\n• Cisco Security Capabilities Benchmark Study\n• Risk-based alerting methodologies\n\n**Technical Resources:**\n• Exploit kit analysis techniques\n• Sguil Network Security Monitoring platform\n\n**Threat Intelligence:**\n• MISP for threat intelligence sharing\n• MITRE ATT&CK framework\n• Various threat intelligence feeds\n\nContinuous learning is essential in the rapidly evolving threat landscape.",
+      "tags": ["resources", "nist", "threat-intelligence", "continuous-learning"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "soc-workflow-020",
+      "type": "scenario",
+      "category": "practical",
+      "front": "An analyst receives a signature-based alert for a known malicious domain. Walk through the proper response process.",
+      "back": "**1. Initial Assessment:**\n• Recognize this is a signature-based alert (high fidelity)\n• Note that signature alerts should always be investigated\n• Check alert details and associated indicators\n\n**2. Context Gathering:**\n• Correlate with other logs (DNS, proxy, firewall)\n• Check affected systems and users\n• Review timeline of related activities\n• Enrich with threat intelligence about the domain\n\n**3. Determination and Action:**\n• Likely malicious due to signature match\n• Create incident ticket with findings\n• Escalate for containment if active threat\n• Document IOCs and response actions\n\n**Key**: Signature alerts warrant immediate and thorough investigation.",
+      "tags": ["practical", "signature-alerts", "investigation", "response"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "soc-workflow-021",
+      "type": "technical",
+      "category": "integration",
+      "front": "How do SOC tools integrate to create an effective security operations platform?",
+      "back": "**Integration Flow:**\n1. **SIEM** collects and correlates events, generates alerts\n2. **IMS** receives alerts and creates cases for triage\n3. **TIP** provides threat intelligence for enrichment\n4. **SOAR** automates repetitive tasks and orchestrates workflows\n5. **Knowledge Base** provides playbooks and documentation\n\n**Key Integration Points:**\n• API connections between all platforms\n• Automated data sharing and enrichment\n• Unified analyst dashboards and interfaces\n• Consistent indicator and case management\n\n**Result**: Seamless workflow from detection to resolution with minimal manual handoffs.",
+      "tags": ["integration", "platform", "apis", "automation"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "soc-workflow-022",
+      "type": "concept",
+      "category": "philosophy",
+      "front": "What is the ultimate goal of the SOC workflow, and how is success measured?",
+      "back": "**Ultimate Goal:**\nSystematic handling of security events from initial collection through incident resolution, providing structured approach to SOC operations that ensures:\n• No threats go undetected\n• Proper prioritization and response\n• Continuous improvement of security posture\n\n**Success Metrics:**\n• Reduced mean time to detection (MTTD)\n• Reduced mean time to response (MTTR)\n• Decreased false positive rates\n• Improved threat coverage and detection quality\n• Enhanced analyst efficiency and satisfaction\n\n**Key Principle**: Transform reactive security operations into proactive threat hunting and prevention.",
+      "tags": ["goals", "metrics", "success", "continuous-improvement"],
+      "difficulty": "intermediate"
+    }
+  ]
+}

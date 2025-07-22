@@ -3,10 +3,11 @@ import { getStudyDeckById } from '@/lib/study-decks'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const deck = getStudyDeckById(params.id)
+    const { id } = await params
+    const deck = getStudyDeckById(id)
     
     if (!deck) {
       return NextResponse.json(

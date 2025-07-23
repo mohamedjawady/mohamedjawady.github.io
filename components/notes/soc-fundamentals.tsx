@@ -248,9 +248,9 @@ export function SocFundamentalsNotes() {
               <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded text-xs">
                 <strong>Data Theft Statistics:</strong>
                 <ul className="mt-2 space-y-1">
-                  <li>• 37% of investigations showed evidence of data theft</li>
-                  <li>• 11% involved data theft extortion without ransomware</li>
-                  <li>• 6% involved multi-faceted extortion (data theft + ransomware)</li>
+                  <li>37% of investigations showed evidence of data theft</li>
+                  <li>11% involved data theft extortion without ransomware</li>
+                  <li>6% involved multi-faceted extortion (data theft + ransomware)</li>
                 </ul>
               </div>
               <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded text-xs">

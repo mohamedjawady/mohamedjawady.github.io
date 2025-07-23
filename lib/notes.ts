@@ -73,7 +73,9 @@ export function getNoteById(id: string): Note | null {
     // Dynamically import the component
     let component
     try {
-      component = require(`@/components/notes/${id}`)[
+      const componentModule = require(`@/components/notes/${id}`)
+      // Try default export first, then named export
+      component = componentModule.default || componentModule[
         id.split('-').map(word => 
           word.charAt(0).toUpperCase() + word.slice(1)
         ).join('') + 'Notes'

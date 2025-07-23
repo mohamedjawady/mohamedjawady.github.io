@@ -1,0 +1,267 @@
+{
+  "id": "cyber-threat-intelligence-siem-integration",
+  "title": "Cyber Threat Intelligence & SIEM Integration",
+  "description": "Comprehensive study deck covering threat intelligence fundamentals, TIP platforms, SIEM architecture, SOAR automation, and integrated SOC technology stack",
+  "sourceNote": "cyber-threat-intelligence-siem-integration",
+  "category": "security",
+  "tags": ["threat-intelligence", "SIEM", "SOAR", "TIP", "MISP", "SOC", "integration", "automation", "cyber-security"],
+  "difficulty": "advanced",
+  "estimatedTime": "45-60 minutes",
+  "totalCards": 28,
+  "createdDate": "2025-07-23",
+  "lastUpdated": "2025-07-23",
+  "cards": [
+    {
+      "id": "cti-siem-001",
+      "type": "definition",
+      "category": "fundamentals",
+      "front": "What is the key principle that distinguishes Cyber Threat Intelligence from simple indicator lists?",
+      "back": "**Core Principle**: Cyber Threat Intelligence is NOT just a list of bad domains and IPs. It's **analyzed cyber threat data** that provides strategic and tactical advantages over adversaries, driving \"offense informs defense\" strategies.\n\nIt involves:\n• Analysis and human judgment\n• Strategic context and attribution\n• Actionable defensive recommendations\n• Prioritized threat information",
+      "tags": ["threat-intelligence", "fundamentals", "definitions"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "cti-siem-002",
+      "type": "hierarchy",
+      "category": "fundamentals",
+      "front": "Explain the Data → Information → Intelligence hierarchy in threat intelligence.",
+      "back": "**Data**: Raw data collected from environment\n• Unprocessed information (logs, packets, hashes)\n• High volume output requiring context\n\n**Information**: Answers questions using data + context\n• Data + Context = Information\n• Provides situational awareness\n• Example: \"IP connected to malicious domain\"\n\n**Intelligence**: Uses information + human analysis to drive action\n• Information + Analysis + Judgment\n• Drives decision making and prioritizes actions\n• Example: \"Threat campaign attribution with defensive recommendations\"",
+      "tags": ["threat-intelligence", "hierarchy", "data-analysis"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-003",
+      "type": "framework",
+      "category": "fundamentals",
+      "front": "What are the three components of the Threat Definition Framework?",
+      "back": "**Intent + Capability + Opportunity = Threat**\n\n**Intent**: Malicious actor's desire to target your organization\n• Motivation behind attacks\n• Strategic objectives\n• Target selection criteria\n\n**Capability**: Means to achieve their goals\n• Malware and tools\n• Technical sophistication\n• Attack techniques\n\n**Opportunity**: Opening needed to succeed\n• Software vulnerabilities\n• Hardware weaknesses\n• Personnel security gaps",
+      "tags": ["threat-framework", "definitions", "risk-assessment"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-004",
+      "type": "technical",
+      "category": "platforms",
+      "front": "What are the five core functions that every Threat Intelligence Platform (TIP) should provide?",
+      "back": "**Essential TIP Functions:**\n\n1. **Store analysis and threat information** for indicators\n2. **Perform automated/fast lookups** via API\n3. **Record rich context** (not just lists)\n4. **Find associations** across multiple events\n5. **Enable sharing** with other organizations\n\nThese functions transform simple indicator lists into actionable intelligence that can be integrated with SOC operations.",
+      "tags": ["TIP", "platforms", "requirements", "functionality"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-005",
+      "type": "platform",
+      "category": "platforms",
+      "front": "Why is MISP considered the \"analyst favorite\" threat intelligence platform?",
+      "back": "**MISP (Malware Information Sharing Platform) Advantages:**\n\n• **High-volume indicator storage** capability\n• **Excellent web UI** and REST API\n• **Classification and sharing** functionality\n• **Easy import/export** capabilities\n• **Integration with TheHive** for case management\n• **Open source** with strong community\n• **Event-based organization** with attributes and tags\n• **Automated API integration** with SOC tools",
+      "tags": ["MISP", "open-source", "TIP", "platforms"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "cti-siem-006",
+      "type": "terminology",
+      "category": "platforms",
+      "front": "Define the core entities in MISP terminology and workflow.",
+      "back": "**MISP Core Entities:**\n\n**Events**: Contextually linked information containers\n**Attributes**: Indicators, links, files, and notes\n**Sightings**: True/false positive tracking\n**Tags**: Additional context and categorization\n\n**Workflow Process:**\n1. Create new event for threat/incident\n2. Add attributes (indicators, files, notes)\n3. Apply tags and classifications\n4. Review and publish to organizations\n5. Automated API integration with SOC tools",
+      "tags": ["MISP", "terminology", "workflow", "entities"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-007",
+      "type": "comparison",
+      "category": "platforms",
+      "front": "Compare three major commercial TIP solutions and their key features.",
+      "back": "**ThreatConnect (threatconnect.com):**\n• Advanced analytics and CAL (Collective Analytics Layer)\n• Workflow automation and enterprise integrations\n\n**Anomali (anomali.com):**\n• Machine learning and ThreatStream platform\n• Threat hunting and automated analysis\n\n**ThreatQuotient (threatq.com):**\n• Data fusion and ThreatQ platform\n• Scoring algorithms and visualization\n\nAll provide enterprise-grade threat intelligence management with extensive integration capabilities.",
+      "tags": ["commercial-TIP", "platforms", "comparison", "enterprise"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-008",
+      "type": "technical",
+      "category": "siem",
+      "front": "What are the three core functions of a SIEM system?",
+      "back": "**1. Data Collection:**\n• Receive all log data from sources\n• High-performance logging agents\n• Multi-format log compatibility\n• Message buffering for resiliency\n\n**2. Processing & Enrichment:**\n• Parse data into structured format\n• Filter unwanted events\n• Enrich with additional context\n• Index into searchable database\n\n**3. Analysis & Alerting:**\n• Fast searching capabilities\n• Visualization and dashboards\n• Analytics and correlation\n• Flexible alerting options",
+      "tags": ["SIEM", "architecture", "functions", "data-processing"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "cti-siem-009",
+      "type": "process",
+      "category": "siem",
+      "front": "Describe the SIEM data flow architecture from endpoint to alerts.",
+      "back": "**SIEM Data Flow Pipeline:**\n\n**Endpoint Logs + Network Logs** → **Aggregation** → **Filtering** → **SIEM** → **Alerts**\n\n**Process Details:**\n• **Collection**: Agents gather logs from endpoints and network devices\n• **Aggregation**: Centralized collection point for all data sources\n• **Filtering**: Remove noise and irrelevant events\n• **SIEM Processing**: Parse, enrich, correlate, and analyze\n• **Alert Generation**: Create actionable alerts for SOC analysts",
+      "tags": ["SIEM", "data-flow", "architecture", "pipeline"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-010",
+      "type": "definition",
+      "category": "siem",
+      "front": "What defines a SIEM use case and what essential documentation should it include?",
+      "back": "**SIEM Use Case Definition:**\nA SIEM use case answers \"What is the SIEM doing for us?\" by providing documented, actionable items.\n\n**Essential Documentation:**\n• **Name and description** of the use case\n• **Problem statement and goals**\n• **Data sources** (primary/secondary)\n• **Analytic logic** and expected outputs\n• **Testing and validation** procedures\n\n**Examples**: Brute force detection, suspicious uploads, privilege escalation, phishing credential harvesting",
+      "tags": ["SIEM", "use-cases", "documentation", "analytics"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-011",
+      "type": "comparison",
+      "category": "siem",
+      "front": "Compare three major enterprise SIEM solutions and their distinguishing features.",
+      "back": "**Splunk Enterprise Security (splunk.com):**\n• Machine learning and advanced correlation\n• Extensive integrations and Premium Apps ecosystem\n\n**IBM QRadar (ibm.com/qradar):**\n• Watson for Cyber Security AI integration\n• Flow-based analysis and cognitive insights\n\n**Microsoft Sentinel (azure.com/sentinel):**\n• Cloud-native SIEM with Azure integration\n• SOAR capabilities and ML-driven detection\n• Hunting queries using KQL (Kusto Query Language)",
+      "tags": ["SIEM", "enterprise", "platforms", "comparison"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-012",
+      "type": "comparison",
+      "category": "siem",
+      "front": "Compare three open source/alternative SIEM solutions.",
+      "back": "**Elastic SIEM (elastic.co):**\n• Built on ELK Stack foundation\n• Detection rules and timeline analysis\n• Elastic Security integration\n\n**Wazuh (wazuh.com):**\n• HIDS/HIPS capabilities\n• Compliance monitoring and active response\n• Comprehensive security monitoring\n\n**OSSIM/AlienVault (at&t.com):**\n• Asset discovery and vulnerability assessment\n• Behavioral monitoring and event correlation\n• Unified Security Management platform",
+      "tags": ["SIEM", "open-source", "alternatives", "platforms"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-013",
+      "type": "definition",
+      "category": "automation",
+      "front": "Distinguish between Security Automation and Security Orchestration in SOAR context.",
+      "back": "**Security Automation:**\n• Accomplishes specific, individual tasks\n• Single-purpose actions\n• Reduces manual effort\n• Executes predefined tasks\n• Improves consistency\n\n**Security Orchestration:**\n• Chains automated tasks into complex workflows\n• Multi-step process execution\n• \"Running playbooks for you\"\n• Decision trees and logic\n• Workflow coordination\n\n**Key Difference**: Automation handles individual tasks; Orchestration coordinates multiple automated tasks into comprehensive workflows.",
+      "tags": ["SOAR", "automation", "orchestration", "definitions"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-014",
+      "type": "benefits",
+      "category": "automation",
+      "front": "What are the operational and quality benefits of SOAR platform implementation?",
+      "back": "**Operational Improvements:**\n• Standardization of response tasks\n• Immediate response time\n• Higher capacity to address alerts\n• Faster onboarding for new employees\n\n**Quality Benefits:**\n• Focused effort on high-value analysis\n• Reduced analyst fatigue\n• Improved job satisfaction\n• Consistent response procedures\n\n**Result**: More efficient SOC operations with better analyst experience and consistent incident response.",
+      "tags": ["SOAR", "benefits", "operations", "quality"],
+      "difficulty": "beginner"
+    },
+    {
+      "id": "cti-siem-015",
+      "type": "examples",
+      "category": "automation",
+      "front": "Provide three SOAR automation examples with specific response actions.",
+      "back": "**Malware Detection Response:**\n• Network isolation\n• Forensic image creation\n• Incident notification\n\n**Phishing Response:**\n• Password expiration\n• Email quarantine\n• User awareness notification\n\n**C2 Communication Response:**\n• Domain reputation checking\n• Passive DNS analysis\n• Network blocking\n\nEach example shows how SOAR automates multi-step response procedures that would otherwise require manual analyst intervention.",
+      "tags": ["SOAR", "automation", "examples", "incident-response"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-016",
+      "type": "comparison",
+      "category": "automation",
+      "front": "Compare three enterprise SOAR platforms and their key capabilities.",
+      "back": "**Phantom (now Splunk SOAR) (splunk.com):**\n• 1000+ integrations\n• Visual playbook editor and case management\n\n**Demisto (now Cortex XSOAR) (paloaltonetworks.com):**\n• AI-powered with machine learning\n• Incident lifecycle management and marketplace integrations\n\n**IBM Resilient (ibm.com/resilient):**\n• Workflow automation and threat intelligence integration\n• Communication tools and compliance reporting\n\nAll provide comprehensive orchestration capabilities with extensive third-party integrations.",
+      "tags": ["SOAR", "enterprise", "platforms", "comparison"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-017",
+      "type": "comparison",
+      "category": "automation",
+      "front": "Compare three open source SOAR solutions and their distinguishing features.",
+      "back": "**TheHive + Cortex (thehive-project.org):**\n• Case management and observable analysis\n• Custom analyzers and MISP integration\n\n**WALKOFF (walkoff.readthedocs.io):**\n• Drag-and-drop workflows\n• Python-based with REST APIs and custom applications\n\n**Shuffle (shuffler.io):**\n• Modern automation platform\n• Cloud & on-premise deployment\n• Docker-based with workflow sharing and OpenAPI integration\n\nOpen source options provide cost-effective automation with community-driven development.",
+      "tags": ["SOAR", "open-source", "platforms", "comparison"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-018",
+      "type": "architecture",
+      "category": "integration",
+      "front": "What are the five core components of an integrated SOC technology stack?",
+      "back": "**Integrated SOC Technology Model:**\n\n1. **SIEM**: Data Collection and correlation\n2. **TIP**: Threat Context and intelligence\n3. **IMS**: Case Management and tracking\n4. **SOAR**: Automation and orchestration\n5. **Knowledge**: Documentation and procedures\n\n**Integration Goal**: API-driven connections between all platforms creating seamless workflows from threat detection to incident resolution with minimal manual handoffs.",
+      "tags": ["integration", "SOC", "architecture", "technology-stack"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-019",
+      "type": "process",
+      "category": "integration",
+      "front": "Describe the Detection to Response Pipeline in an integrated SOC.",
+      "back": "**Pipeline Flow:**\n**SIEM Events** → **TIP Context** → **IMS Cases** → **SOAR Response** → **Knowledge**\n\n**Process Details:**\n• **SIEM**: Detects and correlates security events\n• **TIP**: Provides threat intelligence context and attribution\n• **IMS**: Creates and manages incident cases\n• **SOAR**: Executes automated response workflows\n• **Knowledge**: Captures lessons learned and procedures\n\n**Result**: Seamless workflow from detection to resolution with automated enrichment and response.",
+      "tags": ["integration", "workflow", "pipeline", "SOC"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "cti-siem-020",
+      "type": "technical",
+      "category": "integration",
+      "front": "What are the four critical integration points in a SOC technology stack?",
+      "back": "**Critical Integration Points:**\n\n• **SIEM ↔ TIP**: Indicator lookups and threat context enrichment\n• **SIEM ↔ IMS**: Alert to case conversion and incident tracking\n• **TIP ↔ IMS**: Threat intelligence enrichment of cases\n• **SOAR ↔ All**: Orchestrated workflows across all platforms\n\n**Integration Method**: Robust API connections enabling automated data sharing, enrichment, and workflow orchestration between all security tools.",
+      "tags": ["integration", "APIs", "workflow", "automation"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "cti-siem-021",
+      "type": "metrics",
+      "category": "integration",
+      "front": "What are the four key success metrics for SOC technology integration?",
+      "back": "**Success Metrics:**\n\n• **Reduced Mean Time to Detection (MTTD)**: Faster threat identification\n• **Improved Response Consistency**: Standardized incident handling\n• **Enhanced Analyst Productivity**: More efficient use of human resources\n• **Better Threat Attribution**: Improved understanding of attack campaigns\n\n**Measurement Focus**: These metrics demonstrate the value of integrated platforms in improving both operational efficiency and security effectiveness.",
+      "tags": ["metrics", "success", "performance", "SOC"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-022",
+      "type": "strategy",
+      "category": "integration",
+      "front": "What are the four key components of a successful SOAR implementation strategy?",
+      "back": "**Implementation Strategy:**\n\n**1. Start Simple**: Begin with high-volume, low-complexity tasks\n**2. API-First Design**: Ensure all platforms support robust API integration\n**3. Human Oversight**: Build in approval gates for critical actions\n**4. Continuous Improvement**: Iterate based on analyst feedback and metrics\n\n**Goal**: Gradual automation expansion with maintained human control over critical security decisions while building analyst confidence in automated systems.",
+      "tags": ["implementation", "strategy", "SOAR", "best-practices"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "cti-siem-023",
+      "type": "future",
+      "category": "integration",
+      "front": "What are four future considerations for evolving SOC technology integration?",
+      "back": "**Future Considerations:**\n\n**1. AI/ML Integration**: Advanced analytics and automated analysis capabilities\n**2. Cloud-Native Architecture**: Scalable, distributed security platforms\n**3. Real-time Intelligence**: Automated sharing and context generation\n**4. Skills Development**: API skills and automation capabilities for analysts\n\n**Evolution Direction**: Moving toward more intelligent, cloud-based, real-time security operations with enhanced analyst capabilities.",
+      "tags": ["future", "AI", "cloud", "skills", "evolution"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "cti-siem-024",
+      "type": "practical",
+      "category": "scenarios",
+      "front": "A SOC receives a high-volume malware alert. Walk through the integrated response workflow.",
+      "back": "**Integrated Response Workflow:**\n\n**1. SIEM Detection**: Correlates endpoint and network events, generates malware alert\n**2. TIP Enrichment**: Automatically queries threat intelligence for malware signatures, C2 domains, campaign attribution\n**3. IMS Case Creation**: Creates incident case with enriched context, assigns to analyst\n**4. SOAR Automation**: Executes playbook - network isolation, forensic imaging, stakeholder notification\n**5. Knowledge Update**: Documents response actions, updates playbooks, captures lessons learned\n\n**Result**: Rapid, consistent response with minimal manual intervention while maintaining oversight.",
+      "tags": ["practical", "workflow", "malware", "incident-response"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "cti-siem-025",
+      "type": "technical",
+      "category": "platforms",
+      "front": "How do open source alternatives compare to commercial solutions for TIP, SIEM, and SOAR?",
+      "back": "**Open Source Advantages:**\n• **Cost-effective** for budget-conscious organizations\n• **Community-driven** development and support\n• **Customizable** to specific organizational needs\n• **No vendor lock-in** concerns\n\n**Commercial Advantages:**\n• **Enterprise support** and professional services\n• **Advanced features** and user interfaces\n• **Extensive integrations** and partnerships\n• **Compliance certifications** and documentation\n\n**Decision Factors**: Organization size, budget, technical expertise, compliance requirements, and integration needs should guide platform selection.",
+      "tags": ["comparison", "open-source", "commercial", "selection"],
+      "difficulty": "intermediate"
+    },
+    {
+      "id": "cti-siem-026",
+      "type": "concept",
+      "category": "fundamentals",
+      "front": "What is the relationship between offensive security research and defensive threat intelligence?",
+      "back": "**\"Offense Informs Defense\" Principle:**\n\n**Offensive Research Provides:**\n• Understanding of attacker methodologies\n• Knowledge of current attack techniques\n• Insight into tool capabilities and limitations\n• Intelligence on threat actor behaviors\n\n**Defensive Application:**\n• **Detection Development**: Create signatures based on attack patterns\n• **Control Implementation**: Deploy defenses against known techniques\n• **Threat Hunting**: Proactively search for indicators of compromise\n• **Risk Prioritization**: Focus on threats most relevant to organization\n\n**Result**: More effective defensive strategies based on real-world attack intelligence.",
+      "tags": ["offense-defense", "threat-intelligence", "strategy", "methodology"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "cti-siem-027",
+      "type": "analysis",
+      "category": "fundamentals",
+      "front": "Why is context critical in transforming security data into actionable intelligence?",
+      "back": "**Context Transformation Process:**\n\n**Without Context**: Raw IP address \"192.168.1.100\" is just data\n**With Environmental Context**: \"Internal server IP in DMZ\" becomes information\n**With Threat Context**: \"DMZ server communicating with known botnet C2\" becomes intelligence\n**With Temporal Context**: \"Recent communication during off-hours\" adds urgency\n**With Business Context**: \"Critical customer database server\" drives prioritization\n\n**Result**: Context layers transform meaningless data points into prioritized, actionable threat intelligence that drives defensive decision-making.",
+      "tags": ["context", "analysis", "transformation", "intelligence"],
+      "difficulty": "advanced"
+    },
+    {
+      "id": "cti-siem-028",
+      "type": "integration",
+      "category": "best-practices",
+      "front": "What is the key principle for successful SOC technology integration according to the integration framework?",
+      "back": "**Integration Success Principle:**\n\n**\"The most effective SOCs integrate TIP, SIEM, IMS, and SOAR platforms through robust APIs, creating seamless workflows from threat detection to incident resolution while maintaining human oversight for critical decisions.\"**\n\n**Key Elements:**\n• **API-driven integration** for automated data flow\n• **Seamless workflows** without manual handoffs\n• **Human oversight** for critical decision points\n• **End-to-end process** from detection to resolution\n\n**Balance**: Automation efficiency with human judgment and control.",
+      "tags": ["integration", "best-practices", "principles", "human-oversight"],
+      "difficulty": "advanced"
+    }
+  ]
+}

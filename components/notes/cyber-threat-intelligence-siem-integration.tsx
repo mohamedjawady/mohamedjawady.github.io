@@ -354,22 +354,22 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               category="Open Source TIP Solutions"
               platforms={[
                 {
-                  name: "MISP",
+                  name: "MISP (misp-project.org)",
                   type: "open-source",
                   description: "Malware Information Sharing Platform - analyst favorite",
-                  features: ["High-volume storage", "Great web UI", "REST API", "Sharing functionality"]
+                  features: ["High-volume storage", "Great web UI", "REST API", "Sharing functionality", "GitHub: MISP/MISP"]
                 },
                 {
-                  name: "CIF",
+                  name: "CIF (csirtgadgets.com)",
                   type: "open-source",
                   description: "Collective Intelligence Framework",
-                  features: ["Feed aggregation", "API-driven", "Scalable architecture"]
+                  features: ["Feed aggregation", "API-driven", "Scalable architecture", "GitHub: csirtgadgets/bearded-avenger"]
                 },
                 {
-                  name: "YETI",
+                  name: "YETI (yeti-platform.github.io)",
                   type: "open-source",
                   description: "Your Everyday Threat Intelligence",
-                  features: ["Observable tracking", "Analytics", "Investigation support"]
+                  features: ["Observable tracking", "Analytics", "Investigation support", "GitHub: yeti-platform/yeti"]
                 }
               ]}
             />
@@ -378,22 +378,22 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               category="Commercial TIP Solutions"
               platforms={[
                 {
-                  name: "ThreatConnect",
+                  name: "ThreatConnect (threatconnect.com)",
                   type: "commercial",
                   description: "Enterprise threat intelligence platform",
-                  features: ["Advanced analytics", "Workflow automation", "Enterprise integrations"]
+                  features: ["Advanced analytics", "Workflow automation", "Enterprise integrations", "CAL (Collective Analytics Layer)"]
                 },
                 {
-                  name: "Anomali",
+                  name: "Anomali (anomali.com)",
                   type: "commercial",
                   description: "Cloud-based threat intelligence",
-                  features: ["Machine learning", "Threat hunting", "Automated analysis"]
+                  features: ["Machine learning", "Threat hunting", "Automated analysis", "ThreatStream platform"]
                 },
                 {
-                  name: "Threat Quotient",
+                  name: "ThreatQuotient (threatq.com)",
                   type: "commercial",
                   description: "Threat intelligence management",
-                  features: ["Data fusion", "Scoring algorithms", "Visualization"]
+                  features: ["Data fusion", "Scoring algorithms", "Visualization", "ThreatQ platform"]
                 }
               ]}
             />
@@ -543,6 +543,57 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               </div>
             </CardContent>
           </Card>
+
+          {/* SIEM Products */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <PlatformComparison
+              category="Enterprise SIEM Solutions"
+              platforms={[
+                {
+                  name: "Splunk Enterprise Security (splunk.com)",
+                  type: "commercial",
+                  description: "Leading enterprise SIEM with advanced analytics",
+                  features: ["Machine learning", "Advanced correlation", "Extensive integrations", "Premium Apps ecosystem"]
+                },
+                {
+                  name: "IBM QRadar (ibm.com/qradar)",
+                  type: "commercial",
+                  description: "AI-powered security intelligence platform",
+                  features: ["Watson for Cyber Security", "Flow-based analysis", "Risk prioritization", "Cognitive insights"]
+                },
+                {
+                  name: "Microsoft Sentinel (azure.com/sentinel)",
+                  type: "cloud",
+                  description: "Cloud-native SIEM with AI capabilities",
+                  features: ["Azure integration", "SOAR capabilities", "ML-driven detection", "Hunting queries (KQL)"]
+                }
+              ]}
+            />
+
+            <PlatformComparison
+              category="Open Source & Alternative SIEM"
+              platforms={[
+                {
+                  name: "Elastic SIEM (elastic.co)",
+                  type: "open-source",
+                  description: "Built on Elasticsearch with detection engine",
+                  features: ["ELK Stack foundation", "Detection rules", "Timeline analysis", "Elastic Security"]
+                },
+                {
+                  name: "Wazuh (wazuh.com)",
+                  type: "open-source",
+                  description: "Comprehensive security monitoring platform",
+                  features: ["HIDS/HIPS", "Log analysis", "Compliance monitoring", "Active response"]
+                },
+                {
+                  name: "OSSIM/AlienVault (at&t.com)",
+                  type: "commercial",
+                  description: "Unified Security Management platform",
+                  features: ["Asset discovery", "Vulnerability assessment", "Behavioral monitoring", "Event correlation"]
+                }
+              ]}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="automation" className="space-y-6">
@@ -657,6 +708,57 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               </div>
             </CardContent>
           </Card>
+
+          {/* SOAR Products */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <PlatformComparison
+              category="Enterprise SOAR Platforms"
+              platforms={[
+                {
+                  name: "Phantom (now Splunk SOAR) (splunk.com)",
+                  type: "commercial",
+                  description: "Leading SOAR platform with extensive integrations",
+                  features: ["1000+ integrations", "Visual playbook editor", "Case management", "Custom functions"]
+                },
+                {
+                  name: "Demisto (now Cortex XSOAR) (paloaltonetworks.com)",
+                  type: "commercial",
+                  description: "AI-powered security orchestration platform",
+                  features: ["Machine learning", "Incident lifecycle management", "Marketplace integrations", "Multi-tenant"]
+                },
+                {
+                  name: "IBM Resilient (ibm.com/resilient)",
+                  type: "commercial",
+                  description: "Incident response platform with automation",
+                  features: ["Workflow automation", "Threat intelligence", "Communication tools", "Compliance reporting"]
+                }
+              ]}
+            />
+
+            <PlatformComparison
+              category="Open Source & Emerging SOAR"
+              platforms={[
+                {
+                  name: "TheHive + Cortex (thehive-project.org)",
+                  type: "open-source",
+                  description: "Open source incident response platform",
+                  features: ["Case management", "Observable analysis", "Custom analyzers", "MISP integration"]
+                },
+                {
+                  name: "WALKOFF (walkoff.readthedocs.io)",
+                  type: "open-source",
+                  description: "Flexible automation framework",
+                  features: ["Drag-and-drop workflows", "Python-based", "REST APIs", "Custom applications"]
+                },
+                {
+                  name: "Shuffle (shuffler.io)",
+                  type: "open-source",
+                  description: "Modern automation platform",
+                  features: ["Cloud & on-premise", "Docker-based", "Workflow sharing", "OpenAPI integration"]
+                }
+              ]}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="integration" className="space-y-6">

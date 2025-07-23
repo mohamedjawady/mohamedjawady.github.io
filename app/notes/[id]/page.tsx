@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, CalendarDays, User, ExternalLink, BookOpen, Video, Headphones, FileText, Monitor, GraduationCap } from 'lucide-react'
 import { getNoteById, getAllNotes } from '@/lib/notes'
+import { NoteContent } from '@/components/note-content'
 
 interface NotePageProps {
   params: Promise<{ id: string }>
@@ -118,8 +119,6 @@ export default async function NotePage({ params }: NotePageProps) {
     notFound()
   }
 
-  const NoteComponent = note.component
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto space-y-8">
@@ -172,7 +171,7 @@ export default async function NotePage({ params }: NotePageProps) {
 
         {/* Note Content */}
         <div className="prose prose-gray dark:prose-invert max-w-none">
-          <NoteComponent />
+          <NoteContent noteId={note.id} />
         </div>
       </div>
     </div>

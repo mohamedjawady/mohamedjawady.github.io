@@ -16,7 +16,6 @@ export interface Note {
   url?: string
   status: 'reading' | 'completed' | 'abandoned' | 'wishlist'
   visible: boolean
-  component: React.ComponentType<any>
 }
 
 export interface NoteMetadata {
@@ -51,7 +50,10 @@ export function getAllNotes(): Note[] {
       if (a.publishedDate && b.publishedDate) {
         return new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime()
       }
-      return a.title.localeCompare(b.title)
+      // Fallback to empty string if title is undefined
+      const titleA = a.title || ''
+      const titleB = b.title || ''
+      return titleA.localeCompare(titleB)
     })
   } catch (error) {
     console.error('Error reading notes directory:', error)
@@ -70,25 +72,15 @@ export function getNoteById(id: string): Note | null {
     const { data } = matter(fileContents)
     const metadata = data as NoteMetadata
 
-    // Dynamically import the component
-    let component
-    try {
-      const componentModule = require(`@/components/notes/${id}`)
-      // Try default export first, then named export
-      component = componentModule.default || componentModule[
-        id.split('-').map(word => 
-          word.charAt(0).toUpperCase() + word.slice(1)
-        ).join('') + 'Notes'
-      ]
-    } catch (error) {
-      console.error(`Error importing component for note ${id}:`, error)
+    // Validate required fields
+    if (!metadata.title) {
+      console.error(`Note ${id} is missing required 'title' field`)
       return null
     }
 
     return {
       id,
       ...metadata,
-      component,
     }
   } catch (error) {
     console.error(`Error reading note ${id}:`, error)

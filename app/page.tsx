@@ -10,6 +10,33 @@ export default async function HomePage() {
   const posts = await getPublicPosts()
   const latestPosts = posts.slice(0, 6)
 
+  // Extract all unique tags from posts
+  const allTags = posts.reduce<string[]>((acc, post) => {
+    post.tags.forEach((tag) => {
+      if (!acc.includes(tag)) {
+        acc.push(tag)
+      }
+    })
+    return acc
+  }, [])
+
+  // Get top tags by frequency
+  const tagCounts = posts.reduce(
+    (acc, post) => {
+      post.tags.forEach((tag) => {
+        acc[tag] = (acc[tag] || 0) + 1
+      })
+      return acc
+    },
+    {} as Record<string, number>,
+  )
+
+  // Sort tags by frequency and take top 6
+  const topTags = Object.entries(tagCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+    .map(([tag]) => tag)
+
   const stats = [
     { label: "Blog Posts", value: posts.length, icon: Code2 },
     { label: "Years Experience", value: "4+", icon: Shield },
@@ -76,21 +103,26 @@ export default async function HomePage() {
           </p>
           
           <div className="flex flex-wrap justify-center gap-2 mb-8">
-            <Badge variant="outline" className="text-green-500 border-green-500/30 hover:bg-green-500/10 transition-colors">
-              #malware-analysis
-            </Badge>
-            <Badge variant="outline" className="text-blue-500 border-blue-500/30 hover:bg-blue-500/10 transition-colors">
-              #networking
-            </Badge>
-            <Badge variant="outline" className="text-red-500 border-red-500/30 hover:bg-red-500/10 transition-colors">
-              #reverse-engineering
-            </Badge>
-            <Badge variant="outline" className="text-yellow-500 border-yellow-500/30 hover:bg-yellow-500/10 transition-colors">
-              #software-engineering
-            </Badge>
-            <Badge variant="outline" className="text-purple-500 border-purple-500/30 hover:bg-purple-500/10 transition-colors">
-              #threat-hunting
-            </Badge>
+            {topTags.map((tag, index) => {
+              const tagColors = [
+                "text-green-500 border-green-500/30 hover:bg-green-500/10",
+                "text-blue-500 border-blue-500/30 hover:bg-blue-500/10",
+                "text-red-500 border-red-500/30 hover:bg-red-500/10",
+                "text-yellow-500 border-yellow-500/30 hover:bg-yellow-500/10",
+                "text-purple-500 border-purple-500/30 hover:bg-purple-500/10",
+                "text-orange-500 border-orange-500/30 hover:bg-orange-500/10",
+              ]
+              
+              return (
+                <Badge 
+                  key={tag} 
+                  variant="outline" 
+                  className={`${tagColors[index % tagColors.length]} transition-colors`}
+                >
+                  #{tag}
+                </Badge>
+              )
+            })}
           </div>
           
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-8">

@@ -1,0 +1,32 @@
+digraph TEB_Structure {
+    rankdir=TB;
+    node [shape=record, style=filled, fillcolor=lightblue];
+    edge [color=darkblue, arrowhead=vee];
+    
+    // TEB Main Structure
+    TEB [label="{TEB Structure (Thread Environment Block)|{+0x000|NtTib}|{+0x038|EnvironmentPointer}|{+0x040|ClientId}|{+0x050|ActiveRpcHandle}|{+0x058|ThreadLocalStoragePointer}|{+0x060|ProcessEnvironmentBlock}|{+0x068|LastErrorValue}|{+0x06c|CountOfOwnedCriticalSections}|{+0x070|CsrClientThread}|{+0x078|Win32ThreadInfo}|{+0x080|User32Reserved[26]}|{+0x0e8|UserReserved[5]}|{+0x100|WOW32Reserved}|{+0x108|CurrentLocale}|{+0x110|ReservedForDebuggerInstrumentation[16]}|{+0x190|SystemReserved1[25]}|{+0x2f0|GdiTebBatch}|{+0x7d8|RealClientId}|{+0x1250|LastStatusValue}}", fillcolor=lightcyan];
+    
+    // Related Structures
+    NT_TIB [label="{NT_TIB|{+0x000|ExceptionList}|{+0x008|StackBase}|{+0x010|StackLimit}|{+0x018|SubSystemTib}|{+0x020|FiberData}|{+0x028|ArbitraryUserPointer}|{+0x030|Self}}", fillcolor=lightgreen];
+    
+    CLIENT_ID [label="{CLIENT_ID|{+0x000|UniqueProcess (PID)}|{+0x008|UniqueThread (TID)}}", fillcolor=lightyellow];
+    
+    PEB [label="{PEB|Process Environment Block|Contains process information}", fillcolor=lightpink];
+    
+    STACK [label="{Stack Memory|{Stack Base}|{Stack Limit}|{Available Stack Space}}", fillcolor=lightgray];
+    
+    // Relationships
+    TEB -> NT_TIB [label="NtTib pointer"];
+    TEB -> CLIENT_ID [label="ClientId structure"];
+    TEB -> PEB [label="ProcessEnvironmentBlock pointer", color=red, style=bold];
+    NT_TIB -> STACK [label="Stack boundaries"];
+    
+    // Annotations
+    subgraph cluster_legend {
+        label="Key Information";
+        style=dashed;
+        anti_debug [label="LastErrorValue\nUsed for anti-debugging", shape=note, fillcolor=orange];
+        thread_id [label="ClientId\nProcess/Thread identification", shape=note, fillcolor=yellow];
+        peb_link [label="ProcessEnvironmentBlock\nLinks to process data", shape=note, fillcolor=pink];
+    }
+}

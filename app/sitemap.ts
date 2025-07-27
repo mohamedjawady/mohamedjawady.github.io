@@ -100,12 +100,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     },
     {
-      url: getCanonicalUrl('/tags'),
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.5,
-    },
-    {
       url: getCanonicalUrl('/feed.xml'),
       lastModified: new Date(),
       changeFrequency: 'daily',

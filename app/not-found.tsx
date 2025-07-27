@@ -61,12 +61,6 @@ export default function NotFound() {
             >
               All Posts
             </Link>
-            <Link 
-              href="/tags" 
-              className="hover:text-green-500 transition-colors underline decoration-dotted"
-            >
-              Tags
-            </Link>
             
           </div>
         </div>

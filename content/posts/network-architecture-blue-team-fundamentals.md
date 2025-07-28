@@ -6,7 +6,7 @@ author: "Mohamed Habib Jaouadi"
 tags: ["blue-team", "network-architecture", "network-security", "network-monitoring", "threat-hunting", "incident-response", "zero-trust", "network-segmentation"]
 banner: "/banners/posts/network-architecture-blue-team.jpg"
 bannerAlt: "Network Architecture and Blue Team Defense Strategies"
-visibility: "darft"
+visibility: "draft"
 ---
 
 > **🎯 Blue Team Focus:** This post explores network architecture from a defensive perspective, focusing on visibility, monitoring, and containment strategies essential for modern blue team operations.
@@ -111,21 +111,6 @@ Unlike home network switches, enterprise managed switches provide critical capab
 
 **Network Flow Visibility**: Generate NetFlow records showing source, destination, ports, and traffic volumes for every conversation.
 
-<CollapsibleCode title="NetFlow Record Example">
-
-```bash
-# Sample NetFlow v5 record showing internal lateral movement
-Date flow start          Duration Proto      Src IP Addr:Port      Dst IP Addr:Port   Packets Bytes Flags
-2025-07-28 14:23:15.123    5.234 TCP   192.168.10.15:49152 -> 192.168.20.22:445     145   89456  .AP.SF
-2025-07-28 14:23:20.357    0.891 TCP   192.168.10.15:49153 -> 192.168.20.23:445      23    1847  .AP.SF
-2025-07-28 14:23:21.248    0.234 TCP   192.168.10.15:49154 -> 192.168.20.24:445      12     987  .AP.SF
-
-# This pattern might indicate SMB lateral movement from 192.168.10.15
-# to multiple targets in the 192.168.20.0/24 subnet
-```
-
-</CollapsibleCode>
-
 **Mirror (SPAN) Ports**: Copy all traffic from specific ports or VLANs to monitoring devices for deep packet inspection.
 
 **Access Control Lists (ACLs)**: Implement device-level isolation to prevent lateral movement within the same VLAN.
@@ -201,7 +186,7 @@ Choosing between network taps and mirror ports significantly impacts your monito
 | **Deployment Complexity** | Higher | Lower |
 
 **\* Network taps miss intra-subnet traffic that doesn't traverse upstream devices**
-**\** Mirror ports can drop packets when aggregating full-duplex traffic**
+**\*\* Mirror ports can drop packets when aggregating full-duplex traffic**
 
 ### Strategic Placement for Maximum Visibility
 
@@ -261,51 +246,6 @@ The 2017 WannaCry and NotPetya outbreaks demonstrated the critical importance of
 **Segmented Networks:** Slower, contained spread
 **Flat Networks:** Catastrophic organization-wide failure
 
-<CollapsibleCode title="WannaCry Lateral Movement Code">
-
-```python
-# Simplified representation of WannaCry's network scanning behavior
-import socket
-import threading
-
-def scan_and_exploit(target_ip):
-    """
-    Scan for SMB vulnerability and exploit if found
-    """
-    try:
-        # Attempt to connect to SMB port
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        result = sock.connect_ex((target_ip, 445))
-        
-        if result == 0:
-            # SMB port is open, attempt ETERNALBLUE exploit
-            if exploit_eternalblue(target_ip):
-                print(f"Successfully exploited {target_ip}")
-                propagate_to_new_host(target_ip)
-        
-        sock.close()
-    except:
-        pass
-
-def propagate_to_new_host(infected_host):
-    """
-    Continue propagation from newly infected host
-    """
-    # Generate list of targets in local subnets
-    targets = generate_subnet_targets(infected_host)
-    
-    # Spawn threads to scan multiple targets simultaneously
-    for target in targets:
-        thread = threading.Thread(target=scan_and_exploit, args=(target,))
-        thread.start()
-
-# This is why network segmentation matters!
-# Flat networks allow unrestricted propagation
-```
-
-</CollapsibleCode>
-
 ### Defending Flat Networks
 
 If you inherit a flat network, focus on these compensating controls:
@@ -329,6 +269,18 @@ If you inherit a flat network, focus on these compensating controls:
 - Identity-based access controls
 
 ## Practical Implementation Guide
+
+### Network Asset & Configuration Documentation
+
+Track devices, IP addresses, ports, VLANs, connections, and more.
+
+| Tool | Features | Notes |
+|------|----------|-------|
+| **NetBox** | IPAM, DCIM, rack layout, cable paths | Open-source, widely adopted |
+| **phpIPAM** | IP address management, VLANs, VRFs | Lightweight and web-based |
+| **Ralph** | Asset lifecycle management + discovery | Inventory-focused, open-source |
+| **Device42** | Comprehensive network, server, and software asset mapping | Paid, enterprise-grade |
+| **GLPI + FusionInventory** | IT asset mgmt + auto-discovery | Open-source combo used in large orgs |
 
 ### Building Your Network Diagram
 

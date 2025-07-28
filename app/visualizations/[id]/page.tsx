@@ -11,6 +11,7 @@ import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
 import { Badge } from "@/components/ui/badge"
 import remarkMath from 'remark-math'
+import remarkGfm from 'remark-gfm'
 import rehypeKatex from 'rehype-katex'
 
 interface VisualizationPageProps {
@@ -128,7 +129,7 @@ export default async function VisualizationPage({ params }: VisualizationPagePro
           source={visualization.content}
           options={{
             mdxOptions: {
-              remarkPlugins: [remarkMath],
+              remarkPlugins: [remarkMath, remarkGfm],
               rehypePlugins: [rehypeKatex],
             },
           }}

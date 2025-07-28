@@ -10,6 +10,7 @@ import { Metadata } from "next"
 import { BlogPostStructuredData } from "@/components/structured-data"
 import { getCanonicalUrl } from "@/lib/url"
 import remarkMath from 'remark-math'
+import remarkGfm from 'remark-gfm'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import "@/styles/highlight-js/github-dark.css"
@@ -258,7 +259,7 @@ export default async function PostPage({ params }: PostPageProps) {
                   components={postComponents}
                   options={{
                     mdxOptions: {
-                      remarkPlugins: [remarkMath],
+                      remarkPlugins: [remarkMath, remarkGfm],
                       rehypePlugins: [rehypeKatex, rehypeHighlight],
                     },
                   }}

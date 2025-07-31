@@ -6,6 +6,7 @@ import { LagrangeInterpolation } from "@/components/visualizations/lagrange-inte
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
+import { DNSResolution } from "@/components/visualizations/dns-resolution"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
@@ -28,6 +29,7 @@ const visualizationComponents = {
   'LawOfLargeNumbers': LawOfLargeNumbers,
   'MemoryManagement': MemoryManagement,
   'MalwareDetectionMechanisms': MalwareDetectionMechanisms,
+  'DNSResolution': DNSResolution,
   // Add more components here as they are created
 }
 

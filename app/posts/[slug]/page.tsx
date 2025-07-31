@@ -19,6 +19,7 @@ import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
+import { DNSResolution } from "@/components/visualizations/dns-resolution"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
@@ -32,6 +33,7 @@ const postComponents = {
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MemoryManagement: () => <MemoryManagement />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
+  DNSResolution: () => <DNSResolution />,
   CollapsibleCode: CollapsibleCode,
 }
 

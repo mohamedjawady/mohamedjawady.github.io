@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
+import { DNSResolution } from "@/components/visualizations/dns-resolution"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -179,6 +180,7 @@ export const mdxComponents = {
   HillCipher: () => <HillCipher />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
+  DNSResolution: () => <DNSResolution />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

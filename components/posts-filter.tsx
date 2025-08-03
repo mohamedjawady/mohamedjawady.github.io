@@ -5,7 +5,8 @@ import { Post } from "@/lib/posts"
 import { PostCard } from "@/components/post-card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Search, Tag, ChevronDown, ChevronUp } from "lucide-react"
 
 interface PostsFilterProps {
   posts: Post[]
@@ -15,6 +16,7 @@ interface PostsFilterProps {
 export function PostsFilter({ posts, allTags }: PostsFilterProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
+  const [showTags, setShowTags] = useState(false)
 
   const filteredPosts = useMemo(() => {
     let filtered = posts
@@ -56,33 +58,50 @@ export function PostsFilter({ posts, allTags }: PostsFilterProps) {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Badge
-            variant={selectedTag === null ? "default" : "outline"}
-            className={`cursor-pointer transition-colors ${
-              selectedTag === null
-                ? "bg-green-500 hover:bg-green-600"
-                : "hover:bg-green-500/20"
-            }`}
-            onClick={() => handleTagClick(null)}
+        {/* Show Tags Button */}
+        <div className="mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTags(!showTags)}
+            className="flex items-center gap-2"
           >
-            All
-          </Badge>
-          {allTags.map((tag) => (
+            <Tag className="w-4 h-4" />
+            {showTags ? 'Hide Tags' : 'Show Tags'}
+            {showTags ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        </div>
+
+        {/* Tags - Only show when showTags is true */}
+        {showTags && (
+          <div className="flex flex-wrap gap-2">
             <Badge
-              key={tag}
-              variant={selectedTag === tag ? "default" : "outline"}
+              variant={selectedTag === null ? "default" : "outline"}
               className={`cursor-pointer transition-colors ${
-                selectedTag === tag
+                selectedTag === null
                   ? "bg-green-500 hover:bg-green-600"
                   : "hover:bg-green-500/20"
               }`}
-              onClick={() => handleTagClick(tag)}
+              onClick={() => handleTagClick(null)}
             >
-              #{tag}
+              All
             </Badge>
-          ))}
-        </div>
+            {allTags.map((tag) => (
+              <Badge
+                key={tag}
+                variant={selectedTag === tag ? "default" : "outline"}
+                className={`cursor-pointer transition-colors ${
+                  selectedTag === tag
+                    ? "bg-green-500 hover:bg-green-600"
+                    : "hover:bg-green-500/20"
+                }`}
+                onClick={() => handleTagClick(tag)}
+              >
+                #{tag}
+              </Badge>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Results count */}

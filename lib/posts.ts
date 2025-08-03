@@ -58,6 +58,11 @@ export async function getAllPosts(): Promise<Post[]> {
 
 export async function getPublicPosts(): Promise<Post[]> {
   const allPosts = await getAllPosts()
+  return allPosts.filter((post) => post.visibility === 'public')
+}
+
+export async function getPublicAndDraftPosts(): Promise<Post[]> {
+  const allPosts = await getAllPosts()
   return allPosts.filter((post) => post.visibility === 'public' || post.visibility === 'draft')
 }
 
@@ -123,7 +128,7 @@ export async function getSeriesNavigation(currentPostSlug: string): Promise<{
 }
 
 export async function getAllSeries(): Promise<Record<string, Post[]>> {
-  const allPosts = await getPublicPosts()
+  const allPosts = await getPublicAndDraftPosts()
   const seriesMap: Record<string, Post[]> = {}
   
   allPosts.forEach(post => {

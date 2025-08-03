@@ -1,5 +1,6 @@
-import { getPublicPosts } from "@/lib/posts"
+import { getPublicPosts, getDraftPosts } from "@/lib/posts"
 import { PostsFilter } from "@/components/posts-filter"
+import { PostCard } from "@/components/post-card"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 
@@ -28,19 +29,55 @@ export const metadata: Metadata = {
 }
 
 export default async function PostsPage() {
-  const posts = await getPublicPosts()
-  const allTags = Array.from(new Set(posts.flatMap((post) => post.tags)))
+  const publicPosts = await getPublicPosts()
+  const draftPosts = await getDraftPosts()
+  const allTags = Array.from(new Set(publicPosts.flatMap((post) => post.tags)))
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">
       <div className="mb-12">
         <h1 className="text-4xl font-bold font-mono mb-4">All Posts</h1>
         <p className="text-muted-foreground text-lg">
-          {posts.length} posts documenting my journey in cybersecurity and development
+          {publicPosts.length} published posts documenting my journey in cybersecurity and development
         </p>
       </div>
 
-      <PostsFilter posts={posts} allTags={allTags} />
+      {/* Published Posts Section */}
+      <div className="mb-16">
+        <PostsFilter posts={publicPosts} allTags={allTags} />
+      </div>
+
+      {/* Coming Soon Section for Draft Posts */}
+      {draftPosts.length > 0 && (
+        <div className="border-t pt-12">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold font-mono mb-4 flex items-center gap-3">
+              Coming Soon
+              <span className="text-sm font-normal bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-3 py-1 rounded-full">
+                {draftPosts.length} draft{draftPosts.length !== 1 ? 's' : ''}
+              </span>
+            </h2>
+            <p className="text-muted-foreground">
+              These posts are currently in development and will be published soon.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {draftPosts.map((post) => (
+              <div key={post.slug} className="relative">
+                <div className="absolute inset-0 bg-muted/50 rounded-lg z-10 flex items-center justify-center">
+                  <span className="bg-yellow-500/90 text-yellow-950 px-4 py-2 rounded-full font-medium text-sm">
+                    Coming Soon
+                  </span>
+                </div>
+                <div className="opacity-50 pointer-events-none">
+                  <PostCard post={post} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

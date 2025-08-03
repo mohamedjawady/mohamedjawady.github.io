@@ -35,6 +35,10 @@ Home Router = Firewall + Router + Switch + Access Point
 
 This all-in-one approach works for home networks with minimal security requirements, but enterprises need granular control over each function.
 
+![Home Router vs Enterprise Network Architecture](/diagrams/network-architecture/home_vs_enterprise.png)
+
+This comparison illustrates the fundamental difference between home and enterprise network architecture. While home networks consolidate multiple functions into a single device, enterprise networks separate these functions into dedicated, specialized components for better security, scalability, and control.
+
 ### Enterprise Network Separation
 
 Enterprise networks separate these functions into dedicated devices for several critical reasons:
@@ -55,27 +59,9 @@ Network zones are the cornerstone of enterprise security architecture. Instead o
 
 **Common Enterprise Zones:**
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│     WAN     │    │     DMZ     │    │  Internal   │
-│  (Internet) │◄──►│  (External  │◄──►│   Servers   │
-│             │    │  Services)  │    │             │
-└─────────────┘    └─────────────┘    └─────────────┘
-                           │                   │
-                           ▼                   ▼
-                   ┌─────────────┐    ┌─────────────┐
-                   │    User     │    │ Restricted  │
-                   │   Devices   │    │   Servers   │
-                   │             │    │             │
-                   └─────────────┘    └─────────────┘
-                           │
-                           ▼
-                   ┌─────────────┐
-                   │     IoT     │
-                   │   Devices   │
-                   │             │
-                   └─────────────┘
-```
+![Enterprise Network Zones](/diagrams/network-architecture/enterprise_zones.png)
+
+This diagram shows the correct flow of network traffic in an enterprise environment. Notice how user devices connect through access switches to the core network infrastructure, and internet access flows through the edge router and perimeter firewall. This represents realistic network architecture where traffic flows through proper network devices rather than magical direct connections.
 
 ### Zone-Based Traffic Flow Rules
 
@@ -121,21 +107,9 @@ Unlike home network switches, enterprise managed switches provide critical capab
 
 VLANs add complexity that blue teams must understand to properly monitor networks:
 
-```
-Physical Layout:                 Logical VLAN Layout:
-┌─────────────┐                 ┌──VLAN 10 (DMZ)────┐
-│   Switch    │                 │                   │
-│  ┌─┬─┬─┬─┐  │                 │ ┌─┬─┐            │
-│  │1│2│3│4│  │    ═══════►     │ │1│3│            │
-│  └─┴─┴─┴─┘  │                 │ └─┴─┘            │
-└─────────────┘                 └───────────────────┘
-                                ┌──VLAN 20 (Users)──┐
-                                │                   │
-                                │  ┌─┬─┐           │
-                                │  │2│4│           │
-                                │  └─┴─┘           │
-                                └───────────────────┘
-```
+![VLAN Physical vs Logical Layout](/diagrams/network-architecture/vlan_layout.png)
+
+This diagram shows how a single physical switch can be logically divided into multiple VLANs, with different ports assigned to different network segments. This is how enterprises create network isolation without requiring separate physical switches for each network zone.
 
 **Critical Implication**: To determine what subnet a device is on, you must know both the physical port AND the VLAN configuration. This affects:
 
@@ -197,22 +171,19 @@ Choosing between network taps and mirror ports significantly impacts your monito
 3. **Critical Asset Access Points**: Monitor access to crown jewels and sensitive systems
 4. **Internal Chokepoints**: Capture traffic at network convergence points
 
-```
-Internet ── [TAP] ── Firewall ── [TAP] ── Core Switch
-                                              │
-                                         [SPAN Port]
-                                              │
-                          ┌─────────────┬─────┴─────┬─────────────┐
-                          │             │           │             │
-                    User VLAN      Server VLAN   DMZ VLAN   Restricted VLAN
-                       [TAP]         [SPAN]       [TAP]        [SPAN]
-```
+![Strategic Network Monitoring Placement](/diagrams/network-architecture/monitoring_placement.png)
+
+This diagram shows optimal placement of network monitoring tools including TAPs and SPAN ports to maximize visibility across different network segments. Notice how monitoring points are strategically placed at network chokepoints where traffic naturally converges, providing maximum coverage with minimal blind spots.
 
 ## The Zero Trust Evolution
 
 ### From Perimeter Defense to Asset-Centric Security
 
 Traditional network security relied on strong perimeters with soft interiors. The zero trust model assumes breach is inevitable and focuses on asset-centric protection:
+
+![Zero Trust Architecture Evolution](/diagrams/network-architecture/zero_trust_evolution.png)
+
+This diagram shows the evolution from traditional perimeter-based security (strong firewall with trusted internal network) to zero trust architecture (where every access request is verified regardless of location).
 
 **Zero Trust Principles for Blue Teams:**
 

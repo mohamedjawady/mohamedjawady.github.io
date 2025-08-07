@@ -1,7 +1,7 @@
 ---
-title: "DNS Security Analysis Series: Part 3 - Malicious Domain Detection and Infrastructure Analysis"
-description: "Advanced techniques for detecting malicious domains, analyzing domain characteristics, and identifying suspicious DNS infrastructure for security analysts."
-date: "2025-08-04"
+title: "DNS Security Analysis Series: Part 3 - Advanced Attack Techniques and Modern DNS Challenges"
+description: "Advanced DNS attack vectors including tunneling, IDN abuse, encrypted DNS protocols, and enterprise security implementation strategies for security analysts."
+date: "2025-08-05"
 author: "Mohamed Habib Jaouadi"
 tags: ["dns-security-series", "dns-analysis", "malicious-domains", "threat-hunting", "domain-analysis", "incident-response"]
 banner: "/banners/posts/dns-security-analysis-part3.jpg"

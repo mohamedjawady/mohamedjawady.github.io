@@ -1,21 +1,21 @@
 ---
-title: "Network Architecture for Blue Team Operations: Visibility, Segmentation, and Defense"
-description: "Master network architecture fundamentals for effective blue team operations. Learn about network segmentation, visibility points, VLAN configuration, and defensive strategies against lateral movement attacks."
-date: "2025-07-28"
+title: "Enterprise Network Architecture for Blue Team Operations: Visibility, Segmentation, and Modern Defense Strategies"
+description: "A guide to enterprise network architecture for blue team operations."
+date: "2025-08-07"
 author: "Mohamed Habib Jaouadi"
 tags: ["blue-team", "network-architecture", "network-security", "network-monitoring", "threat-hunting", "incident-response", "zero-trust", "network-segmentation"]
 banner: "/banners/posts/network-architecture-blue-team.jpg"
 bannerAlt: "Network Architecture and Blue Team Defense Strategies"
-visibility: "draft"
+visibility: "public"
 ---
 
 > **🎯 Blue Team Focus:** This post explores network architecture from a defensive perspective, focusing on visibility, monitoring, and containment strategies essential for modern blue team operations.
 
 ## Introduction
 
-Understanding your network architecture isn't just about knowing which cables connect where—it's about building a defensive advantage. For blue team professionals, network architecture directly impacts your ability to detect threats, respond to incidents, and contain attackers before they achieve their objectives.
+Knowing your network architecture is not just about knowing what cables plug to what other cables; it's the beginning of gaining a defensive advantage. For professionals working in blue team roles, network architecture has a profound impact on the ability to detect threats, respond to incidents, and contain an attacker to help ensure they do not accomplish their objectives. 
 
-Modern enterprise networks are complex ecosystems of routers, switches, firewalls, and security devices. Each component can either strengthen your defensive posture or become a blind spot that attackers exploit. This post explores how to architect networks for optimal security monitoring and effective threat containment.
+Today's enterprise networks are broad and convoluted, consisting of routers, switches, firewalls, and numerous other and security devices. Each of these devices can contribute positively to your defensive posture or introduce blind spots in your defenses that can be utilized by an attacker. This article examines how to conduct network architecture that will improve your capacity to monitor your network for anomalies and a strategy for containment when under attack.
 
 ## The Evolution from Home to Enterprise Networks
 
@@ -37,7 +37,7 @@ This all-in-one approach works for home networks with minimal security requireme
 
 ![Home Router vs Enterprise Network Architecture](/diagrams/network-architecture/home_vs_enterprise.png)
 
-This comparison illustrates the fundamental difference between home and enterprise network architecture. While home networks consolidate multiple functions into a single device, enterprise networks separate these functions into dedicated, specialized components for better security, scalability, and control.
+This comparison helps demonstrate the essential differences between home and enterprise network architecture. While home networks merge several functions into one device, enterprise networks distribute functions into discrete, specialized elements, ensuring appropriate security, scalable growth, and individual controls within their networks.
 
 ### Enterprise Network Separation
 
@@ -61,7 +61,7 @@ Network zones are the cornerstone of enterprise security architecture. Instead o
 
 ![Enterprise Network Zones](/diagrams/network-architecture/enterprise_zones.png)
 
-This diagram shows the correct flow of network traffic in an enterprise environment. Notice how user devices connect through access switches to the core network infrastructure, and internet access flows through the edge router and perimeter firewall. This represents realistic network architecture where traffic flows through proper network devices rather than magical direct connections.
+This diagram demonstrates the proper flow of network traffic in an enterprise. You can see that user devices connect through access switches to the core of the network. Internet access flows through the edge router and the perimeter firewall. This is how a real-world network ideally would be laid out. Network traffic goes in and out through proper network devices and not random magical connections.
 
 ### Zone-Based Traffic Flow Rules
 
@@ -69,18 +69,12 @@ Effective network segmentation isn't just about creating zones—it's about cont
 
 | Traffic From → To | WAN | DMZ | IoT | Users | Servers | Restricted |
 |-------------------|-----|-----|-----|-------|---------|------------|
-| **WAN**           | N/A | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **DMZ**           | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| **IoT**           | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| **Users**         | 🔄 | ✅ | ✅ | ⚠️ | ✅ | ⚠️ |
-| **Servers**       | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ |
-| **Restricted**    | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
-
-**Legend:**
-- ✅ Allowed
-- ❌ Blocked  
-- ⚠️ Partial (specific rules apply)
-- 🔄 Through proxy only
+| **WAN**           | N/A | Allowed | Blocked | Blocked | Blocked | Blocked |
+| **DMZ**           | Blocked | Partial | Blocked | Blocked | Blocked | Blocked |
+| **IoT**           | Allowed | Blocked | Allowed | Blocked | Blocked | Blocked |
+| **Users**         | Proxy Only | Allowed | Allowed | Partial | Allowed | Partial |
+| **Servers**       | Blocked | Blocked | Blocked | Blocked | Partial | Blocked |
+| **Restricted**    | Blocked | Blocked | Blocked | Blocked | Blocked | Partial |
 
 This ruleset demonstrates several key security principles:
 
@@ -146,21 +140,98 @@ Rule Examples:
 
 ## Traffic Visibility: The Blue Team's Eyes and Ears
 
+### Understanding Network Monitoring Technologies
+
+Before deploying network monitoring solutions, it's essential to understand the two primary methods for capturing network traffic: Network Taps and Mirror Ports.
+
+#### Network Taps (Test Access Points)
+
+Network taps are physical hardware devices that provide a permanent, dedicated connection for monitoring network traffic. They sit directly in the network path between two devices (like between a switch and router) and create copies of all passing traffic.
+
+**How Network Taps Work:** Network taps get injected in the network by being installed inline between network devices, allowing the capture of some / all traffic flowing through the point of connection. Being considered passive monitoring devices that simply make copies of traffic, they do not affect the performance of the network. They operate on traffic from both directions, capturing full duplex exchanges (or bidirectional) simultaneously. The most valuable feature of network taps is that they introduce no latency or packet loss on the monitored links, presenting no impact on production network performance on paper.
+
+**Main Characteristics:**
+- Dedicated hardware device for traffic monitoring
+- Requires physical installation and network downtime
+- Provides complete traffic visibility for the monitored link
+- Cannot selectively monitor specific VLANs or ports
+
+#### Mirror Ports (SPAN Ports)
+
+Mirror ports, also called SPAN (Switch Port Analyzer) ports, are switch features that copy traffic from one or more source ports to a designated monitoring port. This is a software-based approach built into managed switches.
+
+**How Mirror Ports Work:** Mirror ports work by using software configuration through the switch management interface. The interface gives the administrator the ability to establish a port mirroring capability that copies traffic from a designated source port that will be monitored directly to a destination monitoring port. In addition to basic traffic monitoring, mirror ports provide flexible selection options to monitor specific ports, VLANs or specific traffic types depending on their security needs. More sophisticated switches include the option for remote mirroring, utilizing a network protocol to accomplish this and are labeled as RSPAN (Remote SPAN) and ERSPAN (Encapsulated Remote SPAN) to monitor distributed across multiple segments of the network.
+
+**Main Characteristics:**
+- Built-in feature of managed switches
+- No additional hardware required
+- Configurable via switch CLI or web interface
+- Can introduce packet loss under high traffic loads
+
+**Cisco SPAN Configuration Examples:**
+
+```cisco
+! Basic Local SPAN - Mirror single port to monitoring port
+monitor session 1 source interface GigabitEthernet0/1
+monitor session 1 destination interface GigabitEthernet0/24
+
+! Mirror multiple ports to single destination
+monitor session 2 source interface GigabitEthernet0/1 - 10
+monitor session 2 destination interface GigabitEthernet0/24
+
+! Mirror specific VLAN traffic
+monitor session 3 source vlan 100
+monitor session 3 destination interface GigabitEthernet0/24
+
+! Mirror both ingress and egress (default is both)
+monitor session 4 source interface GigabitEthernet0/1 both
+monitor session 4 destination interface GigabitEthernet0/24
+
+! Mirror only ingress traffic
+monitor session 5 source interface GigabitEthernet0/1 rx
+monitor session 5 destination interface GigabitEthernet0/24
+
+! Remote SPAN (RSPAN) - Mirror traffic to remote switch
+vlan 999
+ remote-span
+!
+monitor session 6 source interface GigabitEthernet0/1
+monitor session 6 destination remote vlan 999
+
+! Encapsulated Remote SPAN (ERSPAN) - Mirror over IP network
+monitor session 7 type erspan-source
+ source interface GigabitEthernet0/1
+ destination
+  erspan-id 1
+  ip address 192.168.1.100
+  origin ip address 192.168.1.1
+
+! View current SPAN sessions
+show monitor session all
+show monitor session 1 detail
+```
+
+**SPAN Session Limitations:**
+- **Maximum Sessions**: Most Cisco switches support 2-4 local SPAN sessions
+- **Destination Ports**: Cannot be source ports in other sessions
+- **Bandwidth**: Destination port must handle aggregated source traffic
+- **Packet Loss**: May occur during high traffic periods
+
 ### Network Tap vs. Mirror Port Decision Matrix
 
 Choosing between network taps and mirror ports significantly impacts your monitoring capabilities:
 
 | Capability | Network Tap | Mirror Port |
 |------------|-------------|-------------|
-| **Lateral Movement Detection** | Limited* | Excellent |
-| **Bandwidth Handling** | Excellent | Limited** |
+| **Lateral Movement Detection** | Limited+ | Excellent |
+| **Bandwidth Handling** | Excellent | Limited++ |
 | **Device Impact** | None | CPU overhead |
 | **VLAN Tag Preservation** | Yes | Sometimes lost |
 | **Cost** | Higher | Lower |
 | **Deployment Complexity** | Higher | Lower |
 
-**\* Network taps miss intra-subnet traffic that doesn't traverse upstream devices**
-**\*\* Mirror ports can drop packets when aggregating full-duplex traffic**
+**+ Network taps miss intra-subnet traffic that doesn't traverse upstream devices** 
+**++ Mirror ports can drop packets when aggregating full-duplex traffic**
 
 ### Strategic Placement for Maximum Visibility
 
@@ -173,7 +244,7 @@ Choosing between network taps and mirror ports significantly impacts your monito
 
 ![Strategic Network Monitoring Placement](/diagrams/network-architecture/monitoring_placement.png)
 
-This diagram shows optimal placement of network monitoring tools including TAPs and SPAN ports to maximize visibility across different network segments. Notice how monitoring points are strategically placed at network chokepoints where traffic naturally converges, providing maximum coverage with minimal blind spots.
+This illustration shows optimal layered deployment of monitoring tools (TAPs and SPAN ports) in order to obtain the best possible visibility across different segments of the network, with the least amount of blind spots.
 
 ## The Zero Trust Evolution
 
@@ -194,6 +265,13 @@ This diagram shows the evolution from traditional perimeter-based security (stro
 5. **Continuous Monitoring**: Never stop validating trust assumptions
 
 ### Real-World Zero Trust Implementation: Google's BeyondCorp
+
+Google's BeyondCorp is a zero trust security model that Google created and then deployed internally to transition away from traditional VPN-based remote access in their organization. Google initiated the BeyondCorp project in response to the 2009 Operation Aurora cyberattacks, which exposed the limitations of perimeter-based security. BeyondCorp re-considers how employees access and utilize corporate applications and data. Rather than using network location as a proxy for trust, BeyondCorp treats all networks as untrusted, and access to corporate resources is made based on device and user identity, device security posture, and application sensitivity.
+
+![Google BeyondCorp Enterprise Architecture](/diagrams/network-architecture/BeyondCorp_Enterprise.max-1600x1600.jpg)
+*Google Cloud Zero Trust BeyondCorp Enterprise*
+
+The BeyondCorp model deconstructs the traditional corporate perimeter, enforcing access controls based on continuous verification of user and device context rather than network location and enables employees to work in any location securely without a VPN connection. This has been incredibly useful for increasingly common dispersed workforces and cloud-first organizations.
 
 Google's BeyondCorp demonstrates practical zero trust implementation:
 
@@ -271,43 +349,29 @@ Every blue team needs a current network diagram showing:
 
 ### Monitoring Strategy Development
 
-**Immediate Actions:**
-1. **Inventory Network Devices**: Document all routers, switches, and firewalls
-2. **Map Traffic Flows**: Understand how traffic moves between zones
-3. **Identify Blind Spots**: Find areas lacking monitoring coverage
-4. **Prioritize Visibility**: Focus on crown jewels and attack paths
+**Immediate Actions:** Start your monitoring strategy with a full inventory of every networked device, documenting each router, switch, and firewall in your environment. Next, lay out traffic flows to understand how data moves between the different zones of your network, which is crucial to knowing how to design solid monitoring placement. Locate the blind spots where you currently do not have monitoring, paying particular attention to areas where attackers would have lateral movement capabilities but without monitoring service. Ultimately, your monitoring visibility efforts will be sponsored by understanding your respective crown jewels and what paths lead to the most critical of your assets.
 
-**Long-Term Improvements:**
-1. **Implement Zero Trust Principles**: Gradually reduce implicit trust
-2. **Enhance Segmentation**: Add granular controls between systems
-3. **Automate Response**: Build automated containment capabilities
-4. **Continuous Assessment**: Regularly test and improve defenses
+**Long-Term Improvements:** Gradually implement zero trust principles throughout your network architecture, systematically reducing implicit trust relationships that attackers can exploit. Enhance segmentation by adding granular controls between systems, creating smaller security boundaries that limit the blast radius of potential breaches. Build automated response capabilities that can contain threats without human intervention, reducing the time between detection and containment. Establish a continuous assessment program that regularly tests and improves your defenses, ensuring they evolve alongside emerging threats and changing network architecture.
+
+Don't forget that solid network monitoring is not just a set-it-and-forget-it deployment. It is a constantly evolving process that should adapt to your network architecture and landscape of threats. Start monitoring with a focus on the areas of highest risk and those that are most critical, then gradually expand your monitoring to cover more ground. All the while covering the risk areas we discussed earlier, the goal is to eventually have layers of visibility that overlap within the network that in turn provide great coverage and reasonable alert volumes. As your network grows and changes, your monitoring systems should continually be tested and tuned!
 
 ## Conclusion
 
 Network architecture forms the foundation of effective blue team operations. Without understanding your network's physical layout, logical configuration, and traffic flows, you cannot effectively monitor for threats or respond to incidents.
 
-**Key Takeaways:**
-
-- **Segmentation Saves Lives**: Proper network segmentation slows attackers and contains breaches
-- **Visibility is Critical**: You cannot defend what you cannot see
-- **Location Matters**: Strategic placement of monitoring points maximizes detection capabilities
-- **Zero Trust is the Future**: Move beyond perimeter defense to asset-centric security
-- **Document Everything**: Maintain current network diagrams and monitoring coverage maps
-
-Modern attacks move fast—WannaCry and NotPetya demonstrated that flat networks can be compromised organization-wide within hours. By implementing proper network architecture principles, blue teams can detect threats earlier, respond faster, and minimize the impact of successful breaches.
+Modern attacks move fast; WannaCry and NotPetya demonstrated that flat networks can be compromised organization-wide within hours. By implementing proper network architecture principles, blue teams can detect threats earlier, respond faster, and minimize the impact of successful breaches.
 
 ### Additional Resources
 
 **Network Security Design:**
 - [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework) - Comprehensive security guidelines
-- [SANS Network Forensics](https://www.sans.org/cyber-security-courses/network-forensics-analysis-tools-techniques/) - Advanced network analysis techniques
+- [SANS Network Forensics](https://for572.com) - SANS FOR572 resources list
 - [Zero Trust Architecture](https://www.nist.gov/publications/zero-trust-architecture) - NIST guidance on zero trust implementation
 
 **Network Monitoring Tools:**
 - [Wireshark](https://www.wireshark.org/) - Network packet analysis
 - [Zeek (formerly Bro)](https://zeek.org/) - Network security monitoring platform
-- [Suricata](https://suricata-ids.org/) - Intrusion detection and prevention
+- [Suricata](https://suricata.io) - Intrusion detection and prevention
 - [SiLK](https://tools.netsa.cert.org/silk/) - Network flow analysis suite
 
 **Blue Team Resources:**

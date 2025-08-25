@@ -473,9 +473,9 @@ export function DNSResolution() {
               <CardContent className="p-4">
                 <h4 className="font-semibold text-blue-600 mb-2">Query Types</h4>
                 <ul className="text-sm space-y-1">
-                  <li>• <code>A</code> - IPv4 address lookup</li>
-                  <li>• <code>NS</code> - Nameserver delegation</li>
-                  <li>• Recursive resolution process</li>
+                  <li><code>A</code> - IPv4 address lookup</li>
+                  <li><code>NS</code> - Nameserver delegation</li>
+                  <li>Recursive resolution process</li>
                 </ul>
               </CardContent>
             </Card>
@@ -484,9 +484,9 @@ export function DNSResolution() {
               <CardContent className="p-4">
                 <h4 className="font-semibold text-green-600 mb-2">Caching</h4>
                 <ul className="text-sm space-y-1">
-                  <li>• Responses cached at each level</li>
-                  <li>• TTL determines cache duration</li>
-                  <li>• Reduces subsequent query time</li>
+                  <li>Responses cached at each level</li>
+                  <li>TTL determines cache duration</li>
+                  <li>Reduces subsequent query time</li>
                 </ul>
               </CardContent>
             </Card>
@@ -495,9 +495,9 @@ export function DNSResolution() {
               <CardContent className="p-4">
                 <h4 className="font-semibold text-purple-600 mb-2">Security Notes</h4>
                 <ul className="text-sm space-y-1">
-                  <li>• Each step creates log entries</li>
-                  <li>• Queries reveal communication intent</li>
-                  <li>• Monitor for suspicious patterns</li>
+                  <li>Each step creates log entries</li>
+                  <li>Queries reveal communication intent</li>
+                  <li>Monitor for suspicious patterns</li>
                 </ul>
               </CardContent>
             </Card>

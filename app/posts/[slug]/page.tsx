@@ -15,6 +15,7 @@ import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import "@/styles/highlight-js/github-dark.css"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
+import { WindowsProtectionHierarchy } from "@/components/visualizations/windows-protection-hierarchy"
 import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MemoryManagement } from "@/components/visualizations/memory-management"
@@ -29,6 +30,7 @@ import { LatestPostsSlider } from "@/components/latest-posts-slider"
 const postComponents = {
   ...mdxComponents,
   HillCipher: () => <HillCipher />,
+  WindowsProtectionHierarchy: () => <WindowsProtectionHierarchy />,
   WindowsAPIFlow: () => <WindowsAPIFlow />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MemoryManagement: () => <MemoryManagement />,

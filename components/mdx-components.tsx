@@ -5,6 +5,7 @@ import Image from "next/image"
 import { Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
+import { WindowsProtectionHierarchy } from "@/components/visualizations/windows-protection-hierarchy"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { DNSResolution } from "@/components/visualizations/dns-resolution"
@@ -178,6 +179,7 @@ export const mdxComponents = {
   hr: () => <hr className="my-8 border-border/50" />,
   // Interactive Components
   HillCipher: () => <HillCipher />,
+  WindowsProtectionHierarchy: () => <WindowsProtectionHierarchy />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   DNSResolution: () => <DNSResolution />,

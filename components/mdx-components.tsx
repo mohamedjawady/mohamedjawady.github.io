@@ -9,6 +9,10 @@ import { WindowsProtectionHierarchy } from "@/components/visualizations/windows-
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { DNSResolution } from "@/components/visualizations/dns-resolution"
+import { C2JitterAndSleep } from "@/components/visualizations/c2-jitter-and-sleep"
+import { ProcessMemoryMap } from "@/components/visualizations/process-memory-map"
+import { C2InfrastructureMap } from "@/components/visualizations/c2-infrastructure-map"
+import { MalwareC2Lifecycle } from "@/components/visualizations/malware-c2-lifecycle"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -89,14 +93,14 @@ export const mdxComponents = {
 
     const className = codeElement?.props?.className as string | undefined
     const language = className?.replace('language-', '') || undefined
-    const content = typeof codeElement?.props?.children === 'string' 
-      ? codeElement.props.children 
+    const content = typeof codeElement?.props?.children === 'string'
+      ? codeElement.props.children
       : ''
 
     // Determine if this code block should be collapsible
     const isCollapsible = shouldBeCollapsible(language, content)
     const defaultOpen = isCollapsible ? shouldBeExpandedByDefault(language) : true
-    
+
     // If not collapsible, render as regular code block
     if (!isCollapsible) {
       return (
@@ -111,7 +115,7 @@ export const mdxComponents = {
 
     // Render as collapsible code block
     return (
-      <CollapsibleCode 
+      <CollapsibleCode
         language={language}
         defaultOpen={defaultOpen}
         showCopy={true}
@@ -131,7 +135,7 @@ export const mdxComponents = {
         </code>
       )
     }
-    
+
     // For code blocks, just return the code element - rehype-highlight will handle styling
     return (
       <code className={className} {...props}>
@@ -139,14 +143,14 @@ export const mdxComponents = {
       </code>
     )
   },
-  img: ({ src, alt, ...props }: { src?: string; alt?: string; [key: string]: any }) => (
-    <Image 
-      src={src || ""} 
-      alt={alt || ""} 
-      width={800} 
-      height={400} 
-      className="rounded-lg my-6 border border-border/50" 
-      {...props} 
+  img: ({ src, alt, ...props }: { src?: string; alt?: string;[key: string]: any }) => (
+    <Image
+      src={src || ""}
+      alt={alt || ""}
+      width={800}
+      height={400}
+      className="rounded-lg my-6 border border-border/50"
+      {...props}
     />
   ),
   a: ({ href, children }: { href?: string; children: React.ReactNode }) => (
@@ -183,6 +187,10 @@ export const mdxComponents = {
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   DNSResolution: () => <DNSResolution />,
+  C2JitterAndSleep: () => <C2JitterAndSleep />,
+  ProcessMemoryMap: () => <ProcessMemoryMap />,
+  C2InfrastructureMap: () => <C2InfrastructureMap />,
+  MalwareC2Lifecycle: () => <MalwareC2Lifecycle />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

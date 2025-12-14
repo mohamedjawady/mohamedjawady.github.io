@@ -21,6 +21,10 @@ import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numb
 import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { DNSResolution } from "@/components/visualizations/dns-resolution"
+import { C2JitterAndSleep } from "@/components/visualizations/c2-jitter-and-sleep"
+import { ProcessMemoryMap } from "@/components/visualizations/process-memory-map"
+import { C2InfrastructureMap } from "@/components/visualizations/c2-infrastructure-map"
+import { MalwareC2Lifecycle } from "@/components/visualizations/malware-c2-lifecycle"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
@@ -36,6 +40,10 @@ const postComponents = {
   MemoryManagement: () => <MemoryManagement />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   DNSResolution: () => <DNSResolution />,
+  C2JitterAndSleep: () => <C2JitterAndSleep />,
+  ProcessMemoryMap: () => <ProcessMemoryMap />,
+  C2InfrastructureMap: () => <C2InfrastructureMap />,
+  MalwareC2Lifecycle: () => <MalwareC2Lifecycle />,
   CollapsibleCode: CollapsibleCode,
 }
 
@@ -67,8 +75,8 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
 
   return {
     title: `${post.title}${post.visibility === 'draft' ? ' [DRAFT]' : ''} | 0xHabib`,
-    description: post.visibility === 'draft' 
-      ? `[DRAFT] ${post.description || 'Work-in-progress post content'}` 
+    description: post.visibility === 'draft'
+      ? `[DRAFT] ${post.description || 'Work-in-progress post content'}`
       : (post.description || ''),
     keywords: post.tags,
     authors: [{ name: post.author || '0xHabib' }],
@@ -137,7 +145,7 @@ export default async function PostPage({ params }: PostPageProps) {
         tags={post.tags}
         imageUrl={ogImageUrl}
       />
-      
+
       {/* Draft Warning Banner */}
       {post.visibility === 'draft' && (
         <div className="bg-blue-500 text-white text-center py-4 px-4 font-medium">
@@ -147,7 +155,7 @@ export default async function PostPage({ params }: PostPageProps) {
           </div>
         </div>
       )}
-      
+
       {/* Post Header with Banner Background */}
       <header className="relative w-full min-h-[75vh] flex items-center justify-center overflow-hidden">
         {/* Banner Background */}
@@ -166,15 +174,15 @@ export default async function PostPage({ params }: PostPageProps) {
             <div className="absolute inset-0 gradient-overlay-dark" />
           </div>
         )}
-        
+
         {/* Fallback gradient background when no banner */}
         {!post.banner && (
           <div className="absolute inset-0 z-0 bg-gradient-to-br from-green-600/20 via-blue-600/20 to-purple-600/20 dark:from-green-600/10 dark:via-blue-600/10 dark:to-purple-600/10" />
         )}
-        
+
         {/* Content Container */}
         <div className="relative z-10 max-w-5xl mx-auto px-6 py-20 text-center">
-          
+
           {/* Post Title */}
           <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-8 leading-tight text-white banner-text-shadow">
             {post.title}
@@ -212,9 +220,9 @@ export default async function PostPage({ params }: PostPageProps) {
           {/* Tags */}
           <div className="flex flex-wrap justify-center gap-3">
             {post.tags.map((tag) => (
-              <Badge 
-                key={tag} 
-                variant="secondary" 
+              <Badge
+                key={tag}
+                variant="secondary"
                 className="glass-effect text-white border-white/30 hover:bg-white/20 hover:border-white/50 transition-all duration-300 px-4 py-2 text-sm font-medium hover:scale-105 banner-text-shadow"
               >
                 #{tag}
@@ -228,7 +236,7 @@ export default async function PostPage({ params }: PostPageProps) {
       {seriesNavigation && seriesNavigation.series && (
         <div className="bg-background/95 backdrop-blur-sm border-b border-border/40">
           <div className="max-w-5xl mx-auto px-6 py-8">
-            <SeriesNavigation 
+            <SeriesNavigation
               series={seriesNavigation.series}
               posts={seriesNavigation.posts}
               currentIndex={seriesNavigation.currentIndex}
@@ -258,8 +266,8 @@ export default async function PostPage({ params }: PostPageProps) {
 
               {/* Post Content */}
               <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none prose-lg">
-                <MDXRemote 
-                  source={post.content} 
+                <MDXRemote
+                  source={post.content}
                   components={postComponents}
                   options={{
                     mdxOptions: {

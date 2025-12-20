@@ -25,6 +25,10 @@ import { C2JitterAndSleep } from "@/components/visualizations/c2-jitter-and-slee
 import { ProcessMemoryMap } from "@/components/visualizations/process-memory-map"
 import { C2InfrastructureMap } from "@/components/visualizations/c2-infrastructure-map"
 import { MalwareC2Lifecycle } from "@/components/visualizations/malware-c2-lifecycle"
+import { Win32MessageLoop } from "@/components/visualizations/win32-message-loop"
+import { ThreadSynchronization } from "@/components/visualizations/thread-synchronization"
+import { PEHeaderViewer } from "@/components/visualizations/pe-header-viewer"
+import { ExportTableWalker } from "@/components/visualizations/export-table-walker"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
@@ -44,6 +48,10 @@ const postComponents = {
   ProcessMemoryMap: () => <ProcessMemoryMap />,
   C2InfrastructureMap: () => <C2InfrastructureMap />,
   MalwareC2Lifecycle: () => <MalwareC2Lifecycle />,
+  Win32MessageLoop: () => <Win32MessageLoop />,
+  ThreadSynchronization: () => <ThreadSynchronization />,
+  PEHeaderViewer: () => <PEHeaderViewer />,
+  ExportTableWalker: () => <ExportTableWalker />,
   CollapsibleCode: CollapsibleCode,
 }
 

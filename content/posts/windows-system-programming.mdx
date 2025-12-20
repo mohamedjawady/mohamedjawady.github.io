@@ -1,0 +1,1186 @@
+---
+title: "Windows Development with C++: Part 3 - System Programming"
+description: "Part 3 of the Windows Development series. Master processes, threads, synchronization primitives, and inter-process communication for robust Windows applications."
+date: "2025-12-18"
+author: "Mohamed Habib Jaouadi"
+tags: ["windows-development-series", "win32-api", "c++", "multithreading", "synchronization", "ipc"]
+banner: "/banners/posts/windows-system-programming.jpg"
+bannerAlt: "Windows Development with C++ - System Programming and Multithreading"
+visibility: "private"
+series: "Windows Development with C++"
+seriesOrder: 3
+---
+
+> **📘 Prerequisites:** Understanding of Parts 1-2 (Win32 fundamentals and GUI programming). This part covers advanced topics that build on previous concepts and require comfort with Windows API patterns.
+
+## Introduction
+
+Modern applications rarely run as single-threaded, isolated processes. They spawn worker threads for background tasks, communicate with other processes for data exchange, and coordinate access to shared resources. Understanding Windows system programming—processes, threads, and synchronization—is essential for building responsive, robust applications.
+
+For security professionals, these concepts are fundamental. Malware analysis requires understanding how threats spawn processes, inject into other processes, and communicate with command-and-control infrastructure. Defensive tools need proper thread management to avoid blocking the UI while scanning files. Red team tools must carefully manage their footprint across threads and processes.
+
+In Part 3, we explore the Windows process and thread model, synchronization primitives that prevent race conditions, and inter-process communication mechanisms.
+
+## Processes: The Container
+
+A **process** is an instance of a running program. It provides the isolated environment in which code executes, including:
+
+- **Virtual address space** - Private memory inaccessible to other processes
+- **Security context** - Token defining permissions and identity
+- **Handle table** - References to kernel objects (files, threads, etc.)
+- **At least one thread** - The actual execution unit
+
+### Creating Processes
+
+The `CreateProcessW` function launches a new process:
+
+<CollapsibleCode language="cpp" title="Creating a Child Process">
+
+```cpp
+#include <windows.h>
+#include <string>
+#include <format>
+
+bool LaunchProcess(const std::wstring& commandLine, bool waitForExit = false) {
+    // Command line must be mutable (CreateProcess may modify it)
+    std::wstring cmdLine = commandLine;
+    
+    STARTUPINFOW si = {};
+    si.cb = sizeof(si);
+    
+    // Optional: Configure window appearance
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_SHOW;  // or SW_HIDE for hidden process
+    
+    PROCESS_INFORMATION pi = {};
+    
+    BOOL success = CreateProcessW(
+        NULL,                    // Application name (use command line instead)
+        cmdLine.data(),          // Command line (mutable!)
+        NULL,                    // Process security attributes
+        NULL,                    // Thread security attributes
+        FALSE,                   // Inherit handles?
+        0,                       // Creation flags
+        NULL,                    // Environment (inherit from parent)
+        NULL,                    // Current directory (inherit)
+        &si,                     // Startup info
+        &pi                      // Receives process info
+    );
+    
+    if (!success) {
+        DWORD error = GetLastError();
+        // Handle error...
+        return false;
+    }
+    
+    // pi.hProcess - Handle to new process
+    // pi.hThread  - Handle to primary thread
+    // pi.dwProcessId - Process ID
+    // pi.dwThreadId  - Thread ID
+    
+    if (waitForExit) {
+        // Wait for process to complete
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        
+        // Get exit code
+        DWORD exitCode;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+    }
+    
+    // Always close handles when done
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    
+    return true;
+}
+
+// Usage examples
+void ProcessExamples() {
+    // Launch Notepad
+    LaunchProcess(L"notepad.exe");
+    
+    // Launch with arguments
+    LaunchProcess(L"cmd.exe /c dir C:\\");
+    
+    // Launch and wait for completion
+    LaunchProcess(L"ping localhost -n 4", true);
+}
+```
+
+</CollapsibleCode>
+
+### Process Creation Flags
+
+The `dwCreationFlags` parameter controls process behavior:
+
+| Flag | Description |
+|------|-------------|
+| `CREATE_NEW_CONSOLE` | New console window (for console apps) |
+| `CREATE_NO_WINDOW` | No console window at all |
+| `CREATE_SUSPENDED` | Primary thread starts suspended |
+| `DETACHED_PROCESS` | No console inheritance |
+| `CREATE_NEW_PROCESS_GROUP` | New process group for Ctrl+C handling |
+| `DEBUG_PROCESS` | Debug the new process |
+
+### Process Security and Tokens
+
+Every process runs with a **security token** defining its identity and privileges:
+
+<CollapsibleCode language="cpp" title="Querying Process Token">
+
+```cpp
+#include <windows.h>
+#include <sddl.h>
+
+void PrintProcessTokenInfo() {
+    HANDLE hToken;
+    
+    // Open our own process token
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        return;
+    }
+    
+    // Get token user (SID)
+    DWORD tokenInfoLen = 0;
+    GetTokenInformation(hToken, TokenUser, NULL, 0, &tokenInfoLen);
+    
+    std::vector<BYTE> buffer(tokenInfoLen);
+    PTOKEN_USER pTokenUser = (PTOKEN_USER)buffer.data();
+    
+    if (GetTokenInformation(hToken, TokenUser, pTokenUser, 
+                           tokenInfoLen, &tokenInfoLen)) {
+        LPWSTR sidString;
+        if (ConvertSidToStringSidW(pTokenUser->User.Sid, &sidString)) {
+            wprintf(L"User SID: %s\n", sidString);
+            LocalFree(sidString);
+        }
+    }
+    
+    // Check for elevated token
+    TOKEN_ELEVATION elevation;
+    DWORD elevSize = sizeof(elevation);
+    if (GetTokenInformation(hToken, TokenElevation, &elevation, 
+                           elevSize, &elevSize)) {
+        wprintf(L"Elevated: %s\n", 
+                elevation.TokenIsElevated ? L"Yes" : L"No");
+    }
+    
+    // Get integrity level
+    DWORD integrityLen = 0;
+    GetTokenInformation(hToken, TokenIntegrityLevel, NULL, 0, &integrityLen);
+    
+    std::vector<BYTE> integrityBuffer(integrityLen);
+    PTOKEN_MANDATORY_LABEL pLabel = (PTOKEN_MANDATORY_LABEL)integrityBuffer.data();
+    
+    if (GetTokenInformation(hToken, TokenIntegrityLevel, pLabel, 
+                           integrityLen, &integrityLen)) {
+        DWORD integrityLevel = *GetSidSubAuthority(
+            pLabel->Label.Sid,
+            *GetSidSubAuthorityCount(pLabel->Label.Sid) - 1
+        );
+        
+        const wchar_t* levelName = L"Unknown";
+        if (integrityLevel >= SECURITY_MANDATORY_SYSTEM_RID)
+            levelName = L"System";
+        else if (integrityLevel >= SECURITY_MANDATORY_HIGH_RID)
+            levelName = L"High";
+        else if (integrityLevel >= SECURITY_MANDATORY_MEDIUM_RID)
+            levelName = L"Medium";
+        else if (integrityLevel >= SECURITY_MANDATORY_LOW_RID)
+            levelName = L"Low";
+        
+        wprintf(L"Integrity Level: %s\n", levelName);
+    }
+    
+    CloseHandle(hToken);
+}
+```
+
+</CollapsibleCode>
+
+## Threads: The Execution Unit
+
+A **thread** is the actual unit of execution within a process. A process always has at least one thread (the primary thread), but can create many more for concurrent work.
+
+### Creating Threads
+
+<CollapsibleCode language="cpp" title="Thread Creation Methods">
+
+```cpp
+#include <windows.h>
+#include <process.h>  // For _beginthreadex
+#include <thread>     // C++ standard threads
+
+// Data to pass to thread
+struct ThreadData {
+    int id;
+    std::wstring name;
+    int result;
+};
+
+// Thread function for CreateThread (Windows API)
+DWORD WINAPI WorkerThreadProc(LPVOID lpParameter) {
+    ThreadData* data = (ThreadData*)lpParameter;
+    
+    wprintf(L"[Thread %d: %s] Starting\n", data->id, data->name.c_str());
+    
+    // Simulate work
+    Sleep(1000);
+    data->result = data->id * 10;
+    
+    wprintf(L"[Thread %d] Completed with result: %d\n", 
+            data->id, data->result);
+    
+    return 0;  // Thread exit code
+}
+
+// Method 1: CreateThread (basic Windows API)
+void CreateThreadExample() {
+    ThreadData data = { 1, L"Worker", 0 };
+    
+    HANDLE hThread = CreateThread(
+        NULL,               // Security attributes
+        0,                  // Stack size (0 = default)
+        WorkerThreadProc,   // Thread function
+        &data,              // Parameter
+        0,                  // Creation flags (0 = start immediately)
+        NULL                // Receives thread ID (optional)
+    );
+    
+    if (hThread) {
+        WaitForSingleObject(hThread, INFINITE);
+        CloseHandle(hThread);
+        wprintf(L"Result: %d\n", data.result);
+    }
+}
+
+// Thread function for _beginthreadex (CRT-safe)
+unsigned __stdcall SafeThreadProc(void* arg) {
+    ThreadData* data = (ThreadData*)arg;
+    
+    // Safe to use C runtime functions here
+    wprintf(L"CRT-safe thread %d running\n", data->id);
+    
+    return 0;
+}
+
+// Method 2: _beginthreadex (recommended for C runtime)
+void BeginThreadExExample() {
+    ThreadData data = { 2, L"CRT-Safe", 0 };
+    
+    // _beginthreadex properly initializes CRT per-thread data
+    uintptr_t hThread = _beginthreadex(
+        NULL,               // Security
+        0,                  // Stack size
+        SafeThreadProc,     // Function
+        &data,              // Argument
+        0,                  // Flags
+        NULL                // Thread ID
+    );
+    
+    if (hThread) {
+        WaitForSingleObject((HANDLE)hThread, INFINITE);
+        _endthreadex(0);
+        CloseHandle((HANDLE)hThread);
+    }
+}
+
+// Method 3: std::thread (C++11, recommended for modern code)
+void StdThreadExample() {
+    auto worker = [](int id) {
+        wprintf(L"std::thread %d running\n", id);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        wprintf(L"std::thread %d done\n", id);
+    };
+    
+    std::thread t1(worker, 1);
+    std::thread t2(worker, 2);
+    
+    t1.join();  // Wait for completion
+    t2.join();
+}
+```
+
+</CollapsibleCode>
+
+### Thread Lifecycle and States
+
+Threads move through several states:
+
+1. **Ready** - Waiting for CPU time
+2. **Running** - Currently executing
+3. **Waiting** - Blocked on synchronization object or I/O
+4. **Terminated** - Finished execution
+
+```cpp
+// Check if thread is still running
+DWORD exitCode;
+GetExitCodeThread(hThread, &exitCode);
+if (exitCode == STILL_ACTIVE) {
+    // Thread is running
+}
+
+// Terminate thread forcefully (DANGEROUS - avoid!)
+// TerminateThread(hThread, 1);  // Don't do this!
+
+// Proper termination: signal thread to exit
+// Use an event or flag that the thread checks
+```
+
+### Thread Local Storage (TLS)
+
+TLS provides per-thread data storage:
+
+<CollapsibleCode language="cpp" title="Thread Local Storage">
+
+```cpp
+#include <windows.h>
+
+// C++11 thread_local (recommended)
+thread_local int g_threadSpecificValue = 0;
+
+void UseThreadLocal() {
+    g_threadSpecificValue = GetCurrentThreadId();
+    // Each thread sees its own value
+}
+
+// Windows TLS API (legacy, but still useful)
+class TLSValue {
+public:
+    TLSValue() {
+        m_index = TlsAlloc();
+        if (m_index == TLS_OUT_OF_INDEXES) {
+            throw std::runtime_error("TLS allocation failed");
+        }
+    }
+    
+    ~TLSValue() {
+        TlsFree(m_index);
+    }
+    
+    void Set(void* value) {
+        TlsSetValue(m_index, value);
+    }
+    
+    void* Get() const {
+        return TlsGetValue(m_index);
+    }
+    
+private:
+    DWORD m_index;
+};
+```
+
+</CollapsibleCode>
+
+## Synchronization Primitives
+
+When multiple threads access shared data, **race conditions** can corrupt data. Synchronization primitives coordinate thread access to prevent this.
+
+<ThreadSynchronization />
+
+### Critical Sections
+
+Critical sections are lightweight, intra-process synchronization objects:
+
+<CollapsibleCode language="cpp" title="Critical Section Usage">
+
+```cpp
+#include <windows.h>
+
+class CriticalSection {
+public:
+    CriticalSection() {
+        InitializeCriticalSection(&m_cs);
+    }
+    
+    ~CriticalSection() {
+        DeleteCriticalSection(&m_cs);
+    }
+    
+    void Lock() {
+        EnterCriticalSection(&m_cs);
+    }
+    
+    bool TryLock() {
+        return TryEnterCriticalSection(&m_cs) != FALSE;
+    }
+    
+    void Unlock() {
+        LeaveCriticalSection(&m_cs);
+    }
+    
+    // Non-copyable
+    CriticalSection(const CriticalSection&) = delete;
+    CriticalSection& operator=(const CriticalSection&) = delete;
+    
+private:
+    CRITICAL_SECTION m_cs;
+};
+
+// RAII lock guard
+class CSLockGuard {
+public:
+    explicit CSLockGuard(CriticalSection& cs) : m_cs(cs) {
+        m_cs.Lock();
+    }
+    
+    ~CSLockGuard() {
+        m_cs.Unlock();
+    }
+    
+private:
+    CriticalSection& m_cs;
+};
+
+// Usage
+CriticalSection g_cs;
+int g_sharedCounter = 0;
+
+DWORD WINAPI IncrementThread(LPVOID) {
+    for (int i = 0; i < 10000; i++) {
+        CSLockGuard lock(g_cs);  // Automatic lock/unlock
+        g_sharedCounter++;
+    }
+    return 0;
+}
+```
+
+</CollapsibleCode>
+
+### Mutexes
+
+Mutexes (mutual exclusion) work across processes and support ownership:
+
+<CollapsibleCode language="cpp" title="Mutex Usage">
+
+```cpp
+#include <windows.h>
+#include <memory>
+
+// RAII mutex wrapper
+class Mutex {
+public:
+    Mutex(const wchar_t* name = nullptr, bool initialOwner = false) {
+        m_handle = CreateMutexW(NULL, initialOwner, name);
+        if (!m_handle) {
+            throw std::runtime_error("Mutex creation failed");
+        }
+        
+        // Check if we got ownership or mutex already existed
+        m_alreadyExists = (GetLastError() == ERROR_ALREADY_EXISTS);
+    }
+    
+    ~Mutex() {
+        if (m_handle) CloseHandle(m_handle);
+    }
+    
+    bool Lock(DWORD timeout = INFINITE) {
+        DWORD result = WaitForSingleObject(m_handle, timeout);
+        return result == WAIT_OBJECT_0;
+    }
+    
+    void Unlock() {
+        ReleaseMutex(m_handle);
+    }
+    
+    bool AlreadyExists() const { return m_alreadyExists; }
+    HANDLE Handle() const { return m_handle; }
+    
+private:
+    HANDLE m_handle;
+    bool m_alreadyExists;
+};
+
+// Single-instance application pattern
+bool EnsureSingleInstance() {
+    static Mutex instanceMutex(L"Global\\MyAppSingleInstance");
+    
+    if (instanceMutex.AlreadyExists()) {
+        // Another instance is already running
+        MessageBoxW(NULL, L"Application is already running!", 
+                   L"Error", MB_ICONERROR);
+        return false;
+    }
+    
+    return true;
+}
+
+// Cross-process locking example
+void CrossProcessLock() {
+    // Named mutex can be accessed from any process
+    Mutex sharedMutex(L"Global\\SharedResourceMutex");
+    
+    if (sharedMutex.Lock(5000)) {  // 5 second timeout
+        // Access shared resource...
+        
+        sharedMutex.Unlock();
+    } else {
+        // Timeout or error
+    }
+}
+```
+
+</CollapsibleCode>
+
+### Events
+
+Events signal between threads when something occurs:
+
+<CollapsibleCode language="cpp" title="Event Signaling">
+
+```cpp
+#include <windows.h>
+
+class Event {
+public:
+    Event(bool manualReset = false, bool initialState = false, 
+          const wchar_t* name = nullptr) {
+        m_handle = CreateEventW(NULL, manualReset, initialState, name);
+        if (!m_handle) {
+            throw std::runtime_error("Event creation failed");
+        }
+    }
+    
+    ~Event() {
+        if (m_handle) CloseHandle(m_handle);
+    }
+    
+    void Set() { SetEvent(m_handle); }
+    void Reset() { ResetEvent(m_handle); }
+    void Pulse() { PulseEvent(m_handle); }  // Legacy, avoid in new code
+    
+    bool Wait(DWORD timeout = INFINITE) {
+        return WaitForSingleObject(m_handle, timeout) == WAIT_OBJECT_0;
+    }
+    
+    HANDLE Handle() const { return m_handle; }
+    
+private:
+    HANDLE m_handle;
+};
+
+// Producer-Consumer example
+Event g_dataReady(false, false);      // Auto-reset event
+Event g_shutdownEvent(true, false);   // Manual-reset event
+
+std::queue<int> g_dataQueue;
+CriticalSection g_queueLock;
+
+DWORD WINAPI ProducerThread(LPVOID) {
+    for (int i = 0; i < 10; i++) {
+        // Produce data
+        {
+            CSLockGuard lock(g_queueLock);
+            g_dataQueue.push(i);
+        }
+        g_dataReady.Set();  // Signal consumer
+        Sleep(100);
+    }
+    
+    g_shutdownEvent.Set();  // Signal shutdown
+    return 0;
+}
+
+DWORD WINAPI ConsumerThread(LPVOID) {
+    HANDLE handles[] = { g_dataReady.Handle(), g_shutdownEvent.Handle() };
+    
+    while (true) {
+        DWORD result = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+        
+        if (result == WAIT_OBJECT_0) {
+            // Data ready
+            CSLockGuard lock(g_queueLock);
+            while (!g_dataQueue.empty()) {
+                int data = g_dataQueue.front();
+                g_dataQueue.pop();
+                wprintf(L"Consumed: %d\n", data);
+            }
+        } else if (result == WAIT_OBJECT_0 + 1) {
+            // Shutdown signal
+            break;
+        }
+    }
+    
+    return 0;
+}
+```
+
+</CollapsibleCode>
+
+### Semaphores
+
+Semaphores control access to a pool of resources:
+
+<CollapsibleCode language="cpp" title="Semaphore for Resource Pool">
+
+```cpp
+#include <windows.h>
+
+class Semaphore {
+public:
+    Semaphore(long initialCount, long maxCount, 
+              const wchar_t* name = nullptr) {
+        m_handle = CreateSemaphoreW(NULL, initialCount, maxCount, name);
+        if (!m_handle) {
+            throw std::runtime_error("Semaphore creation failed");
+        }
+    }
+    
+    ~Semaphore() {
+        if (m_handle) CloseHandle(m_handle);
+    }
+    
+    bool Acquire(DWORD timeout = INFINITE) {
+        return WaitForSingleObject(m_handle, timeout) == WAIT_OBJECT_0;
+    }
+    
+    void Release(long count = 1) {
+        ReleaseSemaphore(m_handle, count, NULL);
+    }
+    
+private:
+    HANDLE m_handle;
+};
+
+// Connection pool example
+class ConnectionPool {
+public:
+    ConnectionPool(int maxConnections) 
+        : m_semaphore(maxConnections, maxConnections)
+        , m_maxConnections(maxConnections) {
+        m_connections.resize(maxConnections);
+        // Initialize connections...
+    }
+    
+    Connection* Acquire(DWORD timeout = INFINITE) {
+        if (m_semaphore.Acquire(timeout)) {
+            CSLockGuard lock(m_cs);
+            for (auto& conn : m_connections) {
+                if (!conn.inUse) {
+                    conn.inUse = true;
+                    return &conn;
+                }
+            }
+        }
+        return nullptr;
+    }
+    
+    void Release(Connection* conn) {
+        {
+            CSLockGuard lock(m_cs);
+            conn->inUse = false;
+        }
+        m_semaphore.Release();
+    }
+    
+private:
+    struct Connection {
+        bool inUse = false;
+        // ... connection data
+    };
+    
+    Semaphore m_semaphore;
+    CriticalSection m_cs;
+    std::vector<Connection> m_connections;
+    int m_maxConnections;
+};
+```
+
+</CollapsibleCode>
+
+### Slim Reader/Writer Locks (SRW)
+
+SRW locks optimize for read-heavy workloads:
+
+<CollapsibleCode language="cpp" title="SRW Lock for Read-Heavy Access">
+
+```cpp
+#include <windows.h>
+
+class SRWLock {
+public:
+    SRWLock() {
+        InitializeSRWLock(&m_srw);
+    }
+    
+    // Exclusive (write) access
+    void LockExclusive() {
+        AcquireSRWLockExclusive(&m_srw);
+    }
+    
+    void UnlockExclusive() {
+        ReleaseSRWLockExclusive(&m_srw);
+    }
+    
+    // Shared (read) access
+    void LockShared() {
+        AcquireSRWLockShared(&m_srw);
+    }
+    
+    void UnlockShared() {
+        ReleaseSRWLockShared(&m_srw);
+    }
+    
+private:
+    SRWLOCK m_srw;
+};
+
+// RAII guards
+class SRWExclusiveGuard {
+public:
+    explicit SRWExclusiveGuard(SRWLock& lock) : m_lock(lock) {
+        m_lock.LockExclusive();
+    }
+    ~SRWExclusiveGuard() { m_lock.UnlockExclusive(); }
+private:
+    SRWLock& m_lock;
+};
+
+class SRWSharedGuard {
+public:
+    explicit SRWSharedGuard(SRWLock& lock) : m_lock(lock) {
+        m_lock.LockShared();
+    }
+    ~SRWSharedGuard() { m_lock.UnlockShared(); }
+private:
+    SRWLock& m_lock;
+};
+
+// Thread-safe cache with SRW lock
+class Cache {
+public:
+    std::optional<std::wstring> Get(const std::wstring& key) {
+        SRWSharedGuard lock(m_lock);  // Multiple readers allowed
+        auto it = m_data.find(key);
+        if (it != m_data.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+    
+    void Set(const std::wstring& key, const std::wstring& value) {
+        SRWExclusiveGuard lock(m_lock);  // Exclusive access
+        m_data[key] = value;
+    }
+    
+private:
+    SRWLock m_lock;
+    std::unordered_map<std::wstring, std::wstring> m_data;
+};
+```
+
+</CollapsibleCode>
+
+## Inter-Process Communication (IPC)
+
+Processes need to communicate and share data. Windows provides several IPC mechanisms.
+
+### Named Pipes
+
+Pipes provide stream-based communication between processes:
+
+<CollapsibleCode language="cpp" title="Named Pipe Server and Client">
+
+```cpp
+#include <windows.h>
+#include <string>
+
+// Pipe server
+class PipeServer {
+public:
+    PipeServer(const wchar_t* pipeName) : m_pipeName(pipeName) {}
+    
+    bool Start() {
+        std::wstring fullName = L"\\\\.\\pipe\\" + m_pipeName;
+        
+        m_hPipe = CreateNamedPipeW(
+            fullName.c_str(),
+            PIPE_ACCESS_DUPLEX,         // Read/write
+            PIPE_TYPE_MESSAGE |         // Message mode
+            PIPE_READMODE_MESSAGE |
+            PIPE_WAIT,                  // Blocking
+            PIPE_UNLIMITED_INSTANCES,
+            4096,                       // Output buffer
+            4096,                       // Input buffer
+            0,                          // Default timeout
+            NULL                        // Security
+        );
+        
+        return m_hPipe != INVALID_HANDLE_VALUE;
+    }
+    
+    bool WaitForConnection() {
+        return ConnectNamedPipe(m_hPipe, NULL) || 
+               GetLastError() == ERROR_PIPE_CONNECTED;
+    }
+    
+    bool Read(std::wstring& message) {
+        wchar_t buffer[4096];
+        DWORD bytesRead;
+        
+        if (ReadFile(m_hPipe, buffer, sizeof(buffer) - 2, 
+                    &bytesRead, NULL)) {
+            buffer[bytesRead / 2] = L'\0';
+            message = buffer;
+            return true;
+        }
+        return false;
+    }
+    
+    bool Write(const std::wstring& message) {
+        DWORD bytesWritten;
+        return WriteFile(m_hPipe, message.c_str(), 
+                        (DWORD)(message.size() * 2), 
+                        &bytesWritten, NULL) != FALSE;
+    }
+    
+    void Disconnect() {
+        DisconnectNamedPipe(m_hPipe);
+    }
+    
+    ~PipeServer() {
+        if (m_hPipe != INVALID_HANDLE_VALUE) {
+            CloseHandle(m_hPipe);
+        }
+    }
+    
+private:
+    std::wstring m_pipeName;
+    HANDLE m_hPipe = INVALID_HANDLE_VALUE;
+};
+
+// Pipe client
+class PipeClient {
+public:
+    bool Connect(const wchar_t* pipeName, DWORD timeout = 5000) {
+        std::wstring fullName = L"\\\\.\\pipe\\";
+        fullName += pipeName;
+        
+        // Wait for pipe to be available
+        if (!WaitNamedPipeW(fullName.c_str(), timeout)) {
+            return false;
+        }
+        
+        m_hPipe = CreateFileW(
+            fullName.c_str(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,              // No sharing
+            NULL,           // Default security
+            OPEN_EXISTING,
+            0,              // Default attributes
+            NULL            // No template
+        );
+        
+        if (m_hPipe == INVALID_HANDLE_VALUE) {
+            return false;
+        }
+        
+        // Set message mode
+        DWORD mode = PIPE_READMODE_MESSAGE;
+        SetNamedPipeHandleState(m_hPipe, &mode, NULL, NULL);
+        
+        return true;
+    }
+    
+    bool Send(const std::wstring& message, std::wstring& response) {
+        DWORD bytesWritten;
+        if (!WriteFile(m_hPipe, message.c_str(), 
+                      (DWORD)(message.size() * 2), 
+                      &bytesWritten, NULL)) {
+            return false;
+        }
+        
+        wchar_t buffer[4096];
+        DWORD bytesRead;
+        if (ReadFile(m_hPipe, buffer, sizeof(buffer) - 2, 
+                    &bytesRead, NULL)) {
+            buffer[bytesRead / 2] = L'\0';
+            response = buffer;
+            return true;
+        }
+        
+        return false;
+    }
+    
+    ~PipeClient() {
+        if (m_hPipe != INVALID_HANDLE_VALUE) {
+            CloseHandle(m_hPipe);
+        }
+    }
+    
+private:
+    HANDLE m_hPipe = INVALID_HANDLE_VALUE;
+};
+```
+
+</CollapsibleCode>
+
+### Shared Memory (Memory-Mapped Files)
+
+For high-performance data sharing, use memory-mapped files:
+
+<CollapsibleCode language="cpp" title="Shared Memory Between Processes">
+
+```cpp
+#include <windows.h>
+#include <string>
+
+// Shared data structure
+struct SharedData {
+    LONG counter;
+    wchar_t message[256];
+};
+
+// Shared memory wrapper
+class SharedMemory {
+public:
+    SharedMemory(const wchar_t* name, size_t size, bool create = false) 
+        : m_size(size) {
+        
+        if (create) {
+            // Create new mapping
+            m_hMapping = CreateFileMappingW(
+                INVALID_HANDLE_VALUE,  // Use paging file
+                NULL,                  // Default security
+                PAGE_READWRITE,        // Read/write access
+                0,                     // Size high
+                (DWORD)size,           // Size low
+                name                   // Name
+            );
+        } else {
+            // Open existing mapping
+            m_hMapping = OpenFileMappingW(
+                FILE_MAP_ALL_ACCESS,
+                FALSE,
+                name
+            );
+        }
+        
+        if (!m_hMapping) {
+            throw std::runtime_error("Failed to create/open file mapping");
+        }
+        
+        m_pData = MapViewOfFile(
+            m_hMapping,
+            FILE_MAP_ALL_ACCESS,
+            0, 0,       // Offset
+            size        // Size to map
+        );
+        
+        if (!m_pData) {
+            CloseHandle(m_hMapping);
+            throw std::runtime_error("Failed to map view");
+        }
+    }
+    
+    ~SharedMemory() {
+        if (m_pData) UnmapViewOfFile(m_pData);
+        if (m_hMapping) CloseHandle(m_hMapping);
+    }
+    
+    void* Data() { return m_pData; }
+    size_t Size() const { return m_size; }
+    
+    template<typename T>
+    T* As() { return static_cast<T*>(m_pData); }
+    
+private:
+    HANDLE m_hMapping = NULL;
+    void* m_pData = nullptr;
+    size_t m_size;
+};
+
+// Usage - Server process
+void SharedMemoryServer() {
+    SharedMemory shm(L"Local\\MySharedData", sizeof(SharedData), true);
+    SharedData* data = shm.As<SharedData>();
+    
+    // Initialize
+    data->counter = 0;
+    wcscpy_s(data->message, L"Server initialized");
+    
+    // Update counter atomically
+    while (true) {
+        InterlockedIncrement(&data->counter);
+        Sleep(1000);
+    }
+}
+
+// Usage - Client process  
+void SharedMemoryClient() {
+    SharedMemory shm(L"Local\\MySharedData", sizeof(SharedData), false);
+    SharedData* data = shm.As<SharedData>();
+    
+    wprintf(L"Message: %s\n", data->message);
+    wprintf(L"Counter: %d\n", data->counter);
+}
+```
+
+</CollapsibleCode>
+
+### Mailslots
+
+Mailslots provide simple one-way broadcast messaging:
+
+<CollapsibleCode language="cpp" title="Mailslot for Broadcast Messages">
+
+```cpp
+// Mailslot server (receiver)
+HANDLE CreateMailslotServer(const wchar_t* name) {
+    std::wstring fullName = L"\\\\.\\mailslot\\";
+    fullName += name;
+    
+    return CreateMailslotW(
+        fullName.c_str(),
+        0,              // Max message size (0 = any)
+        MAILSLOT_WAIT_FOREVER,
+        NULL            // Security
+    );
+}
+
+// Mailslot client (sender)
+bool SendMailslotMessage(const wchar_t* name, const std::wstring& message) {
+    std::wstring fullName = L"\\\\.\\mailslot\\";
+    fullName += name;
+    
+    // Use "*" for broadcast: L"\\\\*\\mailslot\\name"
+    
+    HANDLE hSlot = CreateFileW(
+        fullName.c_str(),
+        GENERIC_WRITE,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+    
+    if (hSlot == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    
+    DWORD bytesWritten;
+    BOOL result = WriteFile(hSlot, message.c_str(), 
+                           (DWORD)(message.size() * 2), 
+                           &bytesWritten, NULL);
+    
+    CloseHandle(hSlot);
+    return result != FALSE;
+}
+```
+
+</CollapsibleCode>
+
+## Thread Pools
+
+For managing many short-lived tasks, use the Windows thread pool:
+
+<CollapsibleCode language="cpp" title="Windows Thread Pool">
+
+```cpp
+#include <windows.h>
+#include <functional>
+
+// Modern thread pool usage
+class ThreadPool {
+public:
+    ThreadPool() {
+        m_pool = CreateThreadpool(NULL);
+        if (!m_pool) {
+            throw std::runtime_error("Failed to create thread pool");
+        }
+        
+        InitializeThreadpoolEnvironment(&m_environ);
+        SetThreadpoolCallbackPool(&m_environ, m_pool);
+        
+        // Optional: configure min/max threads
+        SetThreadpoolThreadMinimum(m_pool, 2);
+        SetThreadpoolThreadMaximum(m_pool, 8);
+    }
+    
+    ~ThreadPool() {
+        CloseThreadpool(m_pool);
+        DestroyThreadpoolEnvironment(&m_environ);
+    }
+    
+    template<typename Func>
+    bool Submit(Func&& func) {
+        auto* wrapper = new std::function<void()>(std::forward<Func>(func));
+        
+        PTP_WORK work = CreateThreadpoolWork(
+            WorkCallback,
+            wrapper,
+            &m_environ
+        );
+        
+        if (!work) {
+            delete wrapper;
+            return false;
+        }
+        
+        SubmitThreadpoolWork(work);
+        CloseThreadpoolWork(work);
+        return true;
+    }
+    
+private:
+    static VOID CALLBACK WorkCallback(
+        PTP_CALLBACK_INSTANCE instance,
+        PVOID context,
+        PTP_WORK work
+    ) {
+        auto* func = static_cast<std::function<void()>*>(context);
+        (*func)();
+        delete func;
+    }
+    
+    PTP_POOL m_pool;
+    TP_CALLBACK_ENVIRON m_environ;
+};
+
+// Usage
+void ThreadPoolExample() {
+    ThreadPool pool;
+    
+    for (int i = 0; i < 100; i++) {
+        pool.Submit([i]() {
+            wprintf(L"Task %d executing on thread %d\n", 
+                   i, GetCurrentThreadId());
+            Sleep(100);
+        });
+    }
+    
+    // Wait for completion...
+    Sleep(5000);
+}
+```
+
+</CollapsibleCode>
+
+## Conclusion
+
+Part 3 has covered the fundamentals of Windows system programming:
+
+- **Processes**: Creating, managing, and securing process execution
+- **Threads**: Concurrent execution within processes
+- **Synchronization**: Critical sections, mutexes, events, semaphores, and SRW locks
+- **IPC**: Named pipes, shared memory, and mailslots for cross-process communication
+- **Thread Pools**: Efficient management of many concurrent tasks
+
+These concepts form the foundation for building robust, high-performance Windows applications. For security tooling, proper thread management ensures responsive UIs while performing intensive background work. Understanding IPC mechanisms is crucial for analyzing how malware communicates and persists.
+
+---
+
+**Series Complete**: This concludes the initial Windows Development with C++ series. Future parts may cover advanced topics like COM programming, Windows services, and kernel-mode development.
+
+## References and Further Reading
+
+- [Processes and Threads](https://docs.microsoft.com/en-us/windows/win32/procthread/processes-and-threads) - Official documentation
+- [Synchronization](https://docs.microsoft.com/en-us/windows/win32/sync/synchronization) - Sync primitives reference
+- [Interprocess Communications](https://docs.microsoft.com/en-us/windows/win32/ipc/interprocess-communications) - IPC mechanisms
+- [Windows Internals, 7th Edition](https://docs.microsoft.com/en-us/sysinternals/resources/windows-internals) - Deep dive into Windows architecture
+
+---
+
+*Mastering system programming is essential for security professionals. Process injection techniques, credential theft tools, and defensive monitoring solutions all rely on the concepts covered in this part.*

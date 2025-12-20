@@ -1,0 +1,456 @@
+---
+title: "Advanced Library Loading & Import Resolution"
+description: "A comprehensive deep dive into Windows internals, manual function resolution, TEB/PEB traversal, and proxy loading techniques used by advanced persistent threats to evade analysis."
+date: "2025-12-19"
+author: "Mohamed Habib Jaouadi"
+tags: ["malware-development", "internals", "pe-format", "evasion", "api-hashing", "c++", "proxy-loading", "thread-pool"]
+banner: "/banners/posts/library-loading-techniques.jpg"
+bannerAlt: "Digital matrix code representing memory structures and API resolution"
+visibility: "private"
+---
+
+> **⚠️ Educational Disclaimer:** This material is for research and defensive purposes only. It documents techniques used by sophisticated threat actors (APTs) and ransomware groups. Understanding these internals is mandatory for developing effective EDR sensors and conducting memory forensics.
+
+## The Arms Race of Import Resolution
+
+In the early days of malware analysis, identifying the capabilities of a binary was as simple as running `dumpbin /imports` or opening it in Dependency Walker. The **Import Address Table (IAT)** acted as a manifest: if a program imported `InternetOpen` and `InternetReadFile`, it was likely a downloader. If it imported `CryptEncrypt`, it was potentially ransomware or a stealer.
+
+Security vendors quickly capitalized on this. They built static signatures based on "suspicious import combinations." In response, malware authors began hiding their intent. First, they used standard runtime linking via `LoadLibrary` and `GetProcAddress`. When AVs started hooking those APIs in user-mode, authors moved deeper—manually traversing Windows data structures to find function addresses without ever asking the OS.
+
+Today, we face techniques like **API Hashing** and **Proxy Loading**, which not only hide *what* functions are being called but also *who* is calling them. This article dissects these mechanisms byte-by-byte.
+
+---
+
+## 1. Windows Internals: The TEB and PEB
+
+To understand how malware finds functions without `GetModuleHandle`, we must understand the "Source of Truth" for a process. In Windows, this is the **Process Environment Block (PEB)**.
+
+### The Thread Environment Block (TEB)
+Every thread in a process has a corresponding TEB. It serves as the root from which we can find the process-wide PEB.
+*   **x86 (32-bit):** The TEB is located at the address stored in the **FS** segment register. The PEB pointer is at `FS:[0x30]`.
+*   **x64 (64-bit):** The TEB is in the **GS** segment register. The PEB pointer is at `GS:[0x60]`.
+
+### The Process Environment Block (PEB)
+The PEB contains global variables for the process, including:
+*   `BeingDebugged` flag (a classic anti-debug check).
+*   `ProcessParameters` (command line arguments, working directory).
+*   **`Ldr` (PEB_LDR_DATA)**: The holy grail for manual resolution. It contains a double-linked list of all loaded modules (DLLs).
+
+### accessing Structures via Intrinsics
+Modern C++ compilers (MSVC) provide "intrinsics" to read these segment registers directly. This bypasses any API calls that an EDR might have intercepted.
+
+<CollapsibleCode language="c" title="GetTeb and GetPeb Implementation">
+
+```c
+#include <Windows.h>
+#include <winternl.h>
+
+// TEB is at offset 0x30 in GS segment (x64) or 0x18 in FS segment (x86)
+PTEB GetTeb(VOID)
+{
+#if defined(_WIN64)
+    return (PTEB)__readgsqword(0x30);
+#elif defined(_WIN32)
+    return (PTEB)__readfsdword(0x18);
+#endif
+}
+
+// PEB is at offset 0x60 in GS segment (x64) or 0x30 in FS segment (x86)
+PPEB GetPeb(VOID)
+{
+#if defined(_WIN64)
+    return (PPEB)__readgsqword(0x60);
+#elif defined(_WIN32)
+    return (PPEB)__readfsdword(0x30);
+#endif
+}
+
+// Alternative: Get PEB via TEB pointer
+PPEB GetPebFromTeb(VOID)
+{
+    PTEB Teb = GetTeb();
+    return (PPEB)Teb->ProcessEnvironmentBlock;
+}
+
+// Access KUSER_SHARED_DATA (0x7FFE0000)
+// This page is mapped read-only into every process and writable only by the kernel.
+// It allows getting system time and other metrics without a syscall context switch.
+PKUSER_SHARED_DATA GetKUserSharedData(VOID)
+{
+    return (KUSER_SHARED_DATA*)0x7FFE0000;
+}
+```
+
+</CollapsibleCode>
+
+---
+
+## 2. Manual PE Parsing: "The Hard Way"
+
+Once we traverse the PEB's `Ldr` list and find the base address of a DLL (like `kernel32.dll`), we have a pointer to its raw bytes in memory. To make use of it, we must parse the **Portable Executable (PE)** format.
+
+This is exactly what the Windows Loader does when you start an application. Malware replicates this logic to find the addresses of exported functions.
+
+<PEHeaderViewer />
+
+### The Parsing Flow
+1.  **DOS Header (`IMAGE_DOS_HEADER`)**: Check the first 2 bytes for "MZ" (`0x5A4D`).
+2.  **e_lfanew**: Read the offset at `0x3C` to jump to the NT Headers.
+3.  **NT Headers (`IMAGE_NT_HEADERS`)**: Check signature "PE\0\0" (`0x4550`).
+4.  **Optional Header**: Contains the "Data Directories."
+5.  **Export Directory**: Data Directory index 0 (`IMAGE_DIRECTORY_ENTRY_EXPORT`). This is where the function names and addresses live.
+
+<CollapsibleCode language="c" title="RtlLoadPeHeaders Implementation">
+
+```c
+BOOL RtlLoadPeHeaders(
+    _Inout_ PIMAGE_DOS_HEADER* Dos,
+    _Inout_ PIMAGE_NT_HEADERS* Nt,
+    _Inout_ PIMAGE_FILE_HEADER* File,
+    _Inout_ PIMAGE_OPTIONAL_HEADER* Optional,
+    _Inout_ PBYTE* ImageBase)
+{
+    *Dos = (PIMAGE_DOS_HEADER)*ImageBase;
+    // Verify MZ signature (0x5A4D)
+    if ((*Dos)->e_magic != IMAGE_DOS_SIGNATURE)
+        return FALSE;
+
+    // Follow e_lfanew to NT Headers
+    *Nt = (PIMAGE_NT_HEADERS)((PBYTE)*Dos + (*Dos)->e_lfanew);
+    // Verify PE signature (0x4550)
+    if ((*Nt)->Signature != IMAGE_NT_SIGNATURE)
+        return FALSE;
+
+    *File = (PIMAGE_FILE_HEADER)((PBYTE)*ImageBase + (*Dos)->e_lfanew + sizeof(DWORD));
+    *Optional = (PIMAGE_OPTIONAL_HEADER)((PBYTE)*File + sizeof(IMAGE_FILE_HEADER));
+
+    return TRUE;
+}
+```
+
+</CollapsibleCode>
+
+---
+
+## 3. Safe Manual Export Resolution
+
+Writing your own `GetProcAddress` allows you to bypass user-mode hooks on the real API. However, simply walking the export table is dangerous if you don't handle **Export Forwarders**.
+
+### The Forwarder Problem
+A DLL can "forward" an export to another DLL. For example, `kernel32.dll` often forwards heap functions to `ntdll.dll`.
+*   **Standard Export:** The `AddressOfFunctions` array contains an RVA (Relative Virtual Address) pointing to code *inside* the DLL section.
+*   **Forwarder:** The RVA points to a string *inside the Export Directory* itself (e.g., "NTDLL.RtlAllocateHeap").
+
+If your code jumps to that address treating it as code, it will crash (Access Violation / DEP). You must detect if the address falls within the Export Directory bounds and resolve the target function instead.
+
+<ExportTableWalker />
+
+<CollapsibleCode language="c" title="GetProcAddress (Safe Implementation)">
+
+```c
+typedef NTSTATUS(NTAPI* LDRGETPROCEDUREADDRESS)(HMODULE, PANSI_STRING, WORD, PVOID);
+
+// Helper helper function used by library loading functions to handle API sets
+DWORD64 LdrLoadGetProcedureAddress(VOID) {
+    // ... (This function finds ntdll's LdrGetProcedureAddress manually to bootstrap) ... 
+    // See github repo for full bootstrap logic
+}
+
+DWORD64 __stdcall GetProcAddressA(_In_ DWORD64 ModuleBase, _In_ LPCSTR lpProcName)
+{
+    PBYTE pFunctionName = NULL;
+    PIMAGE_DOS_HEADER Dos = NULL;
+    PIMAGE_NT_HEADERS Nt = NULL;
+    PIMAGE_FILE_HEADER File = NULL;
+    PIMAGE_OPTIONAL_HEADER Optional = NULL;
+    LDRGETPROCEDUREADDRESS LdrGetProcedureAddress = NULL;
+    DWORD64 FunctionAddress = 0;
+    ANSI_STRING ForwardFunctionString = { 0 };
+
+    // Bootstrap our ability to resolve forwarders
+    LdrGetProcedureAddress = (LDRGETPROCEDUREADDRESS)LdrLoadGetProcedureAddress();
+
+    RtlLoadPeHeaders(&Dos, &Nt, &File, &Optional, (PBYTE*)&ModuleBase);
+
+    IMAGE_EXPORT_DIRECTORY* ExportTable = (PIMAGE_EXPORT_DIRECTORY)(ModuleBase + Optional->DataDirectory[0].VirtualAddress);
+    
+    // The Export Table uses three parallel arrays. 
+    // Usually, you match a name in Names[], get the index 'i', look up Ordinals[i], 
+    // and then use that ordinal to index into Functions[].
+    PDWORD FunctionNameAddressArray = (PDWORD)((LPBYTE)ModuleBase + ExportTable->AddressOfNames);
+    PDWORD FunctionAddressArray = (PDWORD)((LPBYTE)ModuleBase + ExportTable->AddressOfFunctions);
+    PWORD FunctionOrdinalAddressArray = (PWORD)((LPBYTE)ModuleBase + ExportTable->AddressOfNameOrdinals);
+
+    for (DWORD dwX = 0; dwX < ExportTable->NumberOfNames; dwX++)
+    {
+        pFunctionName = FunctionNameAddressArray[dwX] + (PBYTE)ModuleBase;
+        
+        if (StringCompareA((PCHAR)pFunctionName, lpProcName) == 0)
+        {
+            FunctionAddress = (DWORD64)ModuleBase + FunctionAddressArray[FunctionOrdinalAddressArray[dwX]];
+            
+            // KEY CHECK: Is this a Forwarder?
+            // If the calculated address is strictly within the bounds of the Export Directory,
+            // it is a pointer to an ASCII string (e.g. "NTDLL.SomeFunc"), NOT executable code.
+            if (FunctionAddress >= (ModuleBase + Optional->DataDirectory[0].VirtualAddress) && 
+                FunctionAddress < (ModuleBase + Optional->DataDirectory[0].VirtualAddress) + (ModuleBase + Optional->DataDirectory[0].Size))
+            {
+                ForwardFunctionString.Buffer = (PCHAR)pFunctionName;
+                ForwardFunctionString.Length = (USHORT)StringLengthA((PCHAR)pFunctionName);
+                ForwardFunctionString.MaximumLength = ForwardFunctionString.Length + sizeof(CHAR);
+
+                // Use the native loader to resolve the forwarded export
+                if (LdrGetProcedureAddress((HMODULE)ModuleBase, &ForwardFunctionString, 0, &FunctionAddress) != STATUS_SUCCESS)
+                    return 0;
+            }
+
+            return FunctionAddress;
+        }
+    }
+
+    return 0;
+}
+```
+
+</CollapsibleCode>
+
+---
+
+## 4. Function Import Methods: API Hashing
+
+Even with manual resolution, storing strings like `"CreateRemoteThread"` in your binary is a death sentence. To look more benign, malware uses **API Hashing**. 
+
+Instead of `strcmp("VirtualAlloc", ExportName)`, the malware computes `Hash("VirtualAlloc")` at compile time (e.g., `0x5A12B9`). At runtime, it hashes every export name it finds until one matches the magic number.
+
+### 1. Djb2
+A variant of Daniel J. Bernstein's hashing algorithm.
+*   **Math**: `hash = ((hash << 5) + hash) + c` (essentially `hash * 33 + c`).
+*   **Malware**: Used by **GuLoader**, **Hell's Gate**, and **Cobalt Strike** variants.
+*   **Why**: The constant `5381` and multiplier `33` provide excellent distribution for ASCII strings with minimal CPU cycles.
+
+<CollapsibleCode language="c" title="GetProcAddressDjb2">
+
+```c
+DWORD64 __stdcall GetProcAddressDjb2(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash)
+{
+    // ... setup (headers & arrays) ...
+
+    for (DWORD dwX = 0; dwX < ExportTable->NumberOfNames; dwX++)
+    {
+        pFunctionName = FunctionNameAddressArray[dwX] + (PBYTE)ModuleBase;
+
+        DWORD dwFunctionHash = HashStringDjb2A((PCHAR)pFunctionName);
+        
+        // Compare Hash instead of String
+        if (Hash == dwFunctionHash)
+            return (DWORD64)ModuleBase + FunctionAddressArray[FunctionOrdinalAddressArray[dwX]];
+    }
+    return 0;
+}
+```
+
+</CollapsibleCode>
+
+### 2. MurmurHash
+A non-cryptographic hash function optimized for speed and collision resistance.
+*   **Malware**: Heavily utilized by **Conti Ransomware** (leaked source code confirmed this) and **Win32/Potao**.
+*   **Why**: It avalanches bits very quickly, meaning similar strings (`LoadLibraryA` vs `LoadLibraryW`) have vastly different hashes.
+
+<CollapsibleCode language="c" title="GetProcAddressMurmur">
+
+```c
+DWORD64 __stdcall GetProcAddressMurmur(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash)
+{
+    // ... setup ...
+    for (DWORD dwX = 0; dwX < ExportTable->NumberOfNames; dwX++)
+    {
+        pFunctionName = FunctionNameAddressArray[dwX] + (PBYTE)ModuleBase;
+        DWORD dwFunctionHash = HashStringMurmurA((PCHAR)pFunctionName);
+        if (Hash == dwFunctionHash)
+            return (DWORD64)ModuleBase + FunctionAddressArray[FunctionOrdinalAddressArray[dwX]];
+    }
+    return 0;
+}
+```
+
+</CollapsibleCode>
+
+### 3. Rotr32 (Rotate Right 32)
+Often associated with the simple ROR13 hashing found in shellcode.
+*   **Malware**: The de-facto standard for **Metasploit** (msgbox shellcode) and **Cobalt Strike**.
+*   **Why**: In assembly, rotating a register is a single opcode. It allows the hashing logic to be implemented in extremely small shellcode blobs (~4 bytes per hash operation).
+
+<CollapsibleCode language="c" title="GetProcAddressRotr32">
+
+```c
+DWORD64 __stdcall GetProcAddressRotr32(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash)
+{
+    // ... setup ...
+    for (DWORD dwX = 0; dwX < ExportTable->NumberOfNames; dwX++)
+    {
+        pFunctionName = FunctionNameAddressArray[dwX] + (PBYTE)ModuleBase;
+        DWORD dwFunctionHash = HashStringRotr32A((PCHAR)pFunctionName);
+        if (Hash == dwFunctionHash)
+            return (DWORD64)ModuleBase + FunctionAddressArray[FunctionOrdinalAddressArray[dwX]];
+    }
+    return 0;
+}
+```
+
+</CollapsibleCode>
+
+### 4. Jenkins One-at-a-Time
+A hash function from Bob Jenkins that does not require a pre-known table constants (like CRC32).
+*   **Malware**: Found in custom loaders and commodity malware families.
+
+<CollapsibleCode language="c" title="GetProcAddressJenkinsOneAtATime32Bit">
+
+```c
+DWORD64 __stdcall GetProcAddressJenkinsOneAtATime32Bit(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash)
+{
+    // ... setup ...
+    for (DWORD dwX = 0; dwX < ExportTable->NumberOfNames; dwX++)
+    {
+        pFunctionName = FunctionNameAddressArray[dwX] + (PBYTE)ModuleBase;
+        DWORD dwFunctionHash = HashStringJenkinsOneAtATime32BitA((PCHAR)pFunctionName);
+        if (Hash == dwFunctionHash)
+            return (DWORD64)ModuleBase + FunctionAddressArray[FunctionOrdinalAddressArray[dwX]];
+    }
+    return 0;
+}
+```
+
+</CollapsibleCode>
+
+### 5. Other Hashing Variants
+Malware authors treat hashing algorithms like ammunition—they cycle through them to break detection signatures.
+
+<CollapsibleCode language="c" title="Additional Hashing Implementations">
+
+```c
+// Fowler-Noll-Vo (FNV-1a): simple multiply-xor algorithm
+DWORD64 __stdcall GetProcAddressFowlerNollVoVariant1a(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash) { /* ... */ }
+
+// LoseLose: extremely simple but high collision rate. Used where size constraints are extreme.
+DWORD64 __stdcall GetProcAddressLoseLose(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash) { /* ... */ }
+
+// SDBM: from the public domain SDBM database library.
+DWORD64 __stdcall GetProcAddressSdbm(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash) { /* ... */ }
+
+// SipHash: Designed to be cryptographically secure against hash-flooding DoS attacks.
+DWORD64 __stdcall GetProcAddressSipHash(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash) { /* ... */ }
+
+// SuperFastHash (Paul Hsieh): Very fast but complex to implement in shellcode.
+DWORD64 __stdcall GetProcAddressSuperFastHash(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash) { /* ... */ }
+
+// Custom/Unknown Variants: Malware authors often tweak constants to create unique "Unknown" hashes.
+DWORD64 __stdcall GetProcAddressUnknownGenericHash1(_In_ DWORD64 ModuleBase, _In_ DWORD64 Hash) { /* ... */ }
+```
+
+</CollapsibleCode>
+
+---
+
+## 5. Proxy Loading via Thread Pool
+
+If we successfully resolve `LoadLibraryA` manually, we can call it. But EDRs monitor the **Call Stack**. If `LoadLibraryA` is called by an unbacked memory region (our shellcode), it raises a red flag.
+
+**Proxy Loading** solves this by asking a *legitimate* system thread to perform the load for us.
+
+### How it works
+Windows manages a pool of worker threads (`ntdll!TppWorkerThread`) to handle asynchronous tasks. We can queue a "work item" to this pool. The work item consists of:
+1.  A function to call.
+2.  A parameter to pass.
+
+If we queue `LoadLibraryW` as the function and `"C:\Malware.dll"` as the parameter, a legitimate generic worker thread will wake up, pop the item, and execute the load. The EDR sees a clean thread stack originating from `ntdll`, not our malicious implant.
+
+### Method A: RtlRegisterWait
+This function creates a wait object. When the associated event is signaled, the thread pool executes the callback.
+
+<CollapsibleCode language="c" title="ProxyRegisterWaitLoadLibrary">
+
+```c
+typedef NTSTATUS(NTAPI* RTLREGISTERWAIT)(PHANDLE, HANDLE, WORKERCALLBACKFUNC, PVOID, ULONG, ULONG);
+
+HMODULE ProxyRegisterWaitLoadLibraryW(_In_ LPCWSTR lpModuleName)
+{
+    // ... Resolve RtlRegisterWait and NtWaitForSingleObject ...
+
+    HANDLE EventObject = CreateEventW(NULL, FALSE, FALSE, NULL);
+    HANDLE WaitObject = NULL;
+
+    // Register LoadLibraryW as the callback function
+    RtlRegisterWait(&WaitObject, EventObject, 
+        (WORKERCALLBACKFUNC)LoadLibraryW, // Target function to proxy
+        (PVOID)lpModuleName,              // Argument (DLL name)
+        0, WT_EXECUTEDEFAULT
+    );
+
+    // Signal the event. The Thread Pool detects this and executes the callback.
+    NtWaitForSingleObject(EventObject, FALSE, &Timeout);
+
+    // Clean up
+    RtlDeregisterWaitEx(WaitObject, NULL);
+    
+    return GetModuleHandleW(lpModuleName);
+}
+```
+
+</CollapsibleCode>
+
+### Method B: RtlQueueWorkItem
+A simpler, "fire-and-forget" approach. It adds the task directly to the queue without needing an event signal.
+
+<CollapsibleCode language="c" title="ProxyWorkItemLoadLibrary">
+
+```c
+typedef NTSTATUS(NTAPI* RTLQUEUEWORKITEM)(PRTL_WORK_ITEM_ROUTINE, PVOID, ULONG);
+
+HMODULE ProxyWorkItemLoadLibraryW(_In_ LPCWSTR lpModuleName)
+{
+    // ... Resolve functions ...
+
+    // Directly queue LoadLibraryW to the system thread pool
+    RtlQueueWorkItem(
+        (PRTL_WORK_ITEM_ROUTINE)&LoadLibraryW, 
+        (PVOID)lpModuleName, 
+        WT_EXECUTEDEFAULT
+    );
+
+    // Wait briefly for the worker thread to pick it up and execute
+    LARGE_INTEGER Timeout = { 0 };
+    Timeout.QuadPart = -500000; // 50ms wait
+    NtWaitForSingleObject(GetCurrentProcessNoForward(), FALSE, &Timeout);
+
+    return GetModuleHandleW(lpModuleName);
+}
+```
+
+</CollapsibleCode>
+
+---
+
+## 6. Detection & Analysis Guide
+
+For the blue team, detecting these techniques requires moving beyond simple API hooking.
+
+### Reverse Engineering
+*   **Segment Registers**: In IDA Pro or Ghidra, look for instructions accessing `FS:[0x30]` or `GS:[0x60]`. These are almost always related to PEB traversal.
+*   **Constant Hashing**: If you see a loop reading bytes, performing arithmetic (like multiply by 33), and comparing the result to a large hardcoded constant (e.g., `0xB2389`), you have found an API Hashing routine.
+*   **Structure Reconstruction**: Malware often defines structs for `LDR_DATA_TABLE_ENTRY` manually to walk the lists. Recognizing these definitions helps quickly identify the purpose of the code.
+
+### Threat Hunting
+*   **Stack Tracing**: EDRs capturing **EtwTi** (kernel threat intelligence) events for `ImageLoad` operations should check the call stack.
+    *   **Normal**: `UserCode -> LoadLibrary -> KernelBase -> Ntdll -> Syscall`.
+    *   **Proxy Load**: `TppWorkerThread -> LoadLibrary -> ...`. While this looks legitimate, context matters. Why is a worker thread loading a library named `tmp123.dll` from `AppData`?
+*   **Memory Scanners**: Tools like PE-Sieve can detect **unbacked executable memory** (code not associated with a file on disk) that is actively resolving APIs.
+
+### Red Teaming Tradecraft
+*   **Noise Reduction**: These methods decouple your activity from your indicators. Proxy loading essentially "launders" the execution of dangerous APIs.
+*   **OpSec**: Never use these techniques in isolation. API Hashing guards against static analysis; Proxy Loading guards against runtime dynamic analysis (stack checks). Combining them is essential for modern evasion.
+
+---
+
+## Conclusion
+
+The evolution of library loading—from `GetProcAddress` to `Ldr` walking, to API Hashing, and now Proxy Loading—demonstrates the continuous adaptation of malware authors. While manual resolution and API hashing complicate static analysis, they leave behavioral traces that modern EDRs can detect. Proxy loading raises the bar further by manipulating the very OS components (Thread Pools) meant to manage execution, turning the system against itself.

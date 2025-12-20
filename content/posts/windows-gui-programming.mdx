@@ -1,0 +1,1097 @@
+---
+title: "Windows Development with C++: Part 2 - GUI Programming"
+description: "Part 2 of the Windows Development series. Master Windows GUI programming with controls, dialogs, resource files, and GDI graphics programming."
+date: "2025-12-18"
+author: "Mohamed Habib Jaouadi"
+tags: ["windows-development-series", "win32-api", "c++", "gui-programming", "gdi", "resource-files"]
+banner: "/banners/posts/windows-gui-programming.jpg"
+bannerAlt: "Windows Development with C++ - GUI Programming with Controls and GDI"
+visibility: "private"
+series: "Windows Development with C++"
+seriesOrder: 2
+---
+
+> **📘 Prerequisites:** Completion of Part 1 (Win32 Foundations) is recommended. This part builds on window creation, message handling, and the message loop concepts covered previously.
+
+## Introduction
+
+Part 1 established the foundation for Win32 programming: window classes, the message loop, and modern C++ patterns. In this part, we dive into the visual layer—creating user interfaces with Windows controls, building dialog boxes, managing resources, and drawing custom graphics with GDI.
+
+GUI programming in Windows follows a declarative pattern for layout (via resource files) combined with imperative message handling. Understanding this duality is key to building responsive, professional applications. For security professionals, this knowledge is essential for building effective tools with usable interfaces, understanding how applications render their UI (useful for automation and testing), and recognizing how attackers might abuse UI elements for phishing or overlay attacks.
+
+## Windows Controls: The Building Blocks
+
+Windows provides a rich library of pre-built controls—buttons, text boxes, list views, and more. These are implemented as child windows with their own window classes and message handlers.
+
+### Creating Controls Programmatically
+
+Every control is created with `CreateWindowExW`, using predefined system classes:
+
+<CollapsibleCode language="cpp" title="Creating Basic Controls">
+
+```cpp
+#include <windows.h>
+#include <commctrl.h>  // For common controls
+
+// Required for common controls (link to comctl32.lib)
+#pragma comment(lib, "comctl32.lib")
+
+// Control IDs (for identifying controls in WM_COMMAND)
+#define IDC_BUTTON_OK      101
+#define IDC_BUTTON_CANCEL  102
+#define IDC_EDIT_NAME      103
+#define IDC_STATIC_LABEL   104
+#define IDC_CHECKBOX       105
+#define IDC_LISTBOX        106
+
+void CreateControls(HWND hwndParent, HINSTANCE hInstance) {
+    // Initialize common controls (required for modern controls)
+    INITCOMMONCONTROLSEX icex = {};
+    icex.dwSize = sizeof(icex);
+    icex.dwICC = ICC_WIN95_CLASSES | ICC_STANDARD_CLASSES;
+    InitCommonControlsEx(&icex);
+    
+    // Static text label
+    CreateWindowExW(
+        0,
+        L"STATIC",           // Pre-defined class for static text
+        L"Enter your name:", // Label text
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        20, 20, 150, 20,     // x, y, width, height
+        hwndParent, 
+        (HMENU)IDC_STATIC_LABEL,
+        hInstance, 
+        NULL
+    );
+    
+    // Edit control (text box)
+    CreateWindowExW(
+        WS_EX_CLIENTEDGE,    // Sunken edge appearance
+        L"EDIT",             // Pre-defined class for edit controls
+        L"",                 // Initial text
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+        20, 45, 200, 25,
+        hwndParent,
+        (HMENU)IDC_EDIT_NAME,
+        hInstance,
+        NULL
+    );
+    
+    // Checkbox
+    CreateWindowExW(
+        0,
+        L"BUTTON",           // Buttons include checkboxes
+        L"Remember me",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        20, 80, 150, 20,
+        hwndParent,
+        (HMENU)IDC_CHECKBOX,
+        hInstance,
+        NULL
+    );
+    
+    // List box
+    CreateWindowExW(
+        WS_EX_CLIENTEDGE,
+        L"LISTBOX",
+        NULL,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | 
+        LBS_NOTIFY | LBS_HASSTRINGS,
+        20, 110, 200, 100,
+        hwndParent,
+        (HMENU)IDC_LISTBOX,
+        hInstance,
+        NULL
+    );
+    
+    // Add items to listbox
+    HWND hListBox = GetDlgItem(hwndParent, IDC_LISTBOX);
+    SendMessageW(hListBox, LB_ADDSTRING, 0, (LPARAM)L"Option 1");
+    SendMessageW(hListBox, LB_ADDSTRING, 0, (LPARAM)L"Option 2");
+    SendMessageW(hListBox, LB_ADDSTRING, 0, (LPARAM)L"Option 3");
+    
+    // OK button
+    CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"OK",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+        20, 230, 90, 30,
+        hwndParent,
+        (HMENU)IDC_BUTTON_OK,
+        hInstance,
+        NULL
+    );
+    
+    // Cancel button
+    CreateWindowExW(
+        0,
+        L"BUTTON",
+        L"Cancel",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        120, 230, 90, 30,
+        hwndParent,
+        (HMENU)IDC_BUTTON_CANCEL,
+        hInstance,
+        NULL
+    );
+}
+```
+
+</CollapsibleCode>
+
+### Handling Control Notifications
+
+Controls communicate with their parent window through `WM_COMMAND` (for most controls) and `WM_NOTIFY` (for common controls like list views):
+
+<CollapsibleCode language="cpp" title="Control Message Handling">
+
+```cpp
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_COMMAND: {
+            // LOWORD(wParam) = control ID
+            // HIWORD(wParam) = notification code
+            // lParam = control handle
+            
+            int controlId = LOWORD(wParam);
+            int notifyCode = HIWORD(wParam);
+            HWND hControl = (HWND)lParam;
+            
+            switch (controlId) {
+                case IDC_BUTTON_OK:
+                    if (notifyCode == BN_CLICKED) {
+                        // Get text from edit control
+                        wchar_t name[256] = {};
+                        GetDlgItemTextW(hwnd, IDC_EDIT_NAME, name, 256);
+                        
+                        // Check if checkbox is checked
+                        LRESULT checked = SendDlgItemMessageW(
+                            hwnd, IDC_CHECKBOX, BM_GETCHECK, 0, 0);
+                        
+                        // Format message
+                        std::wstring msg = std::format(
+                            L"Name: {}\nRemember: {}",
+                            name,
+                            checked == BST_CHECKED ? L"Yes" : L"No"
+                        );
+                        MessageBoxW(hwnd, msg.c_str(), L"Input", MB_OK);
+                    }
+                    break;
+                    
+                case IDC_BUTTON_CANCEL:
+                    if (notifyCode == BN_CLICKED) {
+                        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                    }
+                    break;
+                    
+                case IDC_LISTBOX:
+                    if (notifyCode == LBN_SELCHANGE) {
+                        // Selection changed
+                        int selectedIndex = (int)SendMessageW(
+                            hControl, LB_GETCURSEL, 0, 0);
+                        
+                        if (selectedIndex != LB_ERR) {
+                            wchar_t itemText[256];
+                            SendMessageW(hControl, LB_GETTEXT, 
+                                        selectedIndex, (LPARAM)itemText);
+                        }
+                    }
+                    else if (notifyCode == LBN_DBLCLK) {
+                        // Double-click on item
+                    }
+                    break;
+                    
+                case IDC_EDIT_NAME:
+                    if (notifyCode == EN_CHANGE) {
+                        // Text changed
+                    }
+                    break;
+            }
+            return 0;
+        }
+        
+        // ... other message handlers
+    }
+    
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
+```
+
+</CollapsibleCode>
+
+### Common Control Classes
+
+| Class Name | Description | Common Styles |
+|------------|-------------|---------------|
+| `STATIC` | Labels, images, frames | `SS_LEFT`, `SS_CENTER`, `SS_ICON` |
+| `EDIT` | Single/multi-line text input | `ES_MULTILINE`, `ES_PASSWORD`, `ES_NUMBER` |
+| `BUTTON` | Push buttons, checkboxes, radio buttons | `BS_PUSHBUTTON`, `BS_CHECKBOX`, `BS_RADIOBUTTON` |
+| `LISTBOX` | List of selectable items | `LBS_MULTIPLESEL`, `LBS_SORT` |
+| `COMBOBOX` | Dropdown list | `CBS_DROPDOWN`, `CBS_DROPDOWNLIST` |
+| `SCROLLBAR` | Scroll bars | `SBS_HORZ`, `SBS_VERT` |
+
+## Dialog Boxes
+
+Dialogs provide a structured way to gather user input. They can be defined in resource files (recommended) or created programmatically.
+
+### Modal vs. Modeless Dialogs
+
+**Modal Dialogs** block interaction with the parent window until dismissed. Use `DialogBoxW` to display them:
+
+```cpp
+INT_PTR result = DialogBoxW(
+    hInstance,           // Application instance
+    MAKEINTRESOURCEW(IDD_SETTINGS),  // Dialog resource ID
+    hwndParent,          // Parent window
+    SettingsDialogProc   // Dialog procedure
+);
+
+if (result == IDOK) {
+    // User clicked OK
+} else if (result == IDCANCEL) {
+    // User clicked Cancel or closed dialog
+}
+```
+
+**Modeless Dialogs** allow interaction with other windows. Use `CreateDialogW`:
+
+```cpp
+HWND hDialog = CreateDialogW(
+    hInstance,
+    MAKEINTRESOURCEW(IDD_FIND),
+    hwndParent,
+    FindDialogProc
+);
+
+// Show the dialog (it doesn't block)
+ShowWindow(hDialog, SW_SHOW);
+
+// Later, destroy when done
+DestroyWindow(hDialog);
+```
+
+### The Dialog Procedure
+
+Dialog procedures handle messages like window procedures, but return `INT_PTR` and use different conventions:
+
+<CollapsibleCode language="cpp" title="Dialog Procedure Implementation">
+
+```cpp
+// Forward declaration
+INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, 
+                                     WPARAM wParam, LPARAM lParam);
+
+INT_PTR CALLBACK SettingsDialogProc(HWND hDlg, UINT message, 
+                                     WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+        case WM_INITDIALOG: {
+            // Dialog is initializing - set up controls
+            // lParam contains the value passed to DialogBoxParam
+            
+            // Center dialog on parent
+            HWND hwndParent = GetParent(hDlg);
+            if (hwndParent) {
+                RECT rcParent, rcDlg;
+                GetWindowRect(hwndParent, &rcParent);
+                GetWindowRect(hDlg, &rcDlg);
+                
+                int x = rcParent.left + 
+                    ((rcParent.right - rcParent.left) - 
+                     (rcDlg.right - rcDlg.left)) / 2;
+                int y = rcParent.top + 
+                    ((rcParent.bottom - rcParent.top) - 
+                     (rcDlg.bottom - rcDlg.top)) / 2;
+                
+                SetWindowPos(hDlg, NULL, x, y, 0, 0, 
+                            SWP_NOSIZE | SWP_NOZORDER);
+            }
+            
+            // Initialize controls with default values
+            SetDlgItemTextW(hDlg, IDC_EDIT_USERNAME, L"DefaultUser");
+            CheckDlgButton(hDlg, IDC_CHECK_AUTOSAVE, BST_CHECKED);
+            
+            // Set focus to first control
+            return TRUE;  // Let system set default focus
+        }
+        
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDOK: {
+                    // Validate and collect input
+                    wchar_t username[256] = {};
+                    GetDlgItemTextW(hDlg, IDC_EDIT_USERNAME, username, 256);
+                    
+                    if (wcslen(username) == 0) {
+                        MessageBoxW(hDlg, L"Username is required", 
+                                   L"Validation Error", MB_ICONWARNING);
+                        SetFocus(GetDlgItem(hDlg, IDC_EDIT_USERNAME));
+                        return TRUE;  // Don't close dialog
+                    }
+                    
+                    // Store values (could use a structure passed via lParam)
+                    // ...
+                    
+                    EndDialog(hDlg, IDOK);
+                    return TRUE;
+                }
+                
+                case IDCANCEL:
+                    EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+                    
+                case IDC_BUTTON_BROWSE: {
+                    // Open file dialog
+                    wchar_t filePath[MAX_PATH] = {};
+                    OPENFILENAMEW ofn = {};
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner = hDlg;
+                    ofn.lpstrFile = filePath;
+                    ofn.nMaxFile = MAX_PATH;
+                    ofn.lpstrFilter = L"All Files\0*.*\0";
+                    ofn.Flags = OFN_FILEMUSTEXIST;
+                    
+                    if (GetOpenFileNameW(&ofn)) {
+                        SetDlgItemTextW(hDlg, IDC_EDIT_PATH, filePath);
+                    }
+                    return TRUE;
+                }
+            }
+            break;
+            
+        case WM_CLOSE:
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+    }
+    
+    return FALSE;  // Message not processed
+}
+```
+
+</CollapsibleCode>
+
+## Resource Files
+
+Resource files (`.rc`) define UI elements, icons, strings, and other assets in a declarative format. They're compiled by the resource compiler (`rc.exe`) and embedded in the executable.
+
+### Resource File Structure
+
+<CollapsibleCode language="rc" title="Resource File Example (resource.rc)">
+
+```rc
+// resource.rc - Windows Resource Script
+
+#include "resource.h"
+#include <windows.h>
+
+// Application Icon
+IDI_APPICON ICON "app.ico"
+
+// Dialog Definition
+IDD_SETTINGS DIALOGEX 0, 0, 280, 180
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Settings"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    // Static Labels
+    LTEXT           "Username:", IDC_STATIC, 14, 17, 50, 8
+    LTEXT           "Output Path:", IDC_STATIC, 14, 37, 50, 8
+    
+    // Edit Controls
+    EDITTEXT        IDC_EDIT_USERNAME, 70, 14, 140, 14, ES_AUTOHSCROLL
+    EDITTEXT        IDC_EDIT_PATH, 70, 34, 140, 14, ES_AUTOHSCROLL | ES_READONLY
+    
+    // Browse Button
+    PUSHBUTTON      "...", IDC_BUTTON_BROWSE, 215, 34, 20, 14
+    
+    // Group Box with Options
+    GROUPBOX        "Options", IDC_STATIC, 14, 55, 221, 70
+    AUTOCHECKBOX    "Enable auto-save", IDC_CHECK_AUTOSAVE, 24, 70, 100, 10
+    AUTOCHECKBOX    "Show notifications", IDC_CHECK_NOTIFY, 24, 85, 100, 10
+    AUTOCHECKBOX    "Start minimized", IDC_CHECK_MINIMIZE, 24, 100, 100, 10
+    
+    // OK and Cancel Buttons
+    DEFPUSHBUTTON   "OK", IDOK, 169, 159, 50, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 223, 159, 50, 14
+END
+
+// Menu Definition
+IDR_MAINMENU MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&New\tCtrl+N", ID_FILE_NEW
+        MENUITEM "&Open...\tCtrl+O", ID_FILE_OPEN
+        MENUITEM "&Save\tCtrl+S", ID_FILE_SAVE
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", ID_FILE_EXIT
+    END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Undo\tCtrl+Z", ID_EDIT_UNDO
+        MENUITEM SEPARATOR
+        MENUITEM "Cu&t\tCtrl+X", ID_EDIT_CUT
+        MENUITEM "&Copy\tCtrl+C", ID_EDIT_COPY
+        MENUITEM "&Paste\tCtrl+V", ID_EDIT_PASTE
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About", ID_HELP_ABOUT
+    END
+END
+
+// Accelerator Table (keyboard shortcuts)
+IDR_ACCELERATORS ACCELERATORS
+BEGIN
+    "N", ID_FILE_NEW, VIRTKEY, CONTROL
+    "O", ID_FILE_OPEN, VIRTKEY, CONTROL
+    "S", ID_FILE_SAVE, VIRTKEY, CONTROL
+    "Z", ID_EDIT_UNDO, VIRTKEY, CONTROL
+    "X", ID_EDIT_CUT, VIRTKEY, CONTROL
+    "C", ID_EDIT_COPY, VIRTKEY, CONTROL
+    "V", ID_EDIT_PASTE, VIRTKEY, CONTROL
+END
+
+// String Table (for localization)
+STRINGTABLE
+BEGIN
+    IDS_APP_TITLE       "My Application"
+    IDS_ERROR_GENERIC   "An unexpected error occurred."
+    IDS_CONFIRM_EXIT    "Are you sure you want to exit?"
+END
+
+// Version Information
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"  // US English, Unicode
+        BEGIN
+            VALUE "CompanyName", "Your Company"
+            VALUE "FileDescription", "Application Description"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "myapp"
+            VALUE "OriginalFilename", "myapp.exe"
+            VALUE "ProductName", "My Application"
+            VALUE "ProductVersion", "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200  // US English, Unicode
+    END
+END
+```
+
+</CollapsibleCode>
+
+### Resource Header File
+
+The header defines numeric IDs for resources:
+
+<CollapsibleCode language="cpp" title="Resource Header (resource.h)">
+
+```cpp
+// resource.h - Resource identifiers
+
+#ifndef RESOURCE_H
+#define RESOURCE_H
+
+// Icons
+#define IDI_APPICON             100
+
+// Dialogs
+#define IDD_SETTINGS            101
+#define IDD_ABOUT               102
+
+// Menu
+#define IDR_MAINMENU            103
+#define IDR_ACCELERATORS        104
+
+// Controls
+#define IDC_STATIC              -1      // Static controls (no ID needed)
+#define IDC_EDIT_USERNAME       1001
+#define IDC_EDIT_PATH           1002
+#define IDC_BUTTON_BROWSE       1003
+#define IDC_CHECK_AUTOSAVE      1004
+#define IDC_CHECK_NOTIFY        1005
+#define IDC_CHECK_MINIMIZE      1006
+
+// Menu Items
+#define ID_FILE_NEW             40001
+#define ID_FILE_OPEN            40002
+#define ID_FILE_SAVE            40003
+#define ID_FILE_EXIT            40004
+#define ID_EDIT_UNDO            40010
+#define ID_EDIT_CUT             40011
+#define ID_EDIT_COPY            40012
+#define ID_EDIT_PASTE           40013
+#define ID_HELP_ABOUT           40020
+
+// String Table
+#define IDS_APP_TITLE           50001
+#define IDS_ERROR_GENERIC       50002
+#define IDS_CONFIRM_EXIT        50003
+
+#endif // RESOURCE_H
+```
+
+</CollapsibleCode>
+
+### Using Resources in Code
+
+<CollapsibleCode language="cpp" title="Loading and Using Resources">
+
+```cpp
+#include <windows.h>
+#include "resource.h"
+
+// Load application icon
+HICON hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_APPICON));
+
+// Load menu
+HMENU hMenu = LoadMenuW(hInstance, MAKEINTRESOURCEW(IDR_MAINMENU));
+
+// Attach menu to window
+SetMenu(hwnd, hMenu);
+
+// Load accelerator table for keyboard shortcuts
+HACCEL hAccel = LoadAcceleratorsW(hInstance, MAKEINTRESOURCEW(IDR_ACCELERATORS));
+
+// Modified message loop to handle accelerators
+MSG msg;
+while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+    if (!TranslateAcceleratorW(hwnd, hAccel, &msg)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+}
+
+// Load string from string table
+wchar_t title[256];
+LoadStringW(hInstance, IDS_APP_TITLE, title, 256);
+
+// Access embedded binary data (e.g., embedded file)
+HRSRC hRes = FindResourceW(hInstance, MAKEINTRESOURCEW(IDR_DATA), RT_RCDATA);
+if (hRes) {
+    HGLOBAL hData = LoadResource(hInstance, hRes);
+    DWORD size = SizeofResource(hInstance, hRes);
+    const void* data = LockResource(hData);
+    // Use data...
+    // Note: No need to unlock or free - managed by Windows
+}
+```
+
+</CollapsibleCode>
+
+## GDI Graphics Programming
+
+The Graphics Device Interface (GDI) is Windows' original 2D graphics API. While older than Direct2D and other modern alternatives, GDI remains widely used and is essential for understanding Windows rendering.
+
+### Device Contexts
+
+A **Device Context (DC)** is an abstraction representing a drawing surface. You obtain DCs for windows, printers, or memory bitmaps:
+
+```cpp
+// Get DC for entire window (including title bar)
+HDC hdcWindow = GetWindowDC(hwnd);
+// ... draw ...
+ReleaseDC(hwnd, hdcWindow);
+
+// Get DC for client area only
+HDC hdcClient = GetDC(hwnd);
+// ... draw ...
+ReleaseDC(hwnd, hdcClient);
+
+// In WM_PAINT, use BeginPaint/EndPaint
+case WM_PAINT: {
+    PAINTSTRUCT ps;
+    HDC hdc = BeginPaint(hwnd, &ps);
+    // ps.rcPaint contains the invalid rectangle to repaint
+    // ... draw ...
+    EndPaint(hwnd, &ps);
+    return 0;
+}
+```
+
+### Basic Drawing Operations
+
+<CollapsibleCode language="cpp" title="GDI Drawing Example">
+
+```cpp
+void OnPaint(HWND hwnd) {
+    PAINTSTRUCT ps;
+    HDC hdc = BeginPaint(hwnd, &ps);
+    
+    // Get client area dimensions
+    RECT rcClient;
+    GetClientRect(hwnd, &rcClient);
+    
+    // Create a memory DC for double-buffering
+    HDC hdcMem = CreateCompatibleDC(hdc);
+    HBITMAP hbmMem = CreateCompatibleBitmap(hdc, 
+        rcClient.right, rcClient.bottom);
+    HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
+    
+    // Clear background
+    HBRUSH hbrBackground = CreateSolidBrush(RGB(240, 240, 240));
+    FillRect(hdcMem, &rcClient, hbrBackground);
+    DeleteObject(hbrBackground);
+    
+    // Draw a filled rectangle
+    HBRUSH hbrRed = CreateSolidBrush(RGB(220, 50, 50));
+    HBRUSH hbrOld = (HBRUSH)SelectObject(hdcMem, hbrRed);
+    Rectangle(hdcMem, 50, 50, 200, 150);
+    SelectObject(hdcMem, hbrOld);
+    DeleteObject(hbrRed);
+    
+    // Draw an ellipse with custom pen
+    HPEN hpenBlue = CreatePen(PS_SOLID, 3, RGB(50, 50, 220));
+    HBRUSH hbrYellow = CreateSolidBrush(RGB(255, 230, 100));
+    HPEN hpenOld = (HPEN)SelectObject(hdcMem, hpenBlue);
+    hbrOld = (HBRUSH)SelectObject(hdcMem, hbrYellow);
+    
+    Ellipse(hdcMem, 220, 50, 370, 150);
+    
+    SelectObject(hdcMem, hpenOld);
+    SelectObject(hdcMem, hbrOld);
+    DeleteObject(hpenBlue);
+    DeleteObject(hbrYellow);
+    
+    // Draw lines
+    MoveToEx(hdcMem, 50, 180, NULL);
+    LineTo(hdcMem, 370, 180);
+    
+    // Draw text with custom font
+    HFONT hFont = CreateFontW(
+        24,                     // Height
+        0,                      // Width (0 = auto)
+        0, 0,                   // Escapement, Orientation
+        FW_BOLD,                // Weight
+        FALSE, FALSE, FALSE,    // Italic, Underline, Strikeout
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_SWISS,
+        L"Segoe UI"             // Font face
+    );
+    
+    HFONT hFontOld = (HFONT)SelectObject(hdcMem, hFont);
+    SetBkMode(hdcMem, TRANSPARENT);
+    SetTextColor(hdcMem, RGB(0, 0, 0));
+    
+    TextOutW(hdcMem, 50, 200, L"GDI Graphics Demo", 17);
+    
+    // Draw formatted text in rectangle
+    RECT rcText = {50, 240, 370, 340};
+    DrawTextW(hdcMem, 
+        L"This is a multi-line text block that will wrap "
+        L"automatically within the specified rectangle.",
+        -1, &rcText, 
+        DT_LEFT | DT_WORDBREAK);
+    
+    SelectObject(hdcMem, hFontOld);
+    DeleteObject(hFont);
+    
+    // Copy from memory DC to screen (double-buffer flip)
+    BitBlt(hdc, 0, 0, rcClient.right, rcClient.bottom,
+           hdcMem, 0, 0, SRCCOPY);
+    
+    // Cleanup
+    SelectObject(hdcMem, hbmOld);
+    DeleteObject(hbmMem);
+    DeleteDC(hdcMem);
+    
+    EndPaint(hwnd, &ps);
+}
+```
+
+</CollapsibleCode>
+
+### GDI Objects Reference
+
+| Object Type | Create Function | Purpose |
+|-------------|-----------------|---------|
+| `HPEN` | `CreatePen`, `CreatePenIndirect` | Line drawing (color, style, width) |
+| `HBRUSH` | `CreateSolidBrush`, `CreateHatchBrush`, `CreatePatternBrush` | Area filling |
+| `HFONT` | `CreateFont`, `CreateFontIndirect` | Text rendering |
+| `HBITMAP` | `CreateBitmap`, `CreateCompatibleBitmap` | Image storage |
+| `HRGN` | `CreateRectRgn`, `CreateEllipticRgn` | Clipping and hit testing |
+
+**Critical Rule**: Always delete GDI objects you create, and never delete objects while selected into a DC:
+
+```cpp
+// Wrong - deleting while selected
+HBRUSH hBrush = CreateSolidBrush(RGB(255, 0, 0));
+SelectObject(hdc, hBrush);
+DeleteObject(hBrush);  // WRONG! Still selected
+
+// Correct - save and restore
+HBRUSH hBrush = CreateSolidBrush(RGB(255, 0, 0));
+HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+// ... draw ...
+SelectObject(hdc, hOldBrush);  // Restore original
+DeleteObject(hBrush);          // Now safe to delete
+```
+
+### Modern RAII Wrappers for GDI
+
+<CollapsibleCode language="cpp" title="RAII GDI Object Wrappers">
+
+```cpp
+#include <windows.h>
+#include <memory>
+
+// Generic GDI object deleter
+struct GDIDeleter {
+    void operator()(HGDIOBJ obj) const noexcept {
+        if (obj) DeleteObject(obj);
+    }
+};
+
+// Type aliases
+using UniquePen = std::unique_ptr<std::remove_pointer_t<HPEN>, GDIDeleter>;
+using UniqueBrush = std::unique_ptr<std::remove_pointer_t<HBRUSH>, GDIDeleter>;
+using UniqueFont = std::unique_ptr<std::remove_pointer_t<HFONT>, GDIDeleter>;
+using UniqueBitmap = std::unique_ptr<std::remove_pointer_t<HBITMAP>, GDIDeleter>;
+
+// RAII DC selector - selects object and restores on destruction
+class DCSelector {
+public:
+    DCSelector(HDC hdc, HGDIOBJ obj) 
+        : m_hdc(hdc), m_old(SelectObject(hdc, obj)) {}
+    
+    ~DCSelector() {
+        if (m_hdc && m_old) {
+            SelectObject(m_hdc, m_old);
+        }
+    }
+    
+    // Non-copyable
+    DCSelector(const DCSelector&) = delete;
+    DCSelector& operator=(const DCSelector&) = delete;
+    
+private:
+    HDC m_hdc;
+    HGDIOBJ m_old;
+};
+
+// Usage
+void SafeDrawing(HDC hdc) {
+    // Objects automatically deleted when out of scope
+    UniquePen pen(CreatePen(PS_SOLID, 2, RGB(0, 0, 255)));
+    UniqueBrush brush(CreateSolidBrush(RGB(255, 255, 0)));
+    
+    // Selector restores original objects on destruction
+    {
+        DCSelector selPen(hdc, pen.get());
+        DCSelector selBrush(hdc, brush.get());
+        
+        Rectangle(hdc, 10, 10, 100, 100);
+    }
+    // Original objects restored, our objects still valid
+    
+} // pen and brush automatically deleted here
+```
+
+</CollapsibleCode>
+
+## Practical Example: Complete GUI Application
+
+Let's combine everything into a complete application:
+
+<CollapsibleCode language="cpp" title="Complete GUI Application">
+
+```cpp
+// main.cpp - Complete Windows GUI Application
+
+#ifndef UNICODE
+#define UNICODE
+#endif
+
+#include <windows.h>
+#include <commctrl.h>
+#include <string>
+#include <format>
+
+#pragma comment(lib, "comctl32.lib")
+
+// Resource IDs (normally in resource.h)
+#define IDI_APPICON         100
+#define IDR_MAINMENU        101
+#define IDD_ABOUT           102
+#define ID_FILE_EXIT        40001
+#define ID_HELP_ABOUT       40002
+#define IDC_EDIT_OUTPUT     1001
+#define IDC_BUTTON_CLEAR    1002
+#define IDC_BUTTON_DRAW     1003
+
+// Forward declarations
+LRESULT CALLBACK WindowProc(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK AboutDialogProc(HWND, UINT, WPARAM, LPARAM);
+
+// Global variables
+HINSTANCE g_hInstance;
+HWND g_hwndEdit;
+HWND g_hwndDrawArea;
+
+// Application entry point
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
+    g_hInstance = hInstance;
+    
+    // Initialize common controls
+    INITCOMMONCONTROLSEX icex = {};
+    icex.dwSize = sizeof(icex);
+    icex.dwICC = ICC_WIN95_CLASSES;
+    InitCommonControlsEx(&icex);
+    
+    // Register main window class
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.hIcon = LoadIconW(NULL, IDI_APPLICATION);
+    wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_3DFACE + 1);
+    wc.lpszClassName = L"MainWindowClass";
+    
+    if (!RegisterClassExW(&wc)) {
+        MessageBoxW(NULL, L"Window registration failed", L"Error", MB_ICONERROR);
+        return 1;
+    }
+    
+    // Create window
+    HWND hwnd = CreateWindowExW(
+        0,
+        L"MainWindowClass",
+        L"Windows GUI Demo",
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        800, 600,
+        NULL, NULL, hInstance, NULL
+    );
+    
+    if (!hwnd) {
+        MessageBoxW(NULL, L"Window creation failed", L"Error", MB_ICONERROR);
+        return 1;
+    }
+    
+    ShowWindow(hwnd, nCmdShow);
+    UpdateWindow(hwnd);
+    
+    // Message loop
+    MSG msg;
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    
+    return (int)msg.wParam;
+}
+
+void CreateMainControls(HWND hwnd) {
+    // Create output edit control (multi-line)
+    g_hwndEdit = CreateWindowExW(
+        WS_EX_CLIENTEDGE,
+        L"EDIT",
+        L"",
+        WS_CHILD | WS_VISIBLE | WS_VSCROLL | 
+        ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
+        10, 10, 350, 200,
+        hwnd,
+        (HMENU)IDC_EDIT_OUTPUT,
+        g_hInstance,
+        NULL
+    );
+    
+    // Create buttons
+    CreateWindowExW(
+        0, L"BUTTON", L"Clear Log",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        10, 220, 100, 30,
+        hwnd, (HMENU)IDC_BUTTON_CLEAR, g_hInstance, NULL
+    );
+    
+    CreateWindowExW(
+        0, L"BUTTON", L"Draw Shapes",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        120, 220, 100, 30,
+        hwnd, (HMENU)IDC_BUTTON_DRAW, g_hInstance, NULL
+    );
+    
+    // Create drawing area (static with SS_OWNERDRAW)
+    g_hwndDrawArea = CreateWindowExW(
+        WS_EX_CLIENTEDGE,
+        L"STATIC",
+        NULL,
+        WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
+        380, 10, 390, 530,
+        hwnd,
+        NULL,
+        g_hInstance,
+        NULL
+    );
+}
+
+void AppendLog(const std::wstring& text) {
+    // Get current text length
+    int len = GetWindowTextLengthW(g_hwndEdit);
+    
+    // Move caret to end
+    SendMessageW(g_hwndEdit, EM_SETSEL, len, len);
+    
+    // Append text with newline
+    std::wstring line = text + L"\r\n";
+    SendMessageW(g_hwndEdit, EM_REPLACESEL, FALSE, (LPARAM)line.c_str());
+}
+
+void DrawShapes(HDC hdc, RECT& rc) {
+    // Clear background
+    FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+    
+    // Draw gradient background
+    for (int y = 0; y < rc.bottom; y++) {
+        int blue = 255 - (y * 155 / rc.bottom);
+        HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 150, blue));
+        HPEN hOld = (HPEN)SelectObject(hdc, hPen);
+        MoveToEx(hdc, 0, y, NULL);
+        LineTo(hdc, rc.right, y);
+        SelectObject(hdc, hOld);
+        DeleteObject(hPen);
+    }
+    
+    // Draw shapes
+    HBRUSH hbrRed = CreateSolidBrush(RGB(220, 50, 50));
+    HBRUSH hbrOld = (HBRUSH)SelectObject(hdc, hbrRed);
+    Ellipse(hdc, 50, 50, 150, 150);
+    SelectObject(hdc, hbrOld);
+    DeleteObject(hbrRed);
+    
+    HBRUSH hbrGreen = CreateSolidBrush(RGB(50, 180, 50));
+    hbrOld = (HBRUSH)SelectObject(hdc, hbrGreen);
+    Rectangle(hdc, 180, 50, 280, 150);
+    SelectObject(hdc, hbrOld);
+    DeleteObject(hbrGreen);
+    
+    // Draw text
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(255, 255, 255));
+    
+    HFONT hFont = CreateFontW(28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+    
+    TextOutW(hdc, 50, 200, L"GDI Drawing Demo", 16);
+    
+    SelectObject(hdc, hOldFont);
+    DeleteObject(hFont);
+}
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_CREATE:
+            CreateMainControls(hwnd);
+            AppendLog(L"Application started");
+            return 0;
+            
+        case WM_SIZE: {
+            int width = LOWORD(lParam);
+            int height = HIWORD(lParam);
+            AppendLog(std::format(L"Window resized to {}x{}", width, height));
+            return 0;
+        }
+        
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDC_BUTTON_CLEAR:
+                    SetWindowTextW(g_hwndEdit, L"");
+                    AppendLog(L"Log cleared");
+                    break;
+                    
+                case IDC_BUTTON_DRAW:
+                    InvalidateRect(g_hwndDrawArea, NULL, TRUE);
+                    AppendLog(L"Redrawing shapes");
+                    break;
+                    
+                case ID_FILE_EXIT:
+                    PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                    break;
+                    
+                case ID_HELP_ABOUT:
+                    DialogBoxW(g_hInstance, MAKEINTRESOURCEW(IDD_ABOUT), 
+                              hwnd, AboutDialogProc);
+                    break;
+            }
+            return 0;
+            
+        case WM_DRAWITEM: {
+            LPDRAWITEMSTRUCT lpDIS = (LPDRAWITEMSTRUCT)lParam;
+            if (lpDIS->hwndItem == g_hwndDrawArea) {
+                DrawShapes(lpDIS->hDC, lpDIS->rcItem);
+            }
+            return TRUE;
+        }
+        
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
+    }
+    
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+}
+
+// About dialog procedure
+INT_PTR CALLBACK AboutDialogProc(HWND hDlg, UINT message, 
+                                  WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+        case WM_INITDIALOG:
+            return TRUE;
+            
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+                EndDialog(hDlg, LOWORD(wParam));
+                return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+```
+
+</CollapsibleCode>
+
+## Conclusion
+
+Part 2 has equipped you with the skills to build complete Windows GUI applications:
+
+- Creating and managing controls programmatically
+- Building modal and modeless dialogs
+- Using resource files for UI definitions and localization
+- Drawing custom graphics with GDI
+- Applying RAII patterns to safely manage GDI resources
+
+These techniques form the visual layer of Windows applications. The patterns shown here—message handling for controls, resource compilation, device contexts for drawing—appear throughout Windows programming, from simple utilities to complex applications.
+
+---
+
+**Next in Series**: Part 3 covers System Programming Fundamentals, processes, threads, synchronization primitives, and inter-process communication. We'll explore how Windows manages concurrent execution and how to build thread-safe applications.
+
+## References and Further Reading
+
+- [Windows Controls Documentation](https://docs.microsoft.com/en-us/windows/win32/controls/window-controls) - Official control reference
+- [Dialog Boxes Overview](https://docs.microsoft.com/en-us/windows/win32/dlgbox/dialog-boxes) - Dialog box programming
+- [GDI Reference](https://docs.microsoft.com/en-us/windows/win32/gdi/windows-gdi) - Complete GDI documentation
+- [Resource-Definition Statements](https://docs.microsoft.com/en-us/windows/win32/menurc/resource-definition-statements) - Resource file syntax
+
+---
+
+*Understanding how Windows renders its UI is valuable for security researchers analyzing applications for UI-based vulnerabilities, building tools with professional interfaces, and understanding how overlay attacks and screen capture work at the system level.*

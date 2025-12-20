@@ -7,6 +7,9 @@ import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numb
 import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { DNSResolution } from "@/components/visualizations/dns-resolution"
+import { ProtectedProcessBypass } from "@/components/visualizations/protected-process-bypass"
+import { PEHeaderViewer } from "@/components/visualizations/pe-header-viewer"
+import { ExportTableWalker } from "@/components/visualizations/export-table-walker"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
@@ -30,7 +33,9 @@ const visualizationComponents = {
   'MemoryManagement': MemoryManagement,
   'MalwareDetectionMechanisms': MalwareDetectionMechanisms,
   'DNSResolution': DNSResolution,
-  // Add more components here as they are created
+  'ProtectedProcessBypass': ProtectedProcessBypass,
+  'PEHeaderViewer': PEHeaderViewer,
+  'ExportTableWalker': ExportTableWalker,
 }
 
 export async function generateStaticParams() {
@@ -43,7 +48,7 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: VisualizationPageProps): Promise<Metadata> {
   const { id } = await params
   const visualization = await getVisualizationById(id)
-  
+
   if (!visualization || visualization.visibility === 'private') {
     return {
       title: "Visualization Not Found | 0xHabib",
@@ -98,10 +103,10 @@ export default async function VisualizationPage({ params }: VisualizationPagePro
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-4">
           <span>By {visualization.author}</span>
           <span>•</span>
-          <span>{new Date(visualization.date).toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+          <span>{new Date(visualization.date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
           })}</span>
           {visualization.relatedPost && (
             <>
@@ -112,7 +117,7 @@ export default async function VisualizationPage({ params }: VisualizationPagePro
             </>
           )}
         </div>
-        
+
         {/* Tags */}
         {visualization.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -127,7 +132,7 @@ export default async function VisualizationPage({ params }: VisualizationPagePro
 
       {/* Visualization Content from Markdown */}
       <div className="prose prose-lg dark:prose-invert max-w-none mb-8">
-        <MDXRemote 
+        <MDXRemote
           source={visualization.content}
           options={{
             mdxOptions: {
@@ -144,7 +149,7 @@ export default async function VisualizationPage({ params }: VisualizationPagePro
         <div className="text-center py-20 border-2 border-dashed border-amber-300 dark:border-amber-600 rounded-lg bg-amber-50 dark:bg-amber-950/20">
           <h2 className="text-2xl font-semibold mb-4 text-amber-800 dark:text-amber-300">Coming Soon</h2>
           <p className="text-amber-700 dark:text-amber-400 max-w-md mx-auto">
-            The interactive visualization for "{visualization.title}" is currently under development. 
+            The interactive visualization for "{visualization.title}" is currently under development.
             Check back soon for the full interactive experience!
           </p>
         </div>

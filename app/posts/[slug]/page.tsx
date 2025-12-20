@@ -29,6 +29,7 @@ import { Win32MessageLoop } from "@/components/visualizations/win32-message-loop
 import { ThreadSynchronization } from "@/components/visualizations/thread-synchronization"
 import { PEHeaderViewer } from "@/components/visualizations/pe-header-viewer"
 import { ExportTableWalker } from "@/components/visualizations/export-table-walker"
+import { ProtectedProcessBypass } from "@/components/visualizations/protected-process-bypass"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
@@ -52,6 +53,7 @@ const postComponents = {
   ThreadSynchronization: () => <ThreadSynchronization />,
   PEHeaderViewer: () => <PEHeaderViewer />,
   ExportTableWalker: () => <ExportTableWalker />,
+  ProtectedProcessBypass: () => <ProtectedProcessBypass />,
   CollapsibleCode: CollapsibleCode,
 }
 

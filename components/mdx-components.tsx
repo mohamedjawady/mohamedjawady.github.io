@@ -17,6 +17,7 @@ import { Win32MessageLoop } from "@/components/visualizations/win32-message-loop
 import { ThreadSynchronization } from "@/components/visualizations/thread-synchronization"
 import { PEHeaderViewer } from "@/components/visualizations/pe-header-viewer"
 import { ExportTableWalker } from "@/components/visualizations/export-table-walker"
+import { ProtectedProcessBypass } from "@/components/visualizations/protected-process-bypass"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -199,6 +200,7 @@ export const mdxComponents = {
   ThreadSynchronization: () => <ThreadSynchronization />,
   PEHeaderViewer: () => <PEHeaderViewer />,
   ExportTableWalker: () => <ExportTableWalker />,
+  ProtectedProcessBypass: () => <ProtectedProcessBypass />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

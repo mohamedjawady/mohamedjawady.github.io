@@ -9,7 +9,9 @@ bannerAlt: "Formal automata diagrams overlaid on cybersecurity infrastructure"
 visibility: "public"
 ---
 
-> **Theoretical Foundations:** This post explores the computer science theory underlying many vulnerability classes. While the concepts are abstract, understanding them provides deep insight into why entire categories of security bugs exist and why common mitigations like regex-based filtering are fundamentally inadequate.
+> **Who this is for:** Security engineers, penetration testers, and software architects who want to understand *why* certain vulnerability classes exist rather than just memorizing exploitation techniques. Familiarity with basic programming concepts is assumed.
+
+**TL;DR:** SQL Injection, XSS, and similar vulnerabilities are not random bugs—they are predictable consequences of using the wrong computational model to parse input. Regular expressions cannot recognize nested structures like HTML or SQL. Using regex to filter context-free data is mathematically impossible. This post explains the theory behind this limit and shows how to apply it to real security problems.
 
 ## Introduction
 
@@ -92,9 +94,11 @@ The key property of regular languages is that they require **no memory** to reco
 
 The automaton above accepts strings ending in "ab". Try inputs like `ab`, `bab`, `aab`, or `ba` to see how the machine transitions. Notice that it has no way to "remember" what it saw earlier, so only the current state matters.
 
-**Security Implication:** Regular languages are safe to process. Recognition takes linear time O(n), and there is no mechanism for attackers to exploit unbounded recursion or stack exhaustion.
+**Security Implication:** Regular languages are tractable to process safely, provided deterministic or linear-time automata are used. Recognition takes O(n) time with no recursion or stack exhaustion. However, note that many "regex" engines (PCRE, Python's `re`) include backtracking features that can cause catastrophic performance (ReDoS) on pathological inputs. True safety requires DFA-based matching or careful pattern design.
 
 **Practical Uses:** Validating simple tokens; IP addresses, UUIDs, basic email patterns, date formats.
+
+> **A note on "regex" vs. regular languages:** Modern regex engines often include backtracking, recursion, lookahead, and backreferences that go beyond regular languages. These features effectively embed a parser—and reintroduce complexity, performance risks, and ambiguity. The LangSec argument still holds: if you need these features, you needed a parser, not a filter.
 
 ### Type 2: Context-Free Languages
 
@@ -157,7 +161,13 @@ Context-sensitive languages are recognized by **Linear Bounded Automata** (LBA);
 
 The classic example is `L = { aⁿbⁿcⁿ | n ≥ 0 }`. This language requires matching three groups, which cannot be done with a single stack. You need more sophisticated memory structures.
 
-**Security Implication:** Some type systems and constraints fall into this category. They are decidable (unlike Type 0) but computationally expensive to verify.
+**Real-world examples in security:**
+
+- **Protocol length fields:** HTTP's `Content-Length` header must match the actual body size. Verifying this correspondence requires memory proportional to the input.
+- **Cross-field validation:** A certificate's `issuer` field in one structure must equal the `subject` field of another. These cross-references create context-sensitive constraints.
+- **Type systems:** Many programming languages have type systems that enforce context-sensitive properties (variable names must be declared before use, types must match across expressions).
+
+**Security Implication:** Context-sensitive constraints are decidable (unlike Type 0) but computationally expensive—membership is PSPACE-complete in the general case. Attackers can sometimes exploit the gap between what a fast-path validator checks and what the full context-sensitive grammar requires.
 
 ### Type 0: Recursively Enumerable Languages and Turing Machines
 
@@ -468,6 +478,8 @@ The main parsing loop applies production rules:
         
         return result
 ```
+
+> **Note on regex usage:** The `re.match()` calls above act as **token recognizers** (lexer-level helpers) within the grammar-driven parsing loop, not as validation logic for the entire format. This is analogous to how compilers use regex/DFA to identify tokens, then use a CFG parser for structure. The key architectural point is that the grammar defines what constitutes a valid log, and the regexes only identify individual terminals.
 
 This approach scales to multiple stealer families by defining family-specific grammars and composing them.
 

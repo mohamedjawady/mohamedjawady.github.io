@@ -88,6 +88,56 @@ A → b
 
 This generates: `ab`, `aab`, `bab`, `aaab`, `abab`, etc.
 
+**Constructing the Automaton from the Grammar:**
+
+Converting a regular grammar to a finite automaton follows a systematic procedure taught in compilation courses. The grammar maps directly to a non-deterministic finite automaton (NFA), which we then convert to a DFA using subset construction.
+
+**Step 1: Grammar to NFA**
+
+Each non-terminal becomes a state. The start symbol becomes the start state. Productions of the form `A → a` (terminal only) lead to a new accept state.
+
+Recall the grammar from above:
+- `S` is the start symbol
+- `A` is an intermediate non-terminal
+- The productions are: `S → aS | bS | aA` and `A → b`
+
+From these productions, we create NFA transitions:
+- `S → aS` creates transition: `S --a--> S`
+- `S → bS` creates transition: `S --b--> S`
+- `S → aA` creates transition: `S --a--> A`
+- `A → b` creates transition: `A --b--> (accept)`
+
+This NFA is **non-deterministic** because from state S, reading 'a' can lead to either S or A.
+
+**Step 2: Subset Construction (NFA to DFA)**
+
+To convert the NFA to a DFA, we compute the set of NFA states reachable for each input. Each set of NFA states becomes a single DFA state.
+
+Starting from `{S}`, we compute:
+
+| DFA State | On 'a' | On 'b' |
+|-----------|--------|--------|
+| `{S}` | `{S, A}` | `{S}` |
+| `{S, A}` | `{S, A}` | `{S, accept}` |
+| `{S, accept}` | `{S, A}` | `{S}` |
+
+**Step 3: Draw the DFA from the Table**
+
+Renaming the states for clarity:
+- q₀ = `{S}` (start state)
+- q₁ = `{S, A}` (saw 'a', might be ending)
+- q₂ = `{S, accept}` (accept state, just saw "ab")
+
+The transition table becomes:
+
+| State | 'a' | 'b' |
+|-------|-----|-----|
+| q₀ | q₁ | q₀ |
+| q₁ | q₁ | q₂ |
+| q₂ (accept) | q₁ | q₀ |
+
+This table directly maps to the state diagram below. Each row is a state, each cell is a transition arrow labeled with the input symbol.
+
 The key property of regular languages is that they require **no memory** to recognize. A finite automaton reads input one symbol at a time, transitions between a finite number of states, and accepts or rejects based solely on the final state reached.
 
 <FiniteAutomatonVisualizer />

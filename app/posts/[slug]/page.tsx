@@ -34,6 +34,7 @@ import { ChomskySecurityHierarchy } from "@/components/visualizations/chomsky-se
 import { FiniteAutomatonVisualizer } from "@/components/visualizations/finite-automaton-visualizer"
 import { PushdownAutomatonVisualizer } from "@/components/visualizations/pushdown-automaton-visualizer"
 import { LanguageHierarchyVenn } from "@/components/visualizations/language-hierarchy-venn"
+import { StealerParserDemo } from "@/components/visualizations/stealer-parser-demo"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
@@ -62,6 +63,7 @@ const postComponents = {
   FiniteAutomatonVisualizer: () => <FiniteAutomatonVisualizer />,
   PushdownAutomatonVisualizer: () => <PushdownAutomatonVisualizer />,
   LanguageHierarchyVenn: () => <LanguageHierarchyVenn />,
+  StealerParserDemo: () => <StealerParserDemo />,
   CollapsibleCode: CollapsibleCode,
 }
 

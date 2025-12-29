@@ -22,6 +22,7 @@ import { ChomskySecurityHierarchy } from "@/components/visualizations/chomsky-se
 import { FiniteAutomatonVisualizer } from "@/components/visualizations/finite-automaton-visualizer"
 import { PushdownAutomatonVisualizer } from "@/components/visualizations/pushdown-automaton-visualizer"
 import { LanguageHierarchyVenn } from "@/components/visualizations/language-hierarchy-venn"
+import { StealerParserDemo } from "@/components/visualizations/stealer-parser-demo"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -209,6 +210,7 @@ export const mdxComponents = {
   FiniteAutomatonVisualizer: () => <FiniteAutomatonVisualizer />,
   PushdownAutomatonVisualizer: () => <PushdownAutomatonVisualizer />,
   LanguageHierarchyVenn: () => <LanguageHierarchyVenn />,
+  StealerParserDemo: () => <StealerParserDemo />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

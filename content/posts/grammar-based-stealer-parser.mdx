@@ -1,0 +1,713 @@
+---
+title: "Building a Grammar-Based Stealer Log Parser with PLY"
+date: "2025-12-29"
+description: "A hands-on guide to parsing stealer logs using PLY (Python Lex-Yacc). Learn to define formal grammars, build lexers and parsers, and extract structured threat intelligence from malware output."
+author: "Mohamed Habib Jaouadi"
+tags: ["Blue Team", "Threat Intelligence", "Parsing", "Malware Analysis", "Python", "LangSec"]
+banner: "/banners/posts/ply-parser.jpg"
+bannerAlt: "Parser architecture diagram with token stream"
+visibility: "private"
+---
+
+> **Prerequisite:** This post is a hands-on companion to [The Chomsky Hierarchy and Security: Why Parsers Matter](/posts/language-theory-in-security). I recommend reading that first for the theoretical foundation.
+
+**TL;DR:** Information stealers like RedLine, Vidar, and Lumma output credential logs in predictable formats. Instead of fragile regex extraction, we can define a formal grammar and use PLY (Python Lex-Yacc) to build a robust parser. This approach is extensible, maintainable, and directly applies compiler theory to threat intelligence.
+
+## Introduction
+
+Threat intelligence teams process thousands of stealer logs daily. These logs contain credentials, cookies, cryptocurrency wallet addresses, and system information exfiltrated from compromised machines. Extracting actionable intelligence requires parsing these logs reliably.
+
+The naive approach uses regular expressions to extract fields. This works until it does not. A new stealer variant adds an extra space. A victim's password contains a colon. The regex breaks, and credentials slip through.
+
+The robust approach applies the same techniques used in compiler construction: define a formal grammar that specifies the log format, then use a parser generator to build a recognizer. This post walks through building such a parser using PLY (Python Lex-Yacc).
+
+## Stealer Log Format Analysis
+
+Before writing any code, we must understand the input language we are parsing. Information stealers share a common output pattern due to their shared lineage and copycat development.
+
+### Common Structure
+
+Most stealer logs follow a section-based format:
+
+```
+=== Chrome Passwords ===
+URL: https://bank.example.com/login
+Username: victim@email.com
+Password: Summer2024!
+
+=== System Info ===
+OS: Windows 10 Pro
+IP: 192.168.1.105
+HWID: A1B2C3D4E5F6
+
+=== Crypto Wallets ===
+MetaMask: 0x742d35Cc6634C0532925a3b844Bc9e7595f...
+```
+
+The pattern is clear:
+
+1. **Section headers** delimited by `===`
+2. **Key-value entries** with colon separators
+3. **Blank lines** between sections
+4. **Variable content** in the values (URLs, emails, passwords, hashes)
+
+### Defining the Grammar
+
+Using Backus-Naur Form (BNF), we can specify this language:
+
+```
+log         : sections
+sections    : sections section
+            | section
+section     : SECTION_HEADER entries
+entries     : entries entry
+            | entry
+            | empty
+entry       : KEY COLON VALUE NEWLINE
+```
+
+This grammar is context-free (Type 2 in the Chomsky Hierarchy), meaning we can parse it with a pushdown automaton or, more practically, with an LALR(1) parser like PLY generates.
+
+<StealerParserDemo />
+
+The interactive demo above shows the two-phase process: lexical analysis (tokenization) converts raw text into a token stream, then parsing applies grammar rules to build a structured output.
+
+## PLY: Python Lex-Yacc
+
+PLY is a pure-Python implementation of the classic Lex and Yacc tools used in compiler construction. It provides two modules:
+
+- **lex.py**: Converts input text into tokens using regular expressions
+- **yacc.py**: Parses token streams according to a context-free grammar
+
+PLY uses Python conventions elegantly: token rules are defined as functions with docstrings containing regex patterns, and grammar rules are defined as functions with docstrings containing BNF productions.
+
+### Installation
+
+```bash
+pip install ply
+```
+
+## Building the Lexer
+
+The lexer (tokenizer) is the first phase. It reads raw characters and groups them into meaningful tokens.
+
+### Token Definitions
+
+We start by defining the tokens our grammar uses:
+
+```python
+import ply.lex as lex
+
+tokens = [
+    'SECTION_HEADER',
+    'KEY',
+    'COLON',
+    'VALUE',
+    'NEWLINE',
+]
+```
+
+Each token needs a rule that defines how to recognize it. In PLY, these are functions prefixed with `t_` whose docstrings contain the regex pattern.
+
+### Section Header Token
+
+Section headers are delimited by `===` on both sides:
+
+```python
+def t_SECTION_HEADER(t):
+    r'===[ \t]*[^=\n]+[ \t]*==='
+    # Extract the section name, stripping delimiters and whitespace
+    t.value = t.value.strip('= \t')
+    return t
+```
+
+The regex `===[ \t]*[^=\n]+[ \t]*===` matches:
+- `===` literally
+- Optional spaces or tabs
+- One or more characters that are not `=` or newline (the section name)
+- Optional spaces or tabs
+- `===` literally
+
+The function modifies `t.value` to contain just the section name before returning.
+
+### Key-Value Tokens
+
+Keys are identifiers followed by a colon:
+
+```python
+def t_KEY(t):
+    r'[A-Za-z_][A-Za-z0-9_]*(?=[ \t]*:)'
+    return t
+```
+
+The regex uses a lookahead `(?=[ \t]*:)` to only match identifiers that are followed by a colon, distinguishing keys from values.
+
+The colon itself is a simple literal:
+
+```python
+t_COLON = r':'
+```
+
+Values are everything after the colon until the end of line:
+
+```python
+def t_VALUE(t):
+    r'(?<=:)[ \t]*[^\n]+'
+    t.value = t.value.strip()
+    return t
+```
+
+### Whitespace and Newlines
+
+Newlines are significant in our grammar (they terminate entries), so we track them:
+
+```python
+def t_NEWLINE(t):
+    r'\n+'
+    t.lexer.lineno += len(t.value)
+    return t
+```
+
+Spaces and tabs within lines are ignored:
+
+```python
+t_ignore = ' \t'
+```
+
+### Error Handling
+
+When the lexer encounters an unexpected character, we skip it and continue:
+
+```python
+def t_error(t):
+    print(f"Illegal character '{t.value[0]}' at line {t.lineno}")
+    t.lexer.skip(1)
+```
+
+### Building the Lexer
+
+Finally, we build the lexer:
+
+```python
+lexer = lex.lex()
+```
+
+### Testing the Lexer
+
+We can test tokenization independently:
+
+```python
+sample = """=== Chrome Passwords ===
+URL: https://example.com
+Username: user@test.com
+Password: secret123
+"""
+
+lexer.input(sample)
+for tok in lexer:
+    print(f"{tok.type}: {tok.value!r}")
+```
+
+Output:
+
+```
+SECTION_HEADER: 'Chrome Passwords'
+NEWLINE: '\n'
+KEY: 'URL'
+COLON: ':'
+VALUE: 'https://example.com'
+NEWLINE: '\n'
+KEY: 'Username'
+COLON: ':'
+VALUE: 'user@test.com'
+NEWLINE: '\n'
+KEY: 'Password'
+COLON: ':'
+VALUE: 'secret123'
+NEWLINE: '\n'
+```
+
+The lexer correctly identifies each token type and extracts the relevant values.
+
+## Building the Parser
+
+With tokens defined, we build the parser using PLY's yacc module. Grammar rules are defined as Python functions whose docstrings contain BNF productions.
+
+### Parser Setup
+
+```python
+import ply.yacc as yacc
+from lexer import tokens  # Import tokens from lexer module
+```
+
+### Grammar Rules
+
+Each grammar rule is a function prefixed with `p_`. The docstring specifies the production, and the function body specifies the semantic action (what to do when this rule matches).
+
+**The top-level rule** returns the complete parsed structure:
+
+```python
+def p_log(p):
+    '''log : sections'''
+    p[0] = {'sections': p[1]}
+```
+
+In PLY, `p[0]` is the result of the production, and `p[1]`, `p[2]`, etc. are the values of the right-hand side symbols.
+
+**Sections accumulate** into a list:
+
+```python
+def p_sections_multiple(p):
+    '''sections : sections section'''
+    p[0] = p[1] + [p[2]]
+
+def p_sections_single(p):
+    '''sections : section'''
+    p[0] = [p[1]]
+```
+
+**A section** consists of a header followed by entries:
+
+```python
+def p_section(p):
+    '''section : SECTION_HEADER NEWLINE entries'''
+    p[0] = {
+        'name': p[1],
+        'entries': p[3]
+    }
+```
+
+**Entries accumulate** into a dictionary:
+
+```python
+def p_entries_multiple(p):
+    '''entries : entries entry'''
+    p[0] = {**p[1], **p[2]}
+
+def p_entries_single(p):
+    '''entries : entry'''
+    p[0] = p[1]
+
+def p_entries_empty(p):
+    '''entries : '''
+    p[0] = {}
+```
+
+**An entry** is a key-value pair:
+
+```python
+def p_entry(p):
+    '''entry : KEY COLON VALUE NEWLINE'''
+    p[0] = {p[1]: p[3]}
+```
+
+**Blank lines** are allowed and ignored:
+
+```python
+def p_entry_blank(p):
+    '''entry : NEWLINE'''
+    p[0] = {}
+```
+
+### Error Recovery
+
+When parsing fails, we report the error and attempt to continue:
+
+```python
+def p_error(p):
+    if p:
+        print(f"Syntax error at '{p.value}' (line {p.lineno})")
+    else:
+        print("Syntax error at EOF")
+```
+
+### Building the Parser
+
+```python
+parser = yacc.yacc()
+```
+
+PLY generates `parser.out` (a debugging file) and `parsetab.py` (cached parse tables) on first run.
+
+## Complete Implementation
+
+Here is the complete, production-ready parser combining all components:
+
+```python
+"""
+stealer_parser.py
+Grammar-based stealer log parser using PLY.
+"""
+
+import ply.lex as lex
+import ply.yacc as yacc
+from typing import Any
+import json
+
+
+# =============================================================================
+# LEXER
+# =============================================================================
+
+tokens = [
+    'SECTION_HEADER',
+    'KEY',
+    'COLON',
+    'VALUE',
+    'NEWLINE',
+]
+
+def t_SECTION_HEADER(t):
+    r'===[ \t]*[^=\n]+[ \t]*==='
+    t.value = t.value.strip('= \t')
+    return t
+
+def t_KEY(t):
+    r'[A-Za-z_][A-Za-z0-9_]*(?=[ \t]*:)'
+    return t
+
+t_COLON = r':'
+
+def t_VALUE(t):
+    r'(?<=:)[ \t]*[^\n]+'
+    t.value = t.value.strip()
+    return t
+
+def t_NEWLINE(t):
+    r'\n+'
+    t.lexer.lineno += len(t.value)
+    return t
+
+t_ignore = ' \t'
+
+def t_error(t):
+    t.lexer.skip(1)
+
+lexer = lex.lex()
+
+
+# =============================================================================
+# PARSER
+# =============================================================================
+
+def p_log(p):
+    '''log : sections'''
+    p[0] = {'sections': p[1]}
+
+def p_sections_multiple(p):
+    '''sections : sections section'''
+    p[0] = p[1] + [p[2]]
+
+def p_sections_single(p):
+    '''sections : section'''
+    p[0] = [p[1]]
+
+def p_section(p):
+    '''section : SECTION_HEADER NEWLINE entries'''
+    p[0] = {
+        'name': p[1],
+        'entries': p[3]
+    }
+
+def p_entries_multiple(p):
+    '''entries : entries entry'''
+    p[0] = {**p[1], **p[2]}
+
+def p_entries_single(p):
+    '''entries : entry'''
+    p[0] = p[1]
+
+def p_entries_empty(p):
+    '''entries : '''
+    p[0] = {}
+
+def p_entry(p):
+    '''entry : KEY COLON VALUE NEWLINE'''
+    p[0] = {p[1]: p[3]}
+
+def p_entry_blank(p):
+    '''entry : NEWLINE'''
+    p[0] = {}
+
+def p_error(p):
+    if p:
+        print(f"Syntax error at '{p.value}' (line {p.lineno})")
+
+parser = yacc.yacc()
+
+
+# =============================================================================
+# API
+# =============================================================================
+
+def parse_stealer_log(log_content: str) -> dict[str, Any]:
+    """
+    Parse a stealer log and return structured data.
+    
+    Args:
+        log_content: Raw stealer log text
+        
+    Returns:
+        Dictionary with 'sections' key containing parsed data
+    """
+    lexer.lineno = 1
+    return parser.parse(log_content, lexer=lexer)
+
+
+def extract_credentials(parsed_log: dict) -> list[dict]:
+    """
+    Extract credential entries from parsed log.
+    
+    Returns list of dicts with url, username, password keys.
+    """
+    credentials = []
+    
+    for section in parsed_log.get('sections', []):
+        name = section['name'].lower()
+        entries = section['entries']
+        
+        if 'password' in name or 'credential' in name:
+            cred = {
+                'url': entries.get('URL', ''),
+                'username': entries.get('Username', ''),
+                'password': entries.get('Password', ''),
+                'source': section['name']
+            }
+            if cred['username'] or cred['password']:
+                credentials.append(cred)
+    
+    return credentials
+
+
+def extract_system_info(parsed_log: dict) -> dict:
+    """
+    Extract system information from parsed log.
+    """
+    for section in parsed_log.get('sections', []):
+        if 'system' in section['name'].lower():
+            return section['entries']
+    return {}
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+if __name__ == '__main__':
+    import sys
+    
+    sample = """=== Chrome Passwords ===
+URL: https://bank.example.com/login
+Username: victim@email.com
+Password: Summer2024!
+
+=== Firefox Passwords ===
+URL: https://mail.example.com
+Username: victim
+Password: MailPass789
+
+=== System Info ===
+OS: Windows 10 Pro
+IP: 192.168.1.105
+HWID: A1B2C3D4E5F6
+
+=== Crypto Wallets ===
+MetaMask: 0x742d35Cc6634C0532925a3b844Bc9e7595f
+Phantom: 7xKXtg2CW87d97TXJSDpbD5jBkheTqA8
+"""
+    
+    if len(sys.argv) > 1:
+        with open(sys.argv[1], 'r', encoding='utf-8', errors='ignore') as f:
+            sample = f.read()
+    
+    result = parse_stealer_log(sample)
+    print("=== Parsed Structure ===")
+    print(json.dumps(result, indent=2))
+    
+    print("\n=== Extracted Credentials ===")
+    for cred in extract_credentials(result):
+        print(f"  {cred['source']}: {cred['username']} / {cred['password']}")
+    
+    print("\n=== System Info ===")
+    for key, value in extract_system_info(result).items():
+        print(f"  {key}: {value}")
+```
+
+### Running the Parser
+
+Save the code above as `stealer_parser.py` and run:
+
+```bash
+python stealer_parser.py
+```
+
+Output:
+
+```
+=== Parsed Structure ===
+{
+  "sections": [
+    {
+      "name": "Chrome Passwords",
+      "entries": {
+        "URL": "https://bank.example.com/login",
+        "Username": "victim@email.com",
+        "Password": "Summer2024!"
+      }
+    },
+    ...
+  ]
+}
+
+=== Extracted Credentials ===
+  Chrome Passwords: victim@email.com / Summer2024!
+  Firefox Passwords: victim / MailPass789
+
+=== System Info ===
+  OS: Windows 10 Pro
+  IP: 192.168.1.105
+  HWID: A1B2C3D4E5F6
+```
+
+## Extending for Multiple Stealer Families
+
+Different stealer families use slightly different formats. RedLine uses `===` delimiters, while Vidar might use `---` or `***`. The grammar-based approach makes this easy to handle.
+
+### Option 1: Grammar Variants
+
+Create separate lexer rules for different delimiter styles:
+
+```python
+def t_SECTION_HEADER(t):
+    r'(===|---|\*\*\*)[ \t]*[^=\-\*\n]+[ \t]*(===|---|\*\*\*)'
+    # Normalize by stripping any delimiter characters
+    t.value = t.value.strip('=-* \t')
+    return t
+```
+
+### Option 2: Family Detection
+
+Detect the stealer family first, then use a family-specific parser:
+
+```python
+def detect_family(log_content: str) -> str:
+    """Detect stealer family from log format."""
+    if '=== Chrome' in log_content:
+        return 'redline'
+    elif '--- Passwords ---' in log_content:
+        return 'vidar'
+    elif '[Credentials]' in log_content:
+        return 'raccoon'
+    return 'unknown'
+
+
+def parse_log(log_content: str) -> dict:
+    """Parse log using appropriate family parser."""
+    family = detect_family(log_content)
+    
+    parsers = {
+        'redline': parse_redline_log,
+        'vidar': parse_vidar_log,
+        'raccoon': parse_raccoon_log,
+    }
+    
+    parser_func = parsers.get(family, parse_generic_log)
+    return parser_func(log_content)
+```
+
+## Enrichment and IOC Extraction
+
+Parsed data enables sophisticated enrichment. We can extract Indicators of Compromise (IOCs) using the structured output:
+
+```python
+import re
+
+def extract_iocs(parsed_log: dict) -> dict:
+    """
+    Extract IOCs from parsed stealer log.
+    
+    Returns dict with categorized IOCs.
+    """
+    iocs = {
+        'urls': set(),
+        'emails': set(),
+        'ips': set(),
+        'crypto_addresses': set(),
+    }
+    
+    # Patterns
+    email_pattern = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+    ip_pattern = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
+    eth_pattern = re.compile(r'0x[a-fA-F0-9]{40}')
+    btc_pattern = re.compile(r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b')
+    
+    for section in parsed_log.get('sections', []):
+        for key, value in section['entries'].items():
+            # URLs
+            if value.startswith('http://') or value.startswith('https://'):
+                iocs['urls'].add(value)
+            
+            # Emails
+            for match in email_pattern.findall(value):
+                iocs['emails'].add(match)
+            
+            # IPs
+            for match in ip_pattern.findall(value):
+                iocs['ips'].add(match)
+            
+            # Crypto addresses
+            for match in eth_pattern.findall(value):
+                iocs['crypto_addresses'].add(match)
+            for match in btc_pattern.findall(value):
+                iocs['crypto_addresses'].add(match)
+    
+    # Convert sets to lists for JSON serialization
+    return {k: list(v) for k, v in iocs.items()}
+```
+
+## Advantages of Grammar-Based Parsing
+
+Compared to ad-hoc regex extraction, the grammar-based approach offers:
+
+| Aspect | Regex Approach | Grammar-Based |
+|--------|---------------|---------------|
+| **Correctness** | Fragile, breaks on edge cases | Handles all valid inputs |
+| **Maintainability** | Scattered patterns, hard to modify | Grammar is centralized specification |
+| **Extensibility** | Requires new regex for each variant | Add production rules |
+| **Error Handling** | Silent failures, partial extraction | Clear syntax errors with line numbers |
+| **Documentation** | Patterns are cryptic | Grammar is self-documenting |
+
+## Performance Considerations
+
+PLY generates LALR(1) parsers, which run in linear time O(n) relative to input size. For typical stealer logs (< 1 MB), parsing completes in milliseconds.
+
+For high-volume processing:
+
+```python
+import multiprocessing as mp
+
+def parse_logs_parallel(log_files: list[str], workers: int = 4) -> list[dict]:
+    """Parse multiple log files in parallel."""
+    with mp.Pool(workers) as pool:
+        return pool.map(parse_log_file, log_files)
+```
+
+## Conclusion
+
+Stealer logs are a prime example of structured data that benefits from formal parsing. By defining a grammar and using PLY, we build parsers that are:
+
+- **Correct**: Accept all valid inputs, reject invalid ones
+- **Maintainable**: Grammar is the single source of truth
+- **Extensible**: New formats require new production rules, not pattern rewrites
+- **Debuggable**: Syntax errors report exact locations
+
+This approach directly applies the theory from [The Chomsky Hierarchy and Security](/posts/language-theory-in-security) to a real CTI use case. The stealer log format is context-free (requires recognizing nested sections), so we need a parser, not just regex.
+
+The same technique applies to parsing C2 configurations, malware output, custom log formats, and any structured data in your threat intelligence pipeline.
+
+## References
+
+- [PLY Documentation](https://www.dabeaz.com/ply/)
+- [The Chomsky Hierarchy and Security](/posts/language-theory-in-security)
+- Dragon Book: Aho, Lam, Sethi, Ullman. *Compilers: Principles, Techniques, and Tools*.
+- [MITRE ATT&CK: Credentials from Password Stores](https://attack.mitre.org/techniques/T1555/)

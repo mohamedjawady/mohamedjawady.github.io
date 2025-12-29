@@ -201,6 +201,35 @@ The pushdown automaton above implements this algorithm. Try `aabb` (accepted), `
 
 **Security Implication:** Most structured data formats; JSON, XML, HTML, SQL, and programming languages are context-free. They require proper parsers with stack-based memory. Regular expressions cannot recognize them correctly.
 
+### Common Parsing Conflicts
+
+When building parsers for context-free languages (using tools like Yacc/Bison or PLY), you will encounter two types of conflicts. These signal that your grammar is ambiguous or requires more lookahead than the parser supports.
+
+**1. Shift/Reduce Conflicts**
+The parser cannot decide whether to shift the next token onto the stack or reduce the current stack items using a grammar rule.
+*   **Classic Example:** The "Dangling Else" problem.
+    ```
+    IF expr THEN stmt
+    IF expr THEN stmt ELSE stmt
+    ```
+    When the parser sees `IF a THEN IF b THEN c ELSE d`, and is at the `ELSE`, it doesn't know if the `ELSE` belongs to the inner `IF` (shift) or if the outer `IF` is finished (reduce).
+*   **Resolution:** Most parsers default to "shift" (binding the `ELSE` to the nearest `IF`), which is usually correct.
+
+**2. Reduce/Reduce Conflicts**
+The parser has a valid match on the stack for *multiple* different rules and doesn't know which one to apply.
+*   **Example:** A grammar that distinguishes "Usernames" from "Nicknames" purely by context, but defines them identically.
+    ```
+    username -> WORD
+    nickname -> WORD
+    ```
+    If the parser sees a `WORD`, it doesn't know whether to reduce it to a `username` or a `nickname` without more context.
+*   **Significance:** These are almost always serious errors in grammar design. They indicate that your language definition overlaps in a way the parser cannot disambiguate.
+
+**When do they appear?**
+*   **Ambiguous Syntax:** When a string has two valid parse trees (e.g., `1 + 2 * 3` without operator precedence).
+*   **Lookahead Limitations:** LALR(1) parsers (like PLY) only look one token ahead. If disambiguation requires seeing 2+ tokens, a conflict occurs.
+*   **Solution:** Rewrite the grammar to be unambiguous or use precedence rules. Note that **Shift/Reduce** is often a warning (default behavior works), while **Reduce/Reduce** is an error.
+
 ### Type 1: Context-Sensitive Languages
 
 Context-sensitive languages are recognized by **Linear Bounded Automata** (LBA); Turing machines whose tape length is limited to a linear function of the input length. Production rules have the form:

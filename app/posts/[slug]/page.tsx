@@ -30,6 +30,10 @@ import { ThreadSynchronization } from "@/components/visualizations/thread-synchr
 import { PEHeaderViewer } from "@/components/visualizations/pe-header-viewer"
 import { ExportTableWalker } from "@/components/visualizations/export-table-walker"
 import { ProtectedProcessBypass } from "@/components/visualizations/protected-process-bypass"
+import { ChomskySecurityHierarchy } from "@/components/visualizations/chomsky-security-hierarchy"
+import { FiniteAutomatonVisualizer } from "@/components/visualizations/finite-automaton-visualizer"
+import { PushdownAutomatonVisualizer } from "@/components/visualizations/pushdown-automaton-visualizer"
+import { LanguageHierarchyVenn } from "@/components/visualizations/language-hierarchy-venn"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
@@ -54,6 +58,10 @@ const postComponents = {
   PEHeaderViewer: () => <PEHeaderViewer />,
   ExportTableWalker: () => <ExportTableWalker />,
   ProtectedProcessBypass: () => <ProtectedProcessBypass />,
+  ChomskySecurityHierarchy: () => <ChomskySecurityHierarchy />,
+  FiniteAutomatonVisualizer: () => <FiniteAutomatonVisualizer />,
+  PushdownAutomatonVisualizer: () => <PushdownAutomatonVisualizer />,
+  LanguageHierarchyVenn: () => <LanguageHierarchyVenn />,
   CollapsibleCode: CollapsibleCode,
 }
 

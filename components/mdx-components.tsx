@@ -18,6 +18,10 @@ import { ThreadSynchronization } from "@/components/visualizations/thread-synchr
 import { PEHeaderViewer } from "@/components/visualizations/pe-header-viewer"
 import { ExportTableWalker } from "@/components/visualizations/export-table-walker"
 import { ProtectedProcessBypass } from "@/components/visualizations/protected-process-bypass"
+import { ChomskySecurityHierarchy } from "@/components/visualizations/chomsky-security-hierarchy"
+import { FiniteAutomatonVisualizer } from "@/components/visualizations/finite-automaton-visualizer"
+import { PushdownAutomatonVisualizer } from "@/components/visualizations/pushdown-automaton-visualizer"
+import { LanguageHierarchyVenn } from "@/components/visualizations/language-hierarchy-venn"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -201,6 +205,10 @@ export const mdxComponents = {
   PEHeaderViewer: () => <PEHeaderViewer />,
   ExportTableWalker: () => <ExportTableWalker />,
   ProtectedProcessBypass: () => <ProtectedProcessBypass />,
+  ChomskySecurityHierarchy: () => <ChomskySecurityHierarchy />,
+  FiniteAutomatonVisualizer: () => <FiniteAutomatonVisualizer />,
+  PushdownAutomatonVisualizer: () => <PushdownAutomatonVisualizer />,
+  LanguageHierarchyVenn: () => <LanguageHierarchyVenn />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

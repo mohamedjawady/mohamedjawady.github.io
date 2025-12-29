@@ -11,7 +11,7 @@ visibility: "public"
 
 > **Who this is for:** Security engineers, penetration testers, and software architects who want to understand *why* certain vulnerability classes exist rather than just memorizing exploitation techniques. Familiarity with basic programming concepts is assumed.
 
-**TL;DR:** SQL Injection, XSS, and similar vulnerabilities are not random bugs—they are predictable consequences of using the wrong computational model to parse input. Regular expressions cannot recognize nested structures like HTML or SQL. Using regex to filter context-free data is mathematically impossible. This post explains the theory behind this limit and shows how to apply it to real security problems.
+**TL;DR:** SQL Injection, XSS, and similar vulnerabilities are not random bugs, they are predictable consequences of using the wrong computational model to parse input. Regular expressions cannot recognize nested structures like HTML or SQL. Using regex to filter context-free data is mathematically impossible. This post explains the theory behind this limit and shows how to apply it to real security problems.
 
 ## Introduction
 
@@ -98,7 +98,7 @@ The automaton above accepts strings ending in "ab". Try inputs like `ab`, `bab`,
 
 **Practical Uses:** Validating simple tokens; IP addresses, UUIDs, basic email patterns, date formats.
 
-> **A note on "regex" vs. regular languages:** Modern regex engines often include backtracking, recursion, lookahead, and backreferences that go beyond regular languages. These features effectively embed a parser—and reintroduce complexity, performance risks, and ambiguity. The LangSec argument still holds: if you need these features, you needed a parser, not a filter.
+> **A note on "regex" vs. regular languages:** Modern regex engines often include backtracking, recursion, lookahead, and backreferences that go beyond regular languages. These features effectively embed a parser and reintroduce complexity, performance risks, and ambiguity. The LangSec argument still holds: if you need these features, you needed a parser, not a filter.
 
 ### Type 2: Context-Free Languages
 
@@ -147,7 +147,7 @@ The stack serves as a counter. Each `a` adds to the count; each `b` decrements i
 
 <PushdownAutomatonVisualizer />
 
-The pushdown automaton above implements this algorithm. Try `aabb` (accepted), `aaabbb` (accepted), `aab` (rejected—too many a's), `abb` (rejected—too many b's). Watch how the stack grows when reading `a`s and shrinks when reading `b`s.
+The pushdown automaton above implements this algorithm. Try `aabb` (accepted), `aaabbb` (accepted), `aab` (rejected: too many a's), `abb` (rejected: too many b's). Watch how the stack grows when reading `a`s and shrinks when reading `b`s.
 
 **Security Implication:** Most structured data formats; JSON, XML, HTML, SQL, and programming languages are context-free. They require proper parsers with stack-based memory. Regular expressions cannot recognize them correctly.
 
@@ -167,7 +167,7 @@ The classic example is `L = { aⁿbⁿcⁿ | n ≥ 0 }`. This language requires 
 - **Cross-field validation:** A certificate's `issuer` field in one structure must equal the `subject` field of another. These cross-references create context-sensitive constraints.
 - **Type systems:** Many programming languages have type systems that enforce context-sensitive properties (variable names must be declared before use, types must match across expressions).
 
-**Security Implication:** Context-sensitive constraints are decidable (unlike Type 0) but computationally expensive—membership is PSPACE-complete in the general case. Attackers can sometimes exploit the gap between what a fast-path validator checks and what the full context-sensitive grammar requires.
+**Security Implication:** Context-sensitive constraints are decidable (unlike Type 0) but computationally expensive, membership is PSPACE-complete in the general case. Attackers can sometimes exploit the gap between what a fast-path validator checks and what the full context-sensitive grammar requires.
 
 ### Type 0: Recursively Enumerable Languages and Turing Machines
 

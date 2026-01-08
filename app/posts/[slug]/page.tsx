@@ -35,10 +35,18 @@ import { FiniteAutomatonVisualizer } from "@/components/visualizations/finite-au
 import { PushdownAutomatonVisualizer } from "@/components/visualizations/pushdown-automaton-visualizer"
 import { LanguageHierarchyVenn } from "@/components/visualizations/language-hierarchy-venn"
 import { StealerParserDemo } from "@/components/visualizations/stealer-parser-demo"
+import { PowerShellPlayground } from "@/components/visualizations/powershell-playground"
+import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
+import LOLBASCategories from "@/components/visualizations/lolbas-categories"
+import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
+import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
+import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import Image from "next/image"
 import { LatestPostsSlider } from "@/components/latest-posts-slider"
+import { ReadingProgressBar } from "@/components/visualizations/reading-progress-bar"
+import { ScrollReveal } from "@/components/scroll-reveal"
 
 // Component mapping for interactive elements in posts
 const postComponents = {
@@ -48,6 +56,8 @@ const postComponents = {
   WindowsAPIFlow: () => <WindowsAPIFlow />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
   MemoryManagement: () => <MemoryManagement />,
+  PowerShellPlayground: () => <PowerShellPlayground />,
+  WMIRemoteFlow: () => <WMIRemoteFlow />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   DNSResolution: () => <DNSResolution />,
   C2JitterAndSleep: () => <C2JitterAndSleep />,
@@ -64,6 +74,10 @@ const postComponents = {
   PushdownAutomatonVisualizer: () => <PushdownAutomatonVisualizer />,
   LanguageHierarchyVenn: () => <LanguageHierarchyVenn />,
   StealerParserDemo: () => <StealerParserDemo />,
+  LOLBASCategories: () => <LOLBASCategories />,
+  BITSAdminAttackFlow: () => <BITSAdminAttackFlow />,
+  LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
+  GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   CollapsibleCode: CollapsibleCode,
 }
 
@@ -155,7 +169,9 @@ export default async function PostPage({ params }: PostPageProps) {
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return (
-    <div>
+    <div className="relative">
+      <ReadingProgressBar />
+      <ScrollReveal />
       <BlogPostStructuredData
         title={post.title}
         description={post.description || ''}

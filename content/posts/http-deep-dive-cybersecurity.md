@@ -9,7 +9,7 @@ bannerAlt: "HTTP Protocol Analysis and Cybersecurity Fundamentals"
 visibility: "draft"
 ---
 
-> **🛡️ Blue Team Focus:** This guide is designed specifically for blue team professionals, SOC analysts, and incident responders who need to understand HTTP traffic analysis for threat detection, hunting, and incident response operations.
+> **Blue Team Focus:** This guide is designed specifically for blue team professionals, SOC analysts, and incident responders who need to understand HTTP traffic analysis for threat detection, hunting, and incident response operations.
 
 
 Web servers are essentially sophisticated file-sharing systems that use the HTTP protocol. When you visit a website, the server sends you files specified in the URL path (like `/main/index.htm`). These files are typically HTML, CSS, and JavaScript that browsers render into web pages.

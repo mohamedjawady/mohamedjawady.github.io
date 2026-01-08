@@ -6,7 +6,9 @@ import { Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { WindowsProtectionHierarchy } from "@/components/visualizations/windows-protection-hierarchy"
+import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
 import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numbers"
+import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { DNSResolution } from "@/components/visualizations/dns-resolution"
 import { C2JitterAndSleep } from "@/components/visualizations/c2-jitter-and-sleep"
@@ -23,6 +25,10 @@ import { FiniteAutomatonVisualizer } from "@/components/visualizations/finite-au
 import { PushdownAutomatonVisualizer } from "@/components/visualizations/pushdown-automaton-visualizer"
 import { LanguageHierarchyVenn } from "@/components/visualizations/language-hierarchy-venn"
 import { StealerParserDemo } from "@/components/visualizations/stealer-parser-demo"
+import { PowerShellPlayground } from "@/components/visualizations/powershell-playground"
+import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
+import LOLBASCategories from "@/components/visualizations/lolbas-categories"
+import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -194,7 +200,9 @@ export const mdxComponents = {
   // Interactive Components
   HillCipher: () => <HillCipher />,
   WindowsProtectionHierarchy: () => <WindowsProtectionHierarchy />,
+  WindowsAPIFlow: () => <WindowsAPIFlow />,
   LawOfLargeNumbers: () => <LawOfLargeNumbers />,
+  MemoryManagement: () => <MemoryManagement />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   DNSResolution: () => <DNSResolution />,
   C2JitterAndSleep: () => <C2JitterAndSleep />,
@@ -211,6 +219,10 @@ export const mdxComponents = {
   PushdownAutomatonVisualizer: () => <PushdownAutomatonVisualizer />,
   LanguageHierarchyVenn: () => <LanguageHierarchyVenn />,
   StealerParserDemo: () => <StealerParserDemo />,
+  PowerShellPlayground: () => <PowerShellPlayground />,
+  WMIRemoteFlow: () => <WMIRemoteFlow />,
+  LOLBASCategories: () => <LOLBASCategories />,
+  BITSAdminAttackFlow: () => <BITSAdminAttackFlow />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

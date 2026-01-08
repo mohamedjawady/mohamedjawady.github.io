@@ -412,3 +412,39 @@ button:focus-visible {
 .animate-collapsible-up {
   animation: collapsible-up 0.2s ease-out;
 }
+/* Scroll Reveal Animations */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes slide-up-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-reveal {
+  animation: slide-up-reveal 0.8s ease-out forwards;
+}
+
+/* Section Dividers */
+.section-divider {
+  @apply my-16 border-none h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent relative;
+}
+
+.section-divider::after {
+  content: "✦";
+  @apply absolute left-1/2 -top-3 -translate-x-1/2 text-slate-500 bg-background px-4 text-xs;
+}

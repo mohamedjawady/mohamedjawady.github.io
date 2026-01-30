@@ -70,7 +70,7 @@ export function GoDataStructures() {
                                 </div>
                             </div>
                             <div className="bg-muted/50 p-4 rounded-md text-sm text-muted-foreground mt-4">
-                                <p><strong>Key concept:</strong> Strings are essentially read-only slices. They have a pointer and a length, but no capacity. Passing a string by value copies the struct (2 words), not the backing data.</p>
+                                <p><strong>Key concept:</strong> Strings are essentially read-only slices. They have a pointer and a length, but no capacity. Passing a string by value copies the struct, not the backing data.</p>
                             </div>
                         </TabsContent>
 
@@ -130,7 +130,7 @@ export function GoDataStructures() {
                                 {/* Stack View */}
                                 <div className="text-sm font-semibold text-center text-muted-foreground">Boxed Interface (eface)</div>
                                 <div className="border border-border rounded-lg bg-background p-4 w-80 shadow-sm flex flex-col gap-2">
-                                    <div className="text-xs text-muted-foreground font-mono self-start">interface{ } (2 words)</div>
+                                    <div className="text-xs text-muted-foreground font-mono self-start">interface{ })</div>
 
                                     {/* Type Pointer */}
                                     <div className="flex items-center gap-2 bg-muted/50 p-2 rounded border border-border/50">

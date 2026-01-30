@@ -39,6 +39,7 @@ import { PowerShellPlayground } from "@/components/visualizations/powershell-pla
 import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
 import LOLBASCategories from "@/components/visualizations/lolbas-categories"
 import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
+import { GoDataStructures } from "@/components/visualizations/go-data-structures"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { SeriesNavigation } from "@/components/series-navigation"
@@ -76,6 +77,7 @@ const postComponents = {
   StealerParserDemo: () => <StealerParserDemo />,
   LOLBASCategories: () => <LOLBASCategories />,
   BITSAdminAttackFlow: () => <BITSAdminAttackFlow />,
+  GoDataStructures: () => <GoDataStructures />,
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   CollapsibleCode: CollapsibleCode,

@@ -1,0 +1,293 @@
+---
+title: "Reversing Golang: A Journey into the Internals"
+description: "A deep dive into reverse engineering Go binaries. Learn about Go's internal data structures, compilation flags, PCLNTAB, ABI changes, and how to reconstruct slice and interface operations in IDA Pro."
+date: "2026-01-29"
+author: "Mohamed Habib Jaouadi"
+tags: ["reverse-engineering", "golang", "ida-pro", "malware-analysis", "low-level", "internals"]
+banner: "/banners/posts/4750982421413888.webp"
+bannerAlt: "Reversing Golang Internals"
+visibility: "public"
+series: "Reversing Golang"
+seriesOrder: 1
+---
+
+> **Note:** This guide assumes basic familiarity with IDA Pro (or similar decompilers) and x64 assembly concepts.
+
+## Introduction
+
+Reverse engineering Go (Golang) binaries often feels like stepping into a different dimension. If you come from a C/C++ background, you're used to finding `main`, seeing familiar stack frames, and spotting null-terminated strings. Go throws all of that out the window.
+
+Go binaries are statically linked, meaning they include the entire runtime (scheduler, garbage collector, memory allocator) within the executable. This leads to massive files where your 10 lines of code are buried under megabytes of runtime machinery. Furthermore, historically non-standard calling conventions and custom data structures make "out of the box" decompilation look like a mess of nameless functions and random memory assignments.
+
+However, Go is extremely structured. Once you learn to recognize its internal pattern, an in how it represents strings, slices, and interfaces, the chaos organizes itself into a very predictable system. In this post, we'll walk through the fundamentals of Golang internals from a reverse engineer's perspective.
+
+## The Go Philosophy: Why is it weird?
+
+Go was designed for concurrency and ease of compilation, not for reverse engineering.
+1.  **Everything is bundled:** No `libc.so` or `kernel32.dll` dependency for basic logic.
+2.  **No Null Terminators:** Strings are `(ptr, len)`.
+3.  **Multiple Return Values:** Functions can return 2, 3, or more values, often on the stack.
+4.  **Runtime everywhere:** Even a simple variable assignment might trigger a "Write Barrier" check for the Garbage Collector.
+
+## Ex0: The Setup & Tooling
+
+To learn, we need to build binaries that are friendly to reverse engineering.
+
+### Compilation Flags
+
+We use specific flags to disable optimizations (`-N`) and inlining (`-l`). Inlining is particularly aggressive in Go; without disabling it, small functions like `fmt.Println` effectively disappear, their code pasted directly into the caller.
+
+```bash
+go build -gcflags="all=-N -l" main.go
+```
+
+*   `-N`: Disables optimizations.
+*   `-l`: Disables inlining.
+*   `all=`: Applies these flags to all packages, not just the main one.
+
+### Finding the Entry Point
+
+In standard binaries, we look for `main`. In Go, the true entry point is `_rt0_amd64_windows` (or linux), which bootstraps the runtime.
+
+The execution flow usually looks like this:
+1.  `_rt0_amd64_windows`: Assembly entry point.
+2.  `runtime.rt0_go`: Initializes the runtime (stack, scheduler, GC).
+3.  `runtime.main`: The main goroutine. It runs initializers (`init()` functions).
+4.  **`main.main`**: YOUR code. This is what you are looking for.
+
+### The PCLNTAB Structure
+
+Go binaries embed a massive table called **PCLNTAB** (Program Counter Line Table). This table maps every instruction address to:
+1.  The function name.
+2.  The source file path.
+3.  The exact line number.
+
+This is why "stripped" Go binaries aren't really stripped in the traditional sense. The runtime *needs* this generic table for stack traces (`panic`).
+
+**Essential Tools:**
+*   **IDAGolangHelper / AlphaGolang**: Scripts that parse the PCLNTAB to rename functions and restore file paths in IDA.
+*   **GoReSym**: A robust standalone tool that dumps symbols for use in Ghidra/IDA.
+
+### Calling Convention: Stack vs Registers
+
+To understand why Go looks the way it does in a disassembler, we need to talk about the **ABI** (Application Binary Interface).
+
+#### What is an ABI?
+
+While an **API** (Application Programming Interface) defines how you write code (source compatibility), the **ABI** defines how that code interacts at the binary level (binary compatibility). It is the "handshake protocol" between compiled modules. A calling convention is a crucial part of the ABI, dictating:
+1.  **Where arguments go:** Registers? Stack? Which order?
+2.  **Where return values go:** EAX? Stack?
+3.  **Who cleans the stack:** The caller or the callee?
+4.  **Register preservation:** Which registers can a function trash (volatile), and which must it save (non-volatile)?
+
+Standard C/C++ on Windows follows the **Microsoft x64 ABI** (RCX, RDX, R8, R9), while Linux follows **System V AMD64 ABI** (RDI, RSI, RDX, RCX, R8, R9). Go, historically, ignored both.
+
+#### The Evolution: ABI0 vs ABIInternal
+
+**Pre-Go 1.17 (ABI0 - Stack Based):**
+Historically, Go passed *all* arguments and return values on the stack.
+*   **Pros:** Simpler compiler implementation, infinite arguments, easy stack tracing.
+*   **Cons:** High performance overhead. Accessing memory (stack) is significantly slower than accessing CPU registers.
+*   **Reversing Impact:** You would see a lot of `MOV [RSP+0x8], RAX` instructions before a `CALL`.
+
+**Go 1.17+ (ABIInternal - Register Based):**
+To improve performance, Go shifted to a register-based model. It uses a specific set of registers for argument passing:
+*   **Integer Arguments (9 registers):** `RAX, RBX, RCX, RDI, RSI, R8, R9, R10, R11`
+*   **Floating Point (15 registers):** `X0` through `X14`
+
+**How it works:**
+1.  **Inputs**: The first few arguments fill these registers in order. If there are more arguments than registers, they spill onto the stack.
+2.  **Outputs**: Unlike C, which returns values in `RAX`, Go uses the *same* register set for return values. A function returning 3 integers will return them in `RAX, RBX, RCX`.
+
+**Why this matters for Reversing:**
+If you load a modern Go binary into an older decompiler (or one without Go support), it might assume the standard "Microsoft x64" convention. It will look for arguments in RCX/RDX and ignore RAX/RBX. The result? **Empty function calls.** You'll see `SomeFunction()` with no arguments, even though the assembly clearly shows `MOV RAX, 0x1` right before the call.
+
+## Go Internals: Visualizing Data Structures
+
+Go's power comes from its built-in types: `string`, `slice`, and `interface`. Unlike C, these are valid structs, not just pointers.
+
+<GoDataStructures />
+
+### 1. Strings
+A Go `string` is immutable. Under the hood, it is a 2-word structure:
+*   `Data` (pointer): Points to the UTF-8 bytes in memory.
+*   `Len` (int): The number of bytes.
+
+**Reversing Tip:** If you see a function taking two arguments, a pointer and an integer, it's likely passing a string.
+
+### 2. Slices
+A `slice` is a dynamic window into an array. It is a 3-word structure:
+*   `Data` (pointer): Points to the beginning of the slice element in the backing array.
+*   `Len` (int): Current number of elements.
+*   `Cap` (int): Total capacity of the backing array before a reallocation is needed.
+
+**Reversing Tip:** The "Slice Header" is a crucial pattern. Recognizing `(ptr, len, cap)` triplets is key to identifying slice operations.
+
+### 3. Interfaces
+Interfaces allow polymorphism. They are a 2-word structure:
+*   `Type` (pointer): Points to an `itab` or `_type` structure describing the data type.
+*   `Data` (pointer): Points to the actual value (often allocated on the heap).
+
+This leads to "Interface Boxing". When you pass an `int` to a function expecting `interface{}` (like `fmt.Println`), Go silently creates this structure, assigning the type pointer for `int` and a pointer to your integer value.
+
+## Ex1: Reversing Strings & Interfaces
+
+**Source (`ex1/main.go`):**
+```go
+func main() {
+    var hello string = "sample"
+    fmt.Println(hello)
+}
+```
+
+**Decompiled View (IDA style fake-code):**
+
+First, the runtime initializes the string structure. Since strings in Go are just a `(pointer, length)` pair, we see two distinct assignments:
+
+```c
+string s;
+s.ptr = "sample";
+s.len = 6;
+```
+
+Next, because `fmt.Println` takes an `interface{}`, the compiler must "box" this string. It creates an `interface` structure, assigning the `data` pointer to our string string and the `type` pointer to the `string` type descriptor:
+
+```c
+interface i;
+i.type = &RTYPE_string; // Type descriptor for 'string'
+i.data = &s;            // Pointer to the string struct
+```
+
+Finally, since `Println` is variadic (accepting any number of arguments), these arguments are bundled into a temporary slice. The slice points to our interface:
+
+```c
+slice args;
+args.data = &i;
+args.len = 1;
+args.cap = 1;
+
+fmt_Println(args);
+```
+
+Notice the verbosity? A single line of Go becomes ~10 lines of C initialization. This is why pattern recognition is vital. You aren't reading code; you are recognizing **idioms**.
+
+## Ex2: Reversing Slices & Append
+
+**Source (`ex2/main.go`):**
+```go
+func main() {
+    nums := []int{1, 2, 3}
+    nums = append(nums, 4)
+    fmt.Println(nums)
+}
+```
+
+The `append` function is built-in, but under the hood, it calls `runtime.growslice` if the capacity is exceeded.
+
+### The Slice Growth Algorithm
+
+Before Go 1.18, `append` would simply double the capacity (2x) until a threshold (1024 elements), then grow by 1.25x.
+Since Go 1.18, the formula is smoother to avoid memory wastage, but the principle remains: **Reallocation**.
+
+When `cap` is reached:
+1.  `mallocgc` is called to allocate a larger array.
+2.  `memmove` copies old data to new location.
+3.  The new slice header is returned.
+
+### The `growslice` Problem in IDA
+
+IDA often fails to analyze `runtime.growslice` correctly because it returns a structure by value (the new slice header). It might show up as a function returning `void` but modifying stack memory weirdly.
+
+**The Fix:**
+You must manually define the slice structure in IDA and update the function prototype.
+
+1.  **Define the Struct:**
+    ```c
+    struct GoIntSlice {
+        int64* data;
+        int64 len;
+        int64 cap;
+    };
+    ```
+2.  **Fix the Prototype:**
+    Change `runtime_growslice(...)` to:
+    `GoIntSlice __usercall runtime_growslice(GoIntSlice oldSlice, int needed, ...)`
+
+Once you do this, the decompiler snaps into place:
+
+When you analyze the function with this new prototype, the logic flows clearly step-by-step.
+
+First, the original slice is initialized in memory:
+
+```c
+GoIntSlice nums;
+nums.data = new(int[3]);
+nums.data[0] = 1; nums.data[1] = 2; nums.data[2] = 3;
+nums.len = 3; nums.cap = 3;
+```
+
+When we hit the `append(nums, 4)` call, the runtime realizes the capacity (3) is full. It calls `runtime.growslice` to allocate a larger buffer and copy the existing data:
+
+```c
+// 'append(nums, 4)' triggers a grow because cap(3) is full.
+// The second argument '1' tells the runtime we need room for 1 more item.
+GoIntSlice new_nums = runtime_growslice(nums, 1, ...); 
+```
+
+Finally, the new value is inserted into this fresh, larger slice, and the length is updated:
+
+```c
+new_nums.data[3] = 4;
+new_nums.len = 4;
+
+// The capacity is now likely 6 or 8, depending on the growth algorithm
+new_nums.cap = new_nums.cap; 
+
+fmt_Println(interface_box(new_nums));
+```
+
+## Advanced: Write Barriers (`gcWriteBarrier`)
+
+In larger functions, you will often see strange assembly checks before pointer assignments:
+
+```asm
+CMP [R14+16], RSP  ; Check stack bounds?
+JBE runtime_morestack_noctxt
+...
+CMP byte ptr [runtime.writeBarrier], 0
+JNE runtime.gcWriteBarrier
+MOV [RAX], RBX
+```
+
+This is the **Write Barrier**. The Go Garbage Collector runs concurrently. If you modify a pointer in the heap while the GC is marking objects, you might confuse the GC. The write barrier ensures the GC knows about the change.
+*   **Reversing Tip:** You can largely ignore `gcWriteBarrier` blocks. They are compiler-inserted boilerplate. Focus on the `MOV [RAX], RBX` that happens if the barrier is off.
+
+## Conclusion
+
+Reversing Go is less about reading every instruction and more about identifying high-level runtime structures.
+
+1.  **Calling Convention:** Be aware of stack vs registers (Go 1.17+).
+2.  **Runtime Structures:** Always look for `(ptr, len)` strings and `(ptr, len, cap)` slices.
+3.  **Interface Boxing:** When standard types vanish into `RTYPE` pointers, you are seeing interfaces being built.
+4.  **Tooling:** Use `AlphaGolang` or `IDAGolangHelper` to restore the PCLNTAB.
+
+In the next part, we will tackle **Goroutines**, the **Go Scheduler**, and how to trace channel operations (`chan`) which are the backbone of Go concurrency.
+
+## References & Further Reading
+
+For those who want to go even deeper, here are the standard industry references for reversing Go:
+
+1.  **[Go Internal ABI Specification](https://go.googlesource.com/go/+/refs/heads/master/src/cmd/compile/abi-internal.md)**
+    The official source of truth. Read this to understand the exact register spill rules and stack layout.
+
+2.  **[Rednaga: Reversing Go Binaries](https://rednaga.io/2016/09/21/reversing_go_binaries_like_a_pro/)**
+    The classic blog series that introduced many to Go reversing. Still highly relevant for understanding PCLNTAB.
+
+3.  **[AlphaGolang (IDA Script)](https://github.com/SentineLabs/AlphaGolang)**
+    SentinelOne's set of IDA python scripts for fixing function names and string references in stripped binaries.
+
+4.  **[GoReSym](https://github.com/mandiant/GoReSym)**
+    Mandiant's symbol recovery tool. It parses the embedded metadata to recover function names, types, and line numbers across various Go versions.
+
+5.  **[The Go Memory Model](https://go.dev/ref/mem)**
+    Understanding how Go handles memory visibility is crucial when analyzing the race conditions often exploited in concurrent malware.

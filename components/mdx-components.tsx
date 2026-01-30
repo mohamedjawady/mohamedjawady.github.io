@@ -29,6 +29,7 @@ import { PowerShellPlayground } from "@/components/visualizations/powershell-pla
 import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
 import LOLBASCategories from "@/components/visualizations/lolbas-categories"
 import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
+import { GoDataStructures } from "@/components/visualizations/go-data-structures"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -223,6 +224,7 @@ export const mdxComponents = {
   WMIRemoteFlow: () => <WMIRemoteFlow />,
   LOLBASCategories: () => <LOLBASCategories />,
   BITSAdminAttackFlow: () => <BITSAdminAttackFlow />,
+  GoDataStructures: () => <GoDataStructures />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

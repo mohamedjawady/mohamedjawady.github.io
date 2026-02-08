@@ -21,6 +21,9 @@ import { LawOfLargeNumbers } from "@/components/visualizations/law-of-large-numb
 import { MemoryManagement } from "@/components/visualizations/memory-management"
 import { MalwareDetectionMechanisms } from "@/components/visualizations/malware-detection-mechanisms"
 import { DNSResolution } from "@/components/visualizations/dns-resolution"
+import { DnsTunnelingFlow } from "@/components/visualizations/dns-tunneling-flow"
+import { IdnHomographDetection } from "@/components/visualizations/idn-homograph-detection"
+import { EncryptedDnsFlow } from "@/components/visualizations/encrypted-dns-flow"
 import { C2JitterAndSleep } from "@/components/visualizations/c2-jitter-and-sleep"
 import { ProcessMemoryMap } from "@/components/visualizations/process-memory-map"
 import { C2InfrastructureMap } from "@/components/visualizations/c2-infrastructure-map"
@@ -61,6 +64,9 @@ const postComponents = {
   WMIRemoteFlow: () => <WMIRemoteFlow />,
   MalwareDetectionMechanisms: () => <MalwareDetectionMechanisms />,
   DNSResolution: () => <DNSResolution />,
+  DnsTunnelingFlow: () => <DnsTunnelingFlow />,
+  IdnHomographDetection: () => <IdnHomographDetection />,
+  EncryptedDnsFlow: () => <EncryptedDnsFlow />,
   C2JitterAndSleep: () => <C2JitterAndSleep />,
   ProcessMemoryMap: () => <ProcessMemoryMap />,
   C2InfrastructureMap: () => <C2InfrastructureMap />,

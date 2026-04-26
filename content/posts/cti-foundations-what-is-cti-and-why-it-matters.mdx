@@ -1,0 +1,335 @@
+---
+title: "CTI Foundations: Part 1 - What Cyber Threat Intelligence Is and Why It Matters"
+description: "Part 1 of the CTI Foundations series. Learn what CTI actually is, how the intelligence lifecycle works, and why understanding IOCs, TTPs, and intelligence consumers changes defensive outcomes."
+date: "2026-04-26"
+author: "Mohamed Habib Jaouadi"
+tags: ["cti-foundations", "threat-intelligence", "soc", "threat-hunting", "incident-response", "mitre-att&ck"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Cyber Threat Intelligence foundations for blue team operations"
+visibility: "public"
+series: "CTI Foundations"
+seriesOrder: 1
+---
+
+> **CTI Foundations Focus:** This series is built for analysts, defenders, and security leaders who want to move from indicator chasing to intelligence-driven security operations.
+
+> **Who this is for:** SOC analysts, threat hunters, incident responders, detection engineers, and security leaders who need intelligence products that drive concrete decisions.
+
+**TL;DR:** CTI is not a feed; it is decision support. If your program only distributes indicators, you are operating below potential. Mature CTI combines fast IOC action with durable TTP analysis, delivers different outputs to different consumers, and measures success by decisions changed, not data volume.
+
+## Introduction
+
+Most organizations treat threat intelligence like a feed subscription: buy a list of domains, IP addresses, and hashes, block them, and call it done. That can reduce noise, but it is not Cyber Threat Intelligence.
+
+Cyber Threat Intelligence (CTI) is the output of a structured analytical process that turns raw security data into decision support. The key property is actionability. If a finding does not help a specific stakeholder make a better decision under uncertainty, it is data, not intelligence.
+
+The same raw data can produce very different intelligence products depending on the audience. A SOC analyst needs fast technical context for triage. An incident responder needs adversary behavior to scope and contain impact. A CISO needs risk trends, likely attacker focus, and implications for budget and strategy.
+
+## The Cost of Getting CTI Wrong
+
+When CTI is reduced to indicator distribution, organizations pay a hidden operational tax. SOC teams burn time on infrastructure churn instead of understanding adversary behavior. Detection coverage decays because controls are tuned to technical artifacts rather than behavioral methods. Leadership receives volume metrics about indicators processed instead of decision-ready risk intelligence. Incident response teams start containment with minimal adversary context, increasing mean time to response.
+
+The result is predictable and measurable: significant data movement across systems, but minimal defensive advantage and slower incident response.
+
+## What CTI Actually Is
+
+**CTI is analyzed, contextualized, and confidence-scored knowledge about adversaries that improves defensive decisions.** It answers specific, decision-linked questions rather than distributing data broadly.
+
+CTI answers where others cannot. It tells you what an adversary is likely to do next, not just what they did last week. It identifies which assets are most likely to be targeted based on sector focus and historical targeting patterns. It explains which behaviors persist even when infrastructure rotates, revealing the durable aspects of adversary tradecraft. It prescribes which controls, detections, or response actions should change now as a result of observed threat evolution.
+
+Raw indicators are inputs to the analytical process. They are not the final product. An indicator becomes intelligence only when it has been contextualized, validated, enriched with adversary history, and delivered to someone who can act on it differently because of it.
+
+## The Intelligence Lifecycle
+
+Intelligence quality depends on process discipline. Skipping lifecycle stages creates low-confidence output and operational drift.
+
+### The Flow From Noise to Decision
+
+The intelligence lifecycle is not optional or linear. It is a structured, feedback-driven process where every stage gates the quality of every subsequent stage. Raw data enters the system from dozens of collection points. Without clear direction, this becomes overwhelming noise. Without proper processing, patterns remain hidden in format chaos. Without analysis, data never becomes intelligence. Without dissemination, intelligence never becomes action. Without feedback, the program never learns whether it is actually improving decisions.
+
+### 1. Direction: Start with a Decision, Not a Topic
+
+Define intelligence requirements before collecting anything. Good requirements are specific, decision-linked, and testable. A weak requirement asks a producer to "tell me everything about APT29." That is impossible to scope, impossible to resource, and impossible to measure success on. A strong requirement asks a concrete question: "Is APT29 currently targeting financial organizations with phishing lures tied to payment workflows, and what immediate controls should we prioritize?" This requirement has a decision owner, a deadline, and measurable success criteria.
+
+### 2. Collection: Tight Scope, High Signal
+
+Collect only what is relevant to the requirement. Sources may include open-source reporting, malware telemetry, passive DNS, sandbox output, dark web monitoring, or internal detection logs. The discipline is in not collecting everything. More collection does not automatically improve intelligence. It often increases noise, expands analysis workload, and delays decision support. A collector focused on a specific requirement will spend 80% of their effort on 20% of available sources and still have higher-quality input than an unfocused collection effort.
+
+### 3. Processing: Raw Data Into Reasoned Material
+
+Normalize, de-duplicate, enrich, and structure collected data so analysts can work with it. Processing transforms raw formats into consistent structures through format normalization across STIX/TAXII, CSV, JSON, and vendor-native formats. It translates non-English sources into the organization's working language. It extracts structured indicators from unstructured reports using both automated and manual techniques. It harmonizes timestamps and attaches source-confidence metadata so downstream consumers know who collected this and when. Good processing is invisible when it works and becomes a massive bottleneck when it is skipped.
+
+### 4. Analysis: Where Data Becomes Knowledge
+
+This is where intelligence is produced. Analysts test hypotheses against evidence, challenge their own assumptions, compare alternative explanations, and assign explicit confidence levels. Without this stage, there is no CTI. You have indexed data, searchable databases, and good hygiene. You do not have intelligence.
+
+### 5. Dissemination: Format Follows Consumer
+
+Deliver the right product to the right consumer in the right format and time window. A SOC analyst needs concise detections, indicators, and immediate triage context in machine-readable form. An incident responder needs behavior chains, campaign context, and likely next actions in narrative form that builds situation awareness during active containment. Leadership needs business risk implications, threat actor trend analysis, and control priority recommendations in executive summary form. One intelligence requirement may produce three different products for three audiences.
+
+### 6. Feedback: Close the Loop
+
+Measure usefulness and accuracy. Did the product answer the requirement? Did consumers act on it? Were the assessments accurate when later validated? What should be changed in the next cycle to improve cycle time, accuracy, or relevance?
+
+### Intelligence Lifecycle in Practice
+
+The lifecycle is continuous and circular, not a one-time pipeline. Intelligence that produces no measurable feedback has no way to improve. In practice, this is why lifecycle discipline matters. Defender decisions are made against a moving adversary process, not a static snapshot. If your cycle time is slower than campaign evolution, your intelligence output degrades into historical reporting.
+
+Consider three scenarios running through the same lifecycle:
+
+**Scenario 1: High-frequency tactical cycle** (Hours)
+Direction: IOC sharing partner reports suspicious C2 domain. Collection: Pull passive DNS and current infrastructure status. Processing: Normalize and link to previous infrastructure. Analysis: Confirm consistency with known actor patterns. Dissemination: Send detection rules to SOC within 2 hours. Feedback: Measure block rates and detections overnight.
+
+**Scenario 2: Operational hunting cycle** (Days)
+Direction: Hunting lead develops hypothesis about TTP persistence. Collection: Query telemetry for behavioral indicators over weeks. Processing: De-duplicate and normalize telemetry patterns. Analysis: Identify statistically significant anomalies. Dissemination: Brief detection engineering on new rule requirements. Feedback: Measure new rule coverage over the following month.
+
+**Scenario 3: Strategic planning cycle** (Months)
+Direction: CISO needs threat prioritization for budget allocation. Collection: Aggregate trend data across campaigns, sectors, techniques. Processing: Normalize data into decision-ready format. Analysis: Assess likelihood of sector targeting and required controls. Dissemination: Present risk brief to leadership. Feedback: Validate assessments through industry reports six months later.
+
+## From Data to Decision: Worked Examples
+
+Intelligence quality depends on execution. These scenarios show how the lifecycle produces different outputs from the same raw event.
+
+### Example 1: Phishing Domain Triage (Tactical, 2-Hour Cycle)
+
+Assume the SOC receives a suspicious domain from a phishing report: invoice-secure-portal.net.
+
+**Direction:** Determine whether this is an isolated lure or part of an active campaign targeting your sector.
+
+**Collection:** Pull passive DNS, WHOIS age, URL scan artifacts, email header telemetry, and any linked malware samples. Check if this domain appears in threat feeds or URLScan history.
+
+**Processing:** Normalize indicators into structured format. Deduplicate against known phishing infrastructure. Attach WHOIS registration date (registered 2 days ago) and registrar reputation (known for abuse). Link to TLS certificate if shared with other domains.
+
+**Analysis:** The domain shares a TLS certificate with five others (payroll-updates.net, benefits-portal.net, etc.). Historical WHOIS data shows all registered through the same email. Email headers show origination from Eastern European VPS provider. This pattern is consistent with commodity phishing-as-a-service infrastructure.
+
+**Dissemination (Tactical):** Send to SOC immediately with blocking recommendation and detection signature for certificate fingerprint. Include list of co-hosted domains for proactive blocking.
+
+**Dissemination (Operational):** Brief threat hunting team that this appears to be commodity phishing kit reuse. Recommend searching for historical emails from the same sending infrastructure across the past 90 days.
+
+**Dissemination (Strategic):** Send brief note to security leadership that phishing volume targeting your sector has increased 40% this quarter based on similar infrastructure clustering.
+
+**Feedback:** Check whether SOC blocks reduced inbound click rate. Confirm whether hunting found previous undetected emails. Track whether the infrastructure rotates within 24-48 hours as typical for this threat actor category.
+
+### Example 2: Credential Dumping Hunt Campaign (Operational, 1-Week Cycle)
+
+A threat hunting lead develops a hypothesis: your organization's APT41-targeted employees may be compromised and their credentials dumped to underground forums.
+
+**Direction:** Has APT41 exfiltrated credentials from our organization in the past month, and if so, which users?
+
+**Collection:** Query Shodan, dark web monitors, and breach databases for your organization's domain name or email patterns. Search threat forums for credential dumps posted in the past 30 days. Query your own SIEM for failed VPN login attempts using internal user credentials from external IPs.
+
+**Processing:** Normalize dark web reports and SIEM logs into consistent format. De-duplicate repeat mentions. Attach source reliability scores. Link each credential to known user accounts.
+
+**Analysis:** Four employees' credentials were posted to XSS forum on Day 15. SIEM shows 47 failed login attempts from Russian IP ranges using those credentials starting on Day 16. Credential format and posting style matches previous APT41 campaigns. This indicates active compromise and attempted lateral movement.
+
+**Dissemination (Tactical):** Flag the four users for immediate credential reset and MFA enrollment. Alert SOC to monitor those accounts for lateral movement attempts and anomalous access patterns.
+
+**Dissemination (Operational):** Brief detection engineering that APT41 is actively targeting your sector this month. Request expedited deployment of detection rules for credential-based lateral movement patterns.
+
+**Dissemination (Strategic):** Update executive risk dashboard: APT41 activity confirmed against your organization, credential compromise identified, containment in progress.
+
+**Feedback:** Track whether credential resets prevent further compromise. Measure time from credential dump to detection and containment. Identify any lateral movement that occurred between compromise and reset.
+
+### Example 3: Quarterly Risk Posture Assessment (Strategic, 1-Month Cycle)
+
+Your CISO needs to understand how your current controls map to active threat actor capabilities.
+
+**Direction:** Which threat actors pose the highest risk to our sector in Q3, what are their primary techniques, and where do we have detection gaps?
+
+**Collection:** Aggregate threat reporting from MITRE ATT&CK, industry advisories, and your own incident data over the past quarter. Map active campaigns by sector and geography. Collect your current detection coverage inventory.
+
+**Processing:** Normalize campaign data into common format. Tag by threat actor, technique, and target sector. Map each technique to your detection and prevention controls.
+
+**Analysis:** Three threat actors (APT41, FIN7, Scattered Spider) show consistent activity in your sector. APT41 emphasizes initial access and persistence. FIN7 emphasizes credential access and lateral movement. Scattered Spider emphasizes social engineering and living-off-the-land techniques. Gap analysis shows you have strong detection for APT41 initial access patterns but weak detection for FIN7 credential theft techniques.
+
+**Dissemination (Tactical):** Deploy specific Sigma rules for FIN7 credential dumping patterns. Tune EDR policies for living-off-the-land binary detection.
+
+**Dissemination (Operational):** Brief security managers on priority threat actor hunting targets for Q4. Recommend proactive hunts for FIN7 reconnaissance patterns.
+
+**Dissemination (Strategic):** Present CISO with risk dashboard: 3 high-risk threat actors identified, detection coverage is 60% for APT41 and 30% for FIN7, recommended Q4 investment priorities are (1) credential access detection, (2) living-off-the-land monitoring, (3) social engineering awareness training.
+
+**Feedback:** Six months later, validate whether Q4 control investments actually reduced dwell time or detection latency. Refine threat actor prioritization based on actual incident data.
+
+## The Common Thread
+
+Across all three scenarios, the same six-stage lifecycle produced decision-ready output. The difference is cycle time. The tactical cycle answers an immediate question in hours. The operational cycle informs hunting strategy in days. The strategic cycle shapes budget allocation over months. All three are CTI, and all three feed back into continuous improvement.
+
+<CollapsibleCode title="CTI Triage Card Template" language="markdown">
+
+```markdown
+INTELLIGENCE REQUIREMENT
+- Question:
+- Decision owner:
+- Decision deadline:
+
+INITIAL SIGNAL
+- Source:
+- Trigger event:
+- Initial indicators:
+
+ANALYSIS
+- Hypothesis:
+- Alternative hypothesis:
+- Supporting evidence:
+- Contradicting evidence:
+- Confidence (Low/Medium/High):
+
+OUTPUTS
+- Tactical output (SOC/IR):
+- Operational output (Hunting/Detection):
+- Strategic output (Leadership):
+
+FOLLOW-UP
+- Expected adversary next step:
+- Required telemetry checks:
+- Feedback checkpoint date:
+```
+
+</CollapsibleCode>
+
+<CollapsibleCode title="SOC-to-CTI Workflow Checklist" language="markdown">
+
+```markdown
+[ ] Validate signal quality and source reliability
+[ ] Convert event into a decision-linked intelligence requirement
+[ ] Define decision owner and response deadline
+[ ] Collect only requirement-relevant data
+[ ] Enrich with telemetry, historical context, and actor behavior
+[ ] Document evidence for and against primary hypothesis
+[ ] Assign explicit confidence level
+[ ] Produce tailored outputs for SOC, hunting, and leadership
+[ ] Capture consumer feedback and outcome metrics
+[ ] Update detections/playbooks and archive lessons learned
+```
+
+</CollapsibleCode>
+
+## IOCs vs TTPs: Why This Distinction Changes Everything
+
+### Indicators of Compromise (IOCs)
+
+IOCs are technical artifacts such as hashes, domains, IP addresses, URLs, or file paths. They are fast to share across security teams, easy to automate into blocking and detection systems, and immediately useful for retro-hunting across historical telemetry. The problem is short lifespan. Changing a hash requires only repacking a binary. Rotating infrastructure takes hours on a VPS. Attackers replicate IOCs rapidly and with low cost. Using only IOC-level defense creates a false sense of coverage because high volumes of indicator distribution correlate poorly with actual defensive friction.
+
+### Tactics, Techniques, and Procedures (TTPs)
+
+TTPs describe adversary behavior independent of a single piece of infrastructure. Initial access via spearphishing attachments, persistence via scheduled tasks or service modification, lateral movement via valid credentials and SMB. These methods persist even when attackers change all their infrastructure. TTPs are much more expensive for adversaries to change because modifying tradecraft requires retraining operators, retooling their operational pipeline, and rebuilding their procedures. This means behavior-based detection has longer defensive value and survives infrastructure rotation.
+
+### IOC vs TTP Decision Table
+
+| Dimension | IOC-Centric Output | TTP-Centric Output |
+|-----------|--------------------|--------------------|
+| Time-to-action | Minutes | Hours to days |
+| Durability | Low | High |
+| Evasion cost for attacker | Low | High |
+| Automation friendliness | Very high | Medium |
+| Best use case | Immediate blocking and triage | Hunt design, detection engineering, campaign tracking |
+| Typical failure mode | Chasing rotations and churn | Over-generalization without evidence |
+
+Mature programs intentionally combine both: IOCs for immediate friction, TTPs for lasting defensive advantage.
+
+### Practical Priority Model
+
+Mature programs use both IOCs and TTPs but with different expectations. Use IOCs for immediate operational action: blocking, detection, and triage. Invest analytical effort in TTPs for durable detection and hunting because behavior-based detections survive infrastructure rotation. This logic aligns with the Pyramid of Pain, which illustrates that lower-level indicators like hashes are fast to generate but fragile when attackers change them slightly. Higher-level behavioral indicators are slower to build but much harder for adversaries to evade at scale.
+
+## Strategic, Operational, and Tactical Intelligence
+
+CTI products are not interchangeable.
+
+### Strategic Intelligence
+
+Audience: executives and leadership. Strategic intelligence answers long-horizon questions about which threat actors are likely to target your sector over the next 12 to 18 months, how geopolitical or industry shifts change your risk profile, and where to prioritize budget and control maturity investment. Strategic intelligence rarely contains technical indicators. It shapes resource allocation and shapes how leadership thinks about risk.
+
+### Operational Intelligence
+
+Audience: security managers, detection leads, threat hunters. Operational intelligence describes specific adversary campaigns targeting your sector: a phishing campaign targeting CFOs with fake payment lures, the infrastructure used for that campaign, the attribution to known threat actors, and the expected next steps. Operational intelligence bridges the strategic and tactical layers. It is specific enough to act on but abstracted enough to inform planning and resource prioritization.
+
+### Tactical Intelligence
+
+Audience: SOC analysts, detection engineers, IR teams. Tactical intelligence is the most granular: YARA rules, Sigma detections, specific hashes, IP ranges to block, C2 communication patterns. This is what a SOC analyst or an automated detection system ingests directly into defensive tooling. It requires no further analysis. It is immediately operationalizable.
+
+A common failure pattern is overproducing tactical output because it is easiest to generate from feeds and automation, while starving the strategic layer because it requires the most human judgment. A program that can only tell you to block an IP but cannot tell you why that IP matters and what it signals about upcoming campaigns is running at a fraction of its potential defensive value.
+
+### Intelligence Layer-to-Consumer Mapping
+
+| Intelligence Layer | Primary Consumer | Typical Format | Time Horizon |
+|--------------------|------------------|----------------|--------------|
+| Strategic | CISO, risk leadership, board stakeholders | Briefing memo, risk trend summary, quarterly outlook | 6 to 18 months |
+| Operational | Security managers, hunting leads | Campaign brief, actor profile update, priority watchlist | Weeks to quarters |
+| Tactical | SOC, IR, detection engineering | Sigma/YARA, blocklists, triage notes, playbook updates | Real time to days |
+
+## CTI Consumers and Their Real Requirements
+
+Intelligence fails when producers optimize for what is easy to generate rather than what consumers need. SOC analysts need high-confidence triage context and actionable detections, often delivered in seconds. Incident responders need full behavior chains and likely follow-on actions to scope and contain active breaches. Threat hunters need hypotheses and TTP-driven hunt leads that point to unobserved behaviors. Detection engineers need precise technical requirements for rule creation so they can translate intelligence into durable detections. Leadership needs risk framing, threat actor trend interpretation, and control priority recommendations for budget and strategy decisions.
+
+A 30-page technical report is wrong for leadership. A one-line verdict is wrong for hunting. Product format is not decoration. It is part of intelligence quality. The same underlying analysis produces three different products for three audiences.
+
+## Common Misconceptions
+
+### "CTI is just a feed"
+
+Feeds are data sources. Intelligence is the analytical output built on top of those sources. A feed of IP addresses or hashes is collection material. It only becomes intelligence after a human or a calibrated analytical process asks: what does this data tell us about adversary behavior, and what should we do differently because of it?
+
+### "CTI is a platform"
+
+Tools like MISP, OpenCTI, and TIPs are force multipliers. They organize data, enable collaboration, and scale operations. They do not replace requirements definition, analysis quality, or stakeholder alignment. Deploying a platform without defined requirements and trained analysts produces an expensive data warehouse.
+
+### "CTI is a checkbox"
+
+Program existence is not program effectiveness. The relevant question is not whether your organization has a CTI program. The relevant question is: did anyone make a better security decision this week because of intelligence produced yesterday?
+
+### "CTI needs a nation-state budget"
+
+Smaller teams can run effective CTI by narrowing requirements sharply, using high-quality public sources, and producing lightweight outputs that integrate directly into existing SOC and IR workflows. A focused requirement with good sources and disciplined analysis beats unfocused collection with unlimited budget.
+
+## The Analyst Mindset
+
+Strong CTI depends as much on reasoning discipline as technical skill. Three cognitive failures are particularly dangerous in this domain.
+
+Mirror imaging assumes adversaries think and operate like defenders do. They have different constraints, different incentives, and a different operational calculus. An analyst who assumes a threat actor will take the most logical path from the defender's perspective will frequently be wrong.
+
+Confirmation bias leads analysts to collect evidence that supports their initial hypothesis and discount evidence that contradicts it. A mature analyst actively tries to falsify their own assessments. They look for scenarios that would prove them wrong, then ask whether the evidence is inconsistent with that scenario.
+
+False certainty presents conclusions without transparent confidence or evidence limits. High-quality intelligence products should explicitly communicate the assessment, the confidence level driving that assessment, the key supporting evidence, major gaps in knowledge, and plausible alternative explanations. That transparency helps consumers calibrate risk and act appropriately.
+
+## Program Metrics That Actually Matter
+
+If you cannot measure decision impact, you cannot improve CTI quality. Track metrics that reveal decision-making value. Requirement-to-product cycle time measures how fast a requirement becomes usable output and is critical for operational relevance. Consumer action rate reveals how often output actually changed a real control, hunt, or response decision. Detection conversion rate shows how often intelligence analysis produced durable detections that persisted across campaigns. Confidence calibration accuracy tracks how often high-confidence assessments were later validated against actual events. Reuse half-life measures how long an intelligence product remains operationally useful before infrastructure rotation or actor change makes it stale.
+
+Avoid vanity metrics such as raw indicator volume distributed, number of feeds consumed, or report page length. These correlate poorly with defensive value.
+
+## Hands-On Exercise
+
+Pick one recent advisory relevant to your sector and produce three intelligence outputs from the same source. Your tactical output should include IOCs, detections, and triage notes tailored for SOC operations. Your operational output should summarize the campaign, estimate likely adversary next steps, and define threat hunt hypotheses. Your strategic output should brief leadership on executive-level risk, control gaps, and recommended investment priorities.
+
+For each output, include explicit confidence levels ranging from Low to Medium to High. State the key evidence supporting your assessment so consumers understand the foundation. Identify one assumption that could prove your assessment wrong. Propose one measurable action that should change this week as a result of the intelligence.
+
+## Conclusion
+
+CTI is not an indicator feed, a dashboard, or a compliance checkbox. It is a decision support function built on structured requirements, disciplined analysis, and consumer-focused delivery.
+
+If your program currently optimizes for indicator volume, the highest-impact upgrade is shifting effort toward behavioral analysis and stakeholder-specific intelligence products.
+
+## References & Further Reading
+
+1. MITRE ATT&CK Framework. [https://attack.mitre.org](https://attack.mitre.org)
+	Use this to map observed adversary behavior into standardized techniques and improve communication between CTI, SOC, and detection teams.
+2. CISA Cybersecurity Advisories. [https://www.cisa.gov/news-events/cybersecurity-advisories](https://www.cisa.gov/news-events/cybersecurity-advisories)
+	Use these as high-signal source material for building practical intelligence exercises and mapping campaigns across strategic, operational, and tactical layers.
+3. MISP Threat Sharing Platform Documentation. [https://www.misp-project.org/documentation/](https://www.misp-project.org/documentation/)
+	Use this to operationalize indicator sharing, enrichment, and collaboration workflows with proper context and tagging.
+4. OpenCTI Platform Documentation. [https://docs.opencti.io](https://docs.opencti.io)
+	Use this to model relationships across actors, campaigns, infrastructure, and observables rather than storing disconnected indicators.
+5. FIRST Traffic Light Protocol (TLP) 2.0. [https://www.first.org/tlp/](https://www.first.org/tlp/)
+	Use this to control dissemination scope and reduce risk when sharing sensitive intelligence products.
+6. STIX 2.1 Specification (OASIS). [https://docs.oasis-open.org/cti/stix/v2.1/stix-v2.1.html](https://docs.oasis-open.org/cti/stix/v2.1/stix-v2.1.html)
+	Use this for standardized, machine-readable intelligence representation and interoperability across tools.
+7. TAXII 2.1 Specification (OASIS). [https://docs.oasis-open.org/cti/taxii/v2.1/taxii-v2.1.html](https://docs.oasis-open.org/cti/taxii/v2.1/taxii-v2.1.html)
+	Use this to automate threat intelligence transport and synchronization between producers and consumers.
+8. Intelligence Community Directive 203: Analytic Standards. [https://www.dni.gov/files/documents/ICD/ICD-203.pdf](https://www.dni.gov/files/documents/ICD/ICD-203.pdf)
+	Use this as a quality benchmark for analytic rigor, evidence handling, and confidence expression in intelligence products.
+9. Diamond Model of Intrusion Analysis (Center for Cyber Intelligence Analysis and Threat Research). [https://apps.dtic.mil/sti/pdfs/ADA586960.pdf](https://apps.dtic.mil/sti/pdfs/ADA586960.pdf)
+	Use this model to structure adversary analysis across capability, infrastructure, victim, and adversary relationships.
+
+## What's Next
+
+In Part 2, we will go deep on the Pyramid of Pain with practical examples at each level. We will map how the same campaign looks through hash-level, infrastructure-level, tool-level, and TTP-level lenses, then translate that into concrete detection and hunting priorities.

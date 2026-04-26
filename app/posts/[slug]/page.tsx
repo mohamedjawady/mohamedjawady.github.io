@@ -194,7 +194,7 @@ export default async function PostPage({ params }: PostPageProps) {
       {post.visibility === 'draft' && (
         <div className="bg-blue-500 text-white text-center py-4 px-4 font-medium">
           <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
-            <span className="text-xl animate-pulse">📝</span>
+            
             <span className="text-lg">COMING SOON: This post is currently being written and will be available soon!</span>
           </div>
         </div>

@@ -6,6 +6,14 @@ export async function GET() {
   
   // Filter out draft posts for RSS feed
   const publishedPosts = posts.filter(post => post.visibility === 'public')
+
+  const escapeXml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
   
   const rssItems = publishedPosts
     .slice(0, 20) // Latest 20 posts
@@ -18,8 +26,8 @@ export async function GET() {
       <link>${getCanonicalUrl(`/posts/${post.slug}`)}</link>
       <guid isPermaLink="true">${getCanonicalUrl(`/posts/${post.slug}`)}</guid>
       <pubDate>${postDate.toUTCString()}</pubDate>
-      <author>mjawady31@gmail.com (${post.author})</author>
-      ${post.tags.map(tag => `<category>${tag}</category>`).join('')}
+      <author>mjawady31@gmail.com (${escapeXml(post.author)})</author>
+      ${post.tags.map(tag => `<category>${escapeXml(tag)}</category>`).join('')}
     </item>`
     }).join('')
 

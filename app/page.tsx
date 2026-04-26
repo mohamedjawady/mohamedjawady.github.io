@@ -117,7 +117,7 @@ export default async function HomePage() {
           </h1>
 
           <p className="text-xl md:text-2xl text-muted-foreground mb-4 max-w-3xl mx-auto font-medium">
-            Cybersecurity Researcher & Developer
+            Cyber Threat Intelligence Analyst
           </p>
 
           <p className="text-lg text-muted-foreground/80 mb-10 max-w-2xl mx-auto leading-relaxed">

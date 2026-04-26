@@ -7,16 +7,10 @@ export async function GET() {
   // Filter out draft posts for RSS feed
   const publishedPosts = posts.filter(post => post.visibility === 'public')
   
-  // Helper function to parse YYYY-DD-MM format
-  const parseCustomDate = (dateString: string): Date => {
-    const [year, day, month] = dateString.split('-')
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
-  }
-  
   const rssItems = publishedPosts
     .slice(0, 20) // Latest 20 posts
     .map((post) => {
-      const postDate = parseCustomDate(post.date)
+      const postDate = new Date(`${post.date}T00:00:00Z`)
       return `
     <item>
       <title><![CDATA[${post.title}]]></title>

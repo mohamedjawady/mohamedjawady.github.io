@@ -5,6 +5,7 @@ import Script from "next/script"
 import "./globals.css"
 import "katex/dist/katex.min.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { Header } from "@/components/header"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
@@ -104,21 +105,23 @@ export default function RootLayout({
         </Script>
         
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <div className="min-h-screen bg-background">
-            <Header />
-            <main>{children}</main>
-            <footer className="border-t border-border/40 py-12 px-4">
-              <div className="max-w-6xl mx-auto text-center space-y-4">
-                <p className="text-muted-foreground">
-                  Built with Love.
-                  <span className="text-green-500 font-mono"> 0xHabib </span>© 2025
-                </p>
-                <p className="text-xs text-muted-foreground/70">
-                  Anonymous analytics are collected for performance monitoring and site improvement purposes.
-                </p>
-              </div>
-            </footer>
-          </div>
+          <TooltipProvider>
+            <div className="min-h-screen bg-background">
+              <Header />
+              <main>{children}</main>
+              <footer className="border-t border-border/40 py-12 px-4">
+                <div className="max-w-6xl mx-auto text-center space-y-4">
+                  <p className="text-muted-foreground">
+                    Built with Love.
+                    <span className="text-green-500 font-mono"> 0xHabib </span>© 2025
+                  </p>
+                  <p className="text-xs text-muted-foreground/70">
+                    Anonymous analytics are collected for performance monitoring and site improvement purposes.
+                  </p>
+                </div>
+              </footer>
+            </div>
+          </TooltipProvider>
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />

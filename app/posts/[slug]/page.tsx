@@ -49,6 +49,7 @@ import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-syste
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
+import { Term } from "@/components/ui/term"
 import Image from "next/image"
 import { LatestPostsSlider } from "@/components/latest-posts-slider"
 import { ReadingProgressBar } from "@/components/visualizations/reading-progress-bar"
@@ -91,6 +92,7 @@ const postComponents = {
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   CollapsibleCode: CollapsibleCode,
+  Term: Term,
 }
 
 interface PostPageProps {

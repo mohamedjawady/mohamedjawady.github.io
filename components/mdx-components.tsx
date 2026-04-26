@@ -39,6 +39,7 @@ import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-syste
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import { LinkPreview } from "@/components/link-preview"
+import { Term } from "@/components/ui/term"
 import { shouldBeCollapsible, shouldBeExpandedByDefault } from "@/lib/code-block-config"
 
 // Simple copy button component for regular code blocks
@@ -240,4 +241,6 @@ export const mdxComponents = {
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   // Custom collapsible code component for manual use
   CollapsibleCode: CollapsibleCode,
+  // Term tooltip component
+  Term: Term,
 }

@@ -19,9 +19,9 @@ seriesOrder: 1
 
 ## Introduction
 
-Most organizations treat threat intelligence like a feed subscription: buy a list of domains, IP addresses, and hashes, block them, and call it done. That can reduce noise, but it is not Cyber Threat Intelligence.
+Most organizations treat threat intelligence like a feed subscription: buy a list of domains, IP addresses, and hashes, block them, and call it done. That can reduce noise, but it is not <Term concept="cti">Cyber Threat Intelligence</Term>.
 
-Cyber Threat Intelligence (CTI) is the output of a structured analytical process that turns raw security data into decision support. The key property is actionability. If a finding does not help a specific stakeholder make a better decision under uncertainty, it is data, not intelligence.
+<Term concept="cti">Cyber Threat Intelligence (CTI)</Term> is the output of a structured analytical process that turns raw security data into decision support. The key property is actionability. If a finding does not help a specific stakeholder make a better decision under uncertainty, it is data, not intelligence.
 
 The same raw data can produce very different intelligence products depending on the audience. A SOC analyst needs fast technical context for triage. An incident responder needs adversary behavior to scope and contain impact. A CISO needs risk trends, likely attacker focus, and implications for budget and strategy.
 
@@ -37,7 +37,7 @@ The result is predictable and measurable: significant data movement across syste
 
 CTI answers where others cannot. It tells you what an adversary is likely to do next, not just what they did last week. It identifies which assets are most likely to be targeted based on sector focus and historical targeting patterns. It explains which behaviors persist even when infrastructure rotates, revealing the durable aspects of adversary tradecraft. It prescribes which controls, detections, or response actions should change now as a result of observed threat evolution.
 
-Raw indicators are inputs to the analytical process. They are not the final product. An indicator becomes intelligence only when it has been contextualized, validated, enriched with adversary history, and delivered to someone who can act on it differently because of it.
+Raw <Term concept="indicator-of-compromise">indicators</Term> are inputs to the analytical process. They are not the final product. An indicator becomes intelligence only when it has been contextualized, validated, enriched with adversary history, and delivered to someone who can act on it differently because of it.
 
 ## The Intelligence Lifecycle
 
@@ -53,7 +53,7 @@ Define intelligence requirements before collecting anything. Good requirements a
 
 ### 2. Collection: Tight Scope, High Signal
 
-Collect only what is relevant to the requirement. Sources may include open-source reporting, malware telemetry, passive DNS, sandbox output, dark web monitoring, or internal detection logs. The discipline is in not collecting everything. More collection does not automatically improve intelligence. It often increases noise, expands analysis workload, and delays decision support. A collector focused on a specific requirement will spend 80% of their effort on 20% of available sources and still have higher-quality input than an unfocused collection effort.
+Collect only what is relevant to the requirement. Sources may include open-source reporting, malware telemetry, <Term concept="passive-dns">passive DNS</Term>, sandbox output, dark web monitoring, or internal detection logs. The discipline is in not collecting everything. More collection does not automatically improve intelligence. It often increases noise, expands analysis workload, and delays decision support. A collector focused on a specific requirement will spend 80% of their effort on 20% of available sources and still have higher-quality input than an unfocused collection effort.
 
 ### 3. Processing: Raw Data Into Reasoned Material
 
@@ -80,10 +80,10 @@ The lifecycle is continuous and circular, not a one-time pipeline. Intelligence 
 Consider three scenarios running through the same lifecycle:
 
 **Scenario 1: High-frequency tactical cycle** (Hours)
-Direction: IOC sharing partner reports suspicious C2 domain. Collection: Pull passive DNS and current infrastructure status. Processing: Normalize and link to previous infrastructure. Analysis: Confirm consistency with known actor patterns. Dissemination: Send detection rules to SOC within 2 hours. Feedback: Measure block rates and detections overnight.
+Direction: <Term concept="indicator-of-compromise">IOC</Term> sharing partner reports suspicious <Term concept="c2">C2</Term> domain. Collection: Pull <Term concept="passive-dns">passive DNS</Term> and current infrastructure status. Processing: Normalize and link to previous infrastructure. Analysis: Confirm consistency with known actor patterns. Dissemination: Send detection rules to SOC within 2 hours. Feedback: Measure block rates and detections overnight.
 
 **Scenario 2: Operational hunting cycle** (Days)
-Direction: Hunting lead develops hypothesis about TTP persistence. Collection: Query telemetry for behavioral indicators over weeks. Processing: De-duplicate and normalize telemetry patterns. Analysis: Identify statistically significant anomalies. Dissemination: Brief detection engineering on new rule requirements. Feedback: Measure new rule coverage over the following month.
+Direction: Hunting lead develops hypothesis about <Term concept="ttp">TTP</Term> <Term concept="persistence">persistence</Term>. Collection: Query telemetry for behavioral indicators over weeks. Processing: De-duplicate and normalize telemetry patterns. Analysis: Identify statistically significant anomalies. Dissemination: Brief detection engineering on new rule requirements. Feedback: Measure new rule coverage over the following month.
 
 **Scenario 3: Strategic planning cycle** (Months)
 Direction: CISO needs threat prioritization for budget allocation. Collection: Aggregate trend data across campaigns, sectors, techniques. Processing: Normalize data into decision-ready format. Analysis: Assess likelihood of sector targeting and required controls. Dissemination: Present risk brief to leadership. Feedback: Validate assessments through industry reports six months later.
@@ -118,7 +118,7 @@ A threat hunting lead develops a hypothesis: your organization's APT41-targeted 
 
 **Direction:** Has APT41 exfiltrated credentials from our organization in the past month, and if so, which users?
 
-**Collection:** Query Shodan, dark web monitors, and breach databases for your organization's domain name or email patterns. Search threat forums for credential dumps posted in the past 30 days. Query your own SIEM for failed VPN login attempts using internal user credentials from external IPs.
+**Collection:** Query <Term concept="shodan">Shodan</Term>, dark web monitors, and breach databases for your organization's domain name or email patterns. Search threat forums for credential dumps posted in the past 30 days. Query your own SIEM for failed VPN login attempts using internal user credentials from external IPs.
 
 **Processing:** Normalize dark web reports and SIEM logs into consistent format. De-duplicate repeat mentions. Attach source reliability scores. Link each credential to known user accounts.
 
@@ -144,7 +144,7 @@ Your CISO needs to understand how your current controls map to active threat act
 
 **Analysis:** Three threat actors (APT41, FIN7, Scattered Spider) show consistent activity in your sector. APT41 emphasizes initial access and persistence. FIN7 emphasizes credential access and lateral movement. Scattered Spider emphasizes social engineering and living-off-the-land techniques. Gap analysis shows you have strong detection for APT41 initial access patterns but weak detection for FIN7 credential theft techniques.
 
-**Dissemination (Tactical):** Deploy specific Sigma rules for FIN7 credential dumping patterns. Tune EDR policies for living-off-the-land binary detection.
+**Dissemination (Tactical):** Deploy specific <Term concept="sigma">Sigma</Term> rules for <Term concept="fin7">FIN7</Term> credential dumping patterns. Tune <Term concept="edr">EDR</Term> policies for <Term concept="living-off-the-land">living-off-the-land</Term> binary detection.
 
 **Dissemination (Operational):** Brief security managers on priority threat actor hunting targets for Q4. Recommend proactive hunts for FIN7 reconnaissance patterns.
 
@@ -210,11 +210,11 @@ FOLLOW-UP
 
 ### Indicators of Compromise (IOCs)
 
-IOCs are technical artifacts such as hashes, domains, IP addresses, URLs, or file paths. They are fast to share across security teams, easy to automate into blocking and detection systems, and immediately useful for retro-hunting across historical telemetry. The problem is short lifespan. Changing a hash requires only repacking a binary. Rotating infrastructure takes hours on a VPS. Attackers replicate IOCs rapidly and with low cost. Using only IOC-level defense creates a false sense of coverage because high volumes of indicator distribution correlate poorly with actual defensive friction.
+<Term concept="indicator-of-compromise">IOCs</Term> are technical artifacts such as hashes, domains, IP addresses, URLs, or file paths. They are fast to share across security teams, easy to automate into blocking and detection systems, and immediately useful for retrohunting across historical telemetry. The problem is short lifespan. Changing a hash requires only repacking a binary. Rotating infrastructure takes hours on a VPS. Attackers replicate IOCs rapidly and with low cost. Using only IOC-level defense creates a false sense of coverage because high volumes of indicator distribution correlate poorly with actual defensive friction.
 
 ### Tactics, Techniques, and Procedures (TTPs)
 
-TTPs describe adversary behavior independent of a single piece of infrastructure. Initial access via spearphishing attachments, persistence via scheduled tasks or service modification, lateral movement via valid credentials and SMB. These methods persist even when attackers change all their infrastructure. TTPs are much more expensive for adversaries to change because modifying tradecraft requires retraining operators, retooling their operational pipeline, and rebuilding their procedures. This means behavior-based detection has longer defensive value and survives infrastructure rotation.
+<Term concept="ttp">TTPs</Term> describe adversary behavior independent of a single piece of infrastructure. Initial access via spearphishing attachments, <Term concept="persistence">persistence</Term> via scheduled tasks or service modification, <Term concept="lateral-movement">lateral movement</Term> via valid credentials and SMB. These methods persist even when attackers change all their infrastructure. TTPs are much more expensive for adversaries to change because modifying tradecraft requires retraining operators, retooling their operational pipeline, and rebuilding their procedures. This means behavior-based detection has longer defensive value and survives infrastructure rotation.
 
 ### IOC vs TTP Decision Table
 
@@ -231,7 +231,7 @@ Mature programs intentionally combine both: IOCs for immediate friction, TTPs fo
 
 ### Practical Priority Model
 
-Mature programs use both IOCs and TTPs but with different expectations. Use IOCs for immediate operational action: blocking, detection, and triage. Invest analytical effort in TTPs for durable detection and hunting because behavior-based detections survive infrastructure rotation. This logic aligns with the Pyramid of Pain, which illustrates that lower-level indicators like hashes are fast to generate but fragile when attackers change them slightly. Higher-level behavioral indicators are slower to build but much harder for adversaries to evade at scale.
+Mature programs use both IOCs and TTPs but with different expectations. Use <Term concept="indicator-of-compromise">IOCs</Term> for immediate operational action: blocking, detection, and triage. Invest analytical effort in <Term concept="ttp">TTPs</Term> for durable detection and <Term concept="threat-hunting">hunting</Term> because behavior-based detections survive infrastructure rotation. This logic aligns with the Pyramid of Pain, which illustrates that lower-level indicators like hashes are fast to generate but fragile when attackers change them slightly. Higher-level behavioral indicators are slower to build but much harder for adversaries to evade at scale.
 
 ## Strategic, Operational, and Tactical Intelligence
 
@@ -247,7 +247,7 @@ Audience: security managers, detection leads, threat hunters. Operational intell
 
 ### Tactical Intelligence
 
-Audience: SOC analysts, detection engineers, IR teams. Tactical intelligence is the most granular: YARA rules, Sigma detections, specific hashes, IP ranges to block, C2 communication patterns. This is what a SOC analyst or an automated detection system ingests directly into defensive tooling. It requires no further analysis. It is immediately operationalizable.
+Audience: <Term concept="soc">SOC</Term> analysts, detection engineers, IR teams. Tactical intelligence is the most granular: <Term concept="yara">YARA</Term> rules, <Term concept="sigma">Sigma</Term> detections, specific hashes, IP ranges to block, <Term concept="c2">C2</Term> communication patterns. This is what a SOC analyst or an automated detection system ingests directly into defensive tooling. It requires no further analysis. It is immediately operationalizable.
 
 A common failure pattern is overproducing tactical output because it is easiest to generate from feeds and automation, while starving the strategic layer because it requires the most human judgment. A program that can only tell you to block an IP but cannot tell you why that IP matters and what it signals about upcoming campaigns is running at a fraction of its potential defensive value.
 

@@ -60,7 +60,7 @@ export function PostCard({ post }: PostCardProps) {
           <span>{post.readingTime}</span>
         </div>
         <Link href={`/posts/${post.slug}`}>
-          <h3 className="text-xl font-semibold hover:text-green-500 transition-colors line-clamp-2 group-hover:text-green-500">
+          <h3 className="text-xl font-semibold hover:text-emerald-500 transition-colors line-clamp-2 group-hover:text-emerald-500">
             {post.title}
           </h3>
         </Link>
@@ -98,7 +98,7 @@ export function PostCard({ post }: PostCardProps) {
             <Badge 
               key={tag} 
               variant="secondary" 
-              className="text-xs hover:bg-green-500/20 transition-colors cursor-pointer"
+              className="text-xs bg-muted/50 hover:bg-emerald-500/20 text-muted-foreground hover:text-emerald-400 border border-border/40 transition-colors cursor-pointer"
             >
               #{tag}
             </Badge>

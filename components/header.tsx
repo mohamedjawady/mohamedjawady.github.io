@@ -27,12 +27,12 @@ export function Header() {
       <div className="max-w-6xl mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center space-x-2 group">
-            <Terminal className="w-6 h-6 text-green-500" />
+            <Terminal className="w-6 h-6 text-emerald-500" />
             <span className="font-bold font-mono text-xl relative">
               <span className="inline-block">
-                0x<span className="text-green-500">H</span>
+                0x<span className="text-emerald-500">H</span>
               </span>
-              <span className="text-green-500 inline-block opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out">
+              <span className="text-emerald-500 inline-block opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out">
                 abib
               </span>
             </span>
@@ -45,8 +45,8 @@ export function Header() {
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  "text-sm font-medium transition-colors hover:text-green-500",
-                  pathname === item.href ? "text-green-500" : "text-muted-foreground",
+                  "text-sm font-medium transition-colors hover:text-emerald-500",
+                  pathname === item.href ? "text-emerald-500" : "text-muted-foreground",
                 )}
               >
                 {item.name}
@@ -76,8 +76,8 @@ export function Header() {
                   key={item.name}
                   href={item.href}
                   className={cn(
-                    "px-2 py-1 text-sm font-medium transition-colors hover:text-green-500",
-                    pathname === item.href ? "text-green-500" : "text-muted-foreground",
+                    "px-2 py-1 text-sm font-medium transition-colors hover:text-emerald-500",
+                    pathname === item.href ? "text-emerald-500" : "text-muted-foreground",
                   )}
                   onClick={() => setMobileMenuOpen(false)}
                 >
@@ -88,7 +88,7 @@ export function Header() {
                 href="/feed.xml"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-2 py-1 text-sm font-medium transition-colors hover:text-green-500 text-muted-foreground flex items-center gap-2"
+                className="px-2 py-1 text-sm font-medium transition-colors hover:text-emerald-500 text-muted-foreground flex items-center gap-2"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <Rss className="w-4 h-4" />

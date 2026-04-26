@@ -8,7 +8,7 @@ export default function NotFound() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-2xl mx-auto text-center">
         {/* Error Message */}
-        <Card className="bg-card/50 backdrop-blur-sm border-green-500/20">
+        <Card className="bg-card/50 backdrop-blur-sm border-emerald-500/20">
           <CardContent className="p-8">
             <h2 className="text-2xl md:text-3xl font-bold mb-4">
               Page Not Found
@@ -21,7 +21,7 @@ export default function NotFound() {
             {/* Navigation Options */}
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button asChild className="bg-green-600 hover:bg-green-700">
+                <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white">
                   <Link href="/">
                     <Home className="mr-2 h-4 w-4" />
                     Go Home
@@ -51,13 +51,13 @@ export default function NotFound() {
           <div className="flex flex-wrap justify-center gap-4">
             <Link 
               href="/about" 
-              className="hover:text-green-500 transition-colors underline decoration-dotted"
+              className="hover:text-emerald-500 transition-colors underline decoration-dotted"
             >
               About
             </Link>
             <Link 
               href="/posts" 
-              className="hover:text-green-500 transition-colors underline decoration-dotted"
+              className="hover:text-emerald-500 transition-colors underline decoration-dotted"
             >
               All Posts
             </Link>
@@ -66,8 +66,8 @@ export default function NotFound() {
         </div>
 
         {/* Fun Security-themed message */}
-        <div className="mt-8 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <p className="text-sm text-green-400">
+        <div className="mt-8 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+          <p className="text-sm text-emerald-400">
             <span className="font-mono">Error Code:</span> RESOURCE_NOT_FOUND 
             
           </p>

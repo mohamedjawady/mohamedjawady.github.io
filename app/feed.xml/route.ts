@@ -6,19 +6,17 @@ export async function GET() {
   
   // Filter out draft posts for RSS feed
   const publishedPosts = posts.filter(post => post.visibility === 'public')
-
-  const escapeXml = (value: string) =>
-    value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;')
+  
+  // Helper function to parse YYYY-DD-MM format
+  const parseCustomDate = (dateString: string): Date => {
+    const [year, day, month] = dateString.split('-')
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+  }
   
   const rssItems = publishedPosts
     .slice(0, 20) // Latest 20 posts
     .map((post) => {
-      const postDate = new Date(`${post.date}T00:00:00Z`)
+      const postDate = parseCustomDate(post.date)
       return `
     <item>
       <title><![CDATA[${post.title}]]></title>
@@ -26,8 +24,8 @@ export async function GET() {
       <link>${getCanonicalUrl(`/posts/${post.slug}`)}</link>
       <guid isPermaLink="true">${getCanonicalUrl(`/posts/${post.slug}`)}</guid>
       <pubDate>${postDate.toUTCString()}</pubDate>
-      <author>mjawady31@gmail.com (${escapeXml(post.author)})</author>
-      ${post.tags.map(tag => `<category>${escapeXml(tag)}</category>`).join('')}
+      <author>mjawady31@gmail.com (${post.author})</author>
+      ${post.tags.map(tag => `<category>${tag}</category>`).join('')}
     </item>`
     }).join('')
 

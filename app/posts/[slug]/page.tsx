@@ -43,13 +43,10 @@ import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
 import LOLBASCategories from "@/components/visualizations/lolbas-categories"
 import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
 import { GoDataStructures } from "@/components/visualizations/go-data-structures"
-import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
-import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
-import { Term } from "@/components/ui/term"
 import Image from "next/image"
 import { LatestPostsSlider } from "@/components/latest-posts-slider"
 import { ReadingProgressBar } from "@/components/visualizations/reading-progress-bar"
@@ -87,12 +84,9 @@ const postComponents = {
   LOLBASCategories: () => <LOLBASCategories />,
   BITSAdminAttackFlow: () => <BITSAdminAttackFlow />,
   GoDataStructures: () => <GoDataStructures />,
-  IntelligenceLifecycle: () => <IntelligenceLifecycle />,
-  PyramidOfPain: () => <PyramidOfPain />,
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   CollapsibleCode: CollapsibleCode,
-  Term: Term,
 }
 
 interface PostPageProps {

@@ -33,13 +33,10 @@ import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
 import LOLBASCategories from "@/components/visualizations/lolbas-categories"
 import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
 import { GoDataStructures } from "@/components/visualizations/go-data-structures"
-import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
-import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import { LinkPreview } from "@/components/link-preview"
-import { Term } from "@/components/ui/term"
 import { shouldBeCollapsible, shouldBeExpandedByDefault } from "@/lib/code-block-config"
 
 // Simple copy button component for regular code blocks
@@ -234,13 +231,9 @@ export const mdxComponents = {
   LOLBASCategories: () => <LOLBASCategories />,
   BITSAdminAttackFlow: () => <BITSAdminAttackFlow />,
   GoDataStructures: () => <GoDataStructures />,
-  IntelligenceLifecycle: () => <IntelligenceLifecycle />,
-  PyramidOfPain: () => <PyramidOfPain />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   // Custom collapsible code component for manual use
   CollapsibleCode: CollapsibleCode,
-  // Term tooltip component
-  Term: Term,
 }

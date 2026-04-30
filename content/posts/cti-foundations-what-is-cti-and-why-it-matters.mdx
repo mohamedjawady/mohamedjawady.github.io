@@ -21,9 +21,21 @@ seriesOrder: 1
 
 Most organizations treat threat intelligence like a feed subscription: buy a list of domains, IP addresses, and hashes, block them, and call it done. That can reduce noise, but it is not <Term concept="cti">Cyber Threat Intelligence</Term>.
 
-<Term concept="cti">Cyber Threat Intelligence (CTI)</Term> is the output of a structured analytical process that turns raw security data into decision support. The key property is actionability. If a finding does not help a specific stakeholder make a better decision under uncertainty, it is data, not intelligence.
+<Term concept="cti">Cyber Threat Intelligence (CTI)</Term> is decision support: analyzed, contextualized findings delivered with explicit confidence and a recommended action. The key property is actionability — if a finding does not help a specific stakeholder make a better decision under uncertainty, it is data, not intelligence.
 
-The same raw data can produce very different intelligence products depending on the audience. A SOC analyst needs fast technical context for triage. An incident responder needs adversary behavior to scope and contain impact. A CISO needs risk trends, likely attacker focus, and implications for budget and strategy.
+The same raw data can produce different intelligence products depending on the audience. A SOC analyst needs fast technical context for triage. An incident responder needs adversary behavior to scope and contain impact. A CISO needs risk trends, likely attacker focus, and implications for budget and strategy.
+
+## CTI Output Schema
+
+Use a short, consistent output schema so consumers receive the same signal shape across products. A minimal schema is:
+
+- Assessment: one-sentence judgement
+- Confidence: High / Medium / Low (see rubric below)
+- Evidence: key facts and telemetry
+- Alternatives: plausible competing explanations
+- Action: recommended, owner, and deadline
+
+Keeping outputs short and consistent makes them easier to automate, ingest into TIPs (MISP/OpenCTI), and map to detection workstreams.
 
 ## The Cost of Getting CTI Wrong
 
@@ -42,6 +54,8 @@ Raw <Term concept="indicator-of-compromise">indicators</Term> are inputs to the 
 ## The Intelligence Lifecycle
 
 Intelligence quality depends on process discipline. Skipping lifecycle stages creates low-confidence output and operational drift.
+
+#### Lifecycle (Conceptual)
 
 ### The Flow From Noise to Decision
 
@@ -63,9 +77,21 @@ Normalize, de-duplicate, enrich, and structure collected data so analysts can wo
 
 This is where intelligence is produced. Analysts test hypotheses against evidence, challenge their own assumptions, compare alternative explanations, and assign explicit confidence levels. Without this stage, there is no CTI. You have indexed data, searchable databases, and good hygiene. You do not have intelligence.
 
+#### Confidence Rubric (Practical)
+
+Use a short, reproducible rubric when assigning confidence:
+
+- High: Multiple independent sources, corroborating telemetry, and recent validation (e.g., confirmed incident or matched telemetry within last 30 days).
+- Medium: Good supporting evidence from fewer sources or partial telemetry linkage; some outstanding gaps.
+- Low: Single-source reporting, uncorroborated signals, or significant untested assumptions.
+
+When writing confidence, include the top 2 supporting facts and one major gap that would reduce confidence if disproven.
+
 ### 5. Dissemination: Format Follows Consumer
 
 Deliver the right product to the right consumer in the right format and time window. A SOC analyst needs concise detections, indicators, and immediate triage context in machine-readable form. An incident responder needs behavior chains, campaign context, and likely next actions in narrative form that builds situation awareness during active containment. Leadership needs business risk implications, threat actor trend analysis, and control priority recommendations in executive summary form. One intelligence requirement may produce three different products for three audiences.
+
+For machine-readable transport and structured interchange, use STIX/TAXII and Threat Intelligence Platforms (TIPs) such as MISP or OpenCTI. These tools do not replace analytic judgement, but they make automated dissemination, enrichment, and ingestion into detection pipelines far more reliable.
 
 ### 6. Feedback: Close the Loop
 
@@ -74,6 +100,8 @@ Measure usefulness and accuracy. Did the product answer the requirement? Did con
 ### Intelligence Lifecycle in Practice
 
 <IntelligenceLifecycle />
+
+#### Lifecycle (Operational Examples)
 
 The lifecycle is continuous and circular, not a one-time pipeline. Intelligence that produces no measurable feedback has no way to improve. In practice, this is why lifecycle discipline matters. Defender decisions are made against a moving adversary process, not a static snapshot. If your cycle time is slower than campaign evolution, your intelligence output degrades into historical reporting.
 
@@ -91,6 +119,22 @@ Direction: CISO needs threat prioritization for budget allocation. Collection: A
 ## From Data to Decision: Worked Examples
 
 Intelligence quality depends on execution. These scenarios show how the lifecycle produces different outputs from the same raw event.
+
+## Quick Contrast: Bad CTI vs Good CTI
+
+A short side-by-side helps clarify what to avoid and what to aim for.
+
+Bad CTI (what you see in most feed dumps)
+
+- Format: Long email or CSV of indicators
+- Content: 200 hashes, no context, no confidence, no recommended owner
+- Actionability: SOC must triage everything; high noise, low utility
+
+Good CTI (what a consumer can action)
+
+- Format: One-page assessment + machine-readable artifact
+- Content: One-sentence assessment, confidence, top evidence, ATT&CK mapping, recommended Sigma/YARA rule and owner
+- Actionability: SOC applies one targeted detection; hunting and leadership get prioritized tasks
 
 ### Example 1: Phishing Domain Triage (Tactical, 2-Hour Cycle)
 

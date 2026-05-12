@@ -45,6 +45,8 @@ import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-fl
 import { GoDataStructures } from "@/components/visualizations/go-data-structures"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
+import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
+import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { SeriesNavigation } from "@/components/series-navigation"
@@ -89,6 +91,8 @@ const postComponents = {
   GoDataStructures: () => <GoDataStructures />,
   IntelligenceLifecycle: () => <IntelligenceLifecycle />,
   PyramidOfPain: () => <PyramidOfPain />,
+  SaltArchitecture: () => <SaltArchitecture />,
+  SaltExerciseDiagram: () => <SaltExerciseDiagram />,
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   CollapsibleCode: CollapsibleCode,

@@ -45,6 +45,7 @@ import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-fl
 import { GoDataStructures } from "@/components/visualizations/go-data-structures"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
+import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
 import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
 import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
@@ -91,6 +92,7 @@ const postComponents = {
   GoDataStructures: () => <GoDataStructures />,
   IntelligenceLifecycle: () => <IntelligenceLifecycle />,
   PyramidOfPain: () => <PyramidOfPain />,
+  TTPCampaignTimeline: () => <TTPCampaignTimeline />,
   SaltArchitecture: () => <SaltArchitecture />,
   SaltExerciseDiagram: () => <SaltExerciseDiagram />,
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,

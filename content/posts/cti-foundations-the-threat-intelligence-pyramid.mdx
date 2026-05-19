@@ -1,29 +1,29 @@
 ---
 title: "CTI Foundations: Part 2 - The Threat Intelligence Pyramid"
 description: "Part 2 of the CTI Foundations series. Understand the Pyramid of Pain framework: why hash values are trivial to evade, how infrastructure rotates, and why TTPs are the most durable indicators of compromise."
-date: "2026-05-03"
+date: "2026-05-19"
 author: "Mohamed Habib Jaouadi"
 tags: ["cti-foundations", "threat-intelligence", "pyramid-of-pain", "indicators", "detection-strategy", "mitre-att&ck"]
 banner: "/banners/posts/cti.avif"
 bannerAlt: "Threat Intelligence Pyramid framework for defensive prioritization"
-visibility: "draft"
+visibility: "public"
 series: "CTI Foundations"
 seriesOrder: 2
 ---
 
 > **Pyramid of Pain Focus:** Not all indicators have equal defensive value. Understanding which indicators are cheap for attackers to change and which are expensive fundamentally reshapes how you allocate detection effort.
 
-> **Who this is for:** Detection engineers, threat hunters, SOC leaders, and security architects who want to understand why investment in behavioral detection yields higher defensive value than infrastructure-focused blocking.
-
 **TL;DR:** The Pyramid of Pain, published by David Bianco in 2013, remains the most useful framework for prioritizing detection investment. Lower layers (hashes, IPs, domains) are trivial for attackers to change. Upper layers (TTPs) are profoundly expensive. Mature detection strategies combine fast IOC-based blocking with high-fidelity behavioral detection based on techniques rather than indicators.
 
 ## Why the Pyramid Matters
 
-Not all indicators are equal. Some are trivially cheap for attackers to change. Others are profoundly expensive. A defensive program that optimizes for the cheap indicators spends enormous effort on things that produce minimal friction for the adversary. A program that can operate at the upper levels of the pyramid forces attackers to change the way they fundamentally operate and that costs them time, money, and operational risk.
+Not all indicators are equal. Some are trivially cheap for attackers to change. Others are profoundly expensive. A defensive program that optimizes for the cheap indicators spends enormous effort on things that produce minimal friction for the adversary. A program that can operate at the upper levels of the pyramid forces attackers to change the way they fundamentally operate, and that costs them time, money, and operational risk.
 
 David Bianco published this framework in 2013. Over a decade later, it remains the single most useful conceptual framework in threat intelligence. The reason it has aged so well is that it describes something fundamental about adversary economics, not something about a specific tool or technique that might go obsolete.
 
 The pyramid has five layers, each representing a category of indicators. Each layer up represents a higher cost for the attacker to change. Understanding where your program invests its effort determines how resilient your defenses actually are.
+
+> **Note on layer count:** The original Bianco framework describes six layers, treating IP addresses and domain names as separate tiers. We consolidate them here into a single "Infrastructure" layer because they share nearly identical evasion economics. Both rotate within hours using automated provisioning pipelines.
 
 <PyramidOfPain />
 
@@ -31,23 +31,27 @@ The pyramid has five layers, each representing a category of indicators. Each la
 
 A cryptographic hash (MD5, SHA-1, SHA-256) is a fingerprint of a specific file. If you have the hash of a <Term concept="malware">malicious executable</Term>, you can detect that exact file on any system. Simple, fast, automatable. The appeal is obvious.
 
-The problem is equally obvious: changing a hash requires changing one byte of the file. One byte. Attackers routinely repack, recompile, or lightly modify their tools to produce a different hash while maintaining identical functionality. Tools like <Term concept="upx">UPX</Term>, a common packer, will produce a different hash on each run with different settings.
+The problem is equally obvious: changing a hash requires changing one byte of the file. One byte. Attackers routinely repack, recompile, or lightly modify their tools to produce a different hash while maintaining identical functionality. Tools like <Term concept="upx">UPX</Term> (<Term concept="t1027">T1027.002: Software Packing</Term>), a common packer, will produce a different hash on each run with different settings.
 
-When the LockBit 3.0 builder leaked in 2024, security researchers documented dozens of distinct variants being distributed within weeks. Each had a unique hash. Each was functionally identical to the others. Blocking the original hash did nothing against the variants.
+When the LockBit 3.0 builder leaked in September 2022, security researchers documented dozens of distinct variants being distributed within weeks. Each had a unique hash. Each was functionally identical to the others. Blocking the original hash did nothing against the variants.
+
+The same dynamic played out when Emotet returned in November 2021, ten months after Europol's coordinated infrastructure takedown. Within 72 hours of resuming operations, researchers at ESET and Checkpoint documented multiple distinct binary variants circulating simultaneously. Each packed differently. Each with a unique hash. The behavioral chain, macro-enabled document to VBA dropper to DLL loader, was unchanged. Defenders who had built hash-based blocklists from the January 2021 takedown were starting from zero. Defenders who had built behavioral detections on the execution chain caught the first wave without writing a single new rule.
+
+This was not an edge case. It is the rule. Every time a public YARA signature or hash blocklist appears, the commodity actor pipeline produces new variants before incident responders have even read the advisory.
 
 Hashes are still worth collecting. They are useful for confirming attribution when you suspect a known malware family. They provide rapid initial triage of suspicious files. They enable retrohunting across historical telemetry to identify past compromises. But never treat hash coverage as security coverage. Hash-level detection has a half-life measured in hours at most.
 
 ### Beyond Standard Hashing
 
-Beyond simple file hashes, specialized hashing techniques survive basic evasion attempts. <Term concept="imphash">Imphash (import hash)</Term> hashes the import table structure rather than the full binary, surviving basic repackers and simple mutations. <Term concept="ssdeep">Ssdeep</Term> generates a fuzzy hash that can identify files that are similar but not identical, useful for detecting slight variants of the same tool.
+Beyond simple file hashes, specialized hashing techniques survive basic evasion attempts. <Term concept="imphash">Imphash (import hash)</Term> hashes the import table structure rather than the full binary, surviving basic repackers and simple mutations. <Term concept="ssdeep">Ssdeep</Term> generates a fuzzy hash that can identify files that are similar but not identical, useful for detecting slight variants of the same tool. TLSH (Trend Micro Locality-Sensitive Hash) improves on ssdeep by providing a more stable similarity score across larger modifications.
 
 These techniques are more resilient than simple hashing, but the principle remains: determined attackers change their files regularly, and hash-based detection decays rapidly.
 
 ## Level 2: IP Addresses and Domains - Fast-Rotating Infrastructure
 
-A <Term concept="c2">command-and-control (C2)</Term> IP address or a phishing domain is slightly more painful to change than a hash, but not by much. Infrastructure costs money and takes time to set up and validate, but attackers operating at any meaningful scale have automated provisioning pipelines. A threat actor can spin up a new VPS, register a new domain, update their implant configuration, and be back online within hours.
+A <Term concept="c2">command-and-control (C2)</Term> IP address or a phishing domain is slightly more painful to change than a hash, but not by much. Infrastructure costs money and takes time to set up and validate, but attackers operating at any meaningful scale have automated provisioning pipelines. A threat actor can spin up a new VPS (<Term concept="t1583">T1583: Acquire Infrastructure</Term>), register a new domain, update their implant configuration, and be back online within hours.
 
-The average lifespan of a C2 domain for commodity malware is measured in days. Nation-state actors who value operational security may maintain infrastructure for months, but they do rotate when burned. The infrastructure rotation cycle is dramatically faster than the cycle required to change tradecraft.
+The average lifespan of a C2 domain for commodity malware is measured in days. Feodo Tracker data on Emotet's 2021-2022 operational period showed median C2 host lifespans under 72 hours before rotation or takedown. Nation-state actors who value operational security maintain infrastructure longer, but they do rotate when burned. The infrastructure rotation cycle is dramatically faster than the cycle required to change tradecraft.
 
 The intelligence value of an IP or domain is not in the indicator itself. It is in the pivoting it enables. If you find a <Term concept="c2">C2</Term> IP, you can look at its historical DNS records, find other domains that resolved to it, find other IPs those domains resolved to, and start mapping an adversary's <Term concept="infrastructure-pivoting">infrastructure footprint</Term>. That footprint, though temporary, is far more durable than any single indicator.
 
@@ -61,19 +65,72 @@ A single IP becomes the seed of an infrastructure map. That map, when maintained
 
 Infrastructure maps reveal the full operational footprint. Even when individual components rotate, the patterns of infrastructure relationships persist. Understanding how infrastructure connects teaches you how to anticipate what else might be part of the same campaign.
 
+<CollapsibleCode title="Infrastructure Pivoting Query: Shodan + VirusTotal" language="bash">
+
+```bash
+# Step 1: Find domains historically resolving to target IP (SecurityTrails Search API)
+curl -s -X POST "https://api.securitytrails.com/v1/search/list" \
+  -H "APIKEY: $ST_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"filter": {"ipv4": "203.0.113.55"}}' | jq '.records[].hostname'
+
+# Step 2: Pull all data including TLS certificate SANs from Shodan REST API
+curl -s "https://api.shodan.io/shodan/host/203.0.113.55?key=$SHODAN_KEY" \
+  | jq '[.data[] | select(.ssl) | {port: .port, cn: .ssl.cert.subject.CN, sans: .ssl.cert.extensions}]'
+
+# Step 3: Find malware samples that called back to this IP (VirusTotal)
+curl -s "https://www.virustotal.com/api/v3/ip_addresses/203.0.113.55/communicating_files" \
+  -H "x-apikey: $VT_KEY" | jq '.data[].attributes.sha256'
+
+# Step 4: Expand to co-hosted IPs via shared certificate fingerprint
+# Feed the SAN domains back into passive DNS for the next pivot layer
+```
+
+</CollapsibleCode>
+
 ## Level 3: Network and Host Artifacts - Behavioral Signatures
 
-At this level, we move from pure infrastructure to behavioral signatures. Network artifacts are patterns in traffic: a specific HTTP User-Agent string, a particular URI structure, a distinctive TLS fingerprint (<Term concept="jarm">JARM</Term>), a packet timing pattern. Host artifacts are file paths, registry keys, <Term concept="mutex">mutex</Term> names, named pipes. These are the traces a tool leaves behind on a system it runs on.
+At this level, we move from pure infrastructure to behavioral signatures. Network artifacts are patterns in traffic: a specific HTTP User-Agent string (<Term concept="t1071">T1071.001</Term>), a particular URI structure, a distinctive TLS fingerprint (<Term concept="jarm">JARM</Term>), a packet timing pattern. Host artifacts are file paths, registry keys (<Term concept="t1547">T1547: Boot/Logon Autostart</Term>), <Term concept="mutex">mutex</Term> names, named pipes. These are the traces a tool leaves behind on a system it runs on.
 
 These are harder to change because they are often baked into how a tool is built. A C2 framework's default configuration might use a specific User-Agent and URI structure for HTTP beaconing. Changing these requires modifying the framework configuration, recompiling, and retesting. That is more work than rotating an IP, and work that scales poorly across a large operational footprint.
 
-### Cobalt Strike Example
+### Cobalt Strike: A Case Study in Artifacts
 
-<Term concept="cobalt-strike">Cobalt Strike</Term> provides a useful case study. Default <Term concept="cobalt-strike">Cobalt Strike</Term> beacons are detectable via <Term concept="jarm">JARM</Term> fingerprinting and specific HTTP response patterns. When operators fail to customize the <Term concept="malleable-c2">malleable C2</Term> profile, their infrastructure lights up in <Term concept="shodan">Shodan</Term> queries for specific default response characteristics. The artifact (the specific HTTP response pattern) is more durable than the infrastructure indicator. Some nation-state operators have run <Term concept="cobalt-strike">Cobalt Strike</Term> on the same certificate across entire regional campaigns because customization requires more effort than infrastructure rotation.
+<Term concept="cobalt-strike">Cobalt Strike</Term> provides a useful case study. Default <Term concept="cobalt-strike">Cobalt Strike</Term> beacons are detectable via <Term concept="jarm">JARM</Term> fingerprinting and specific HTTP response patterns. When operators fail to customize the <Term concept="malleable-c2">malleable C2</Term> profile, their infrastructure lights up in <Term concept="shodan">Shodan</Term> queries for specific default response characteristics. The artifact, the specific HTTP response pattern, is more durable than the infrastructure indicator. Some nation-state operators have run <Term concept="cobalt-strike">Cobalt Strike</Term> on the same certificate across entire regional campaigns because customization requires more effort than infrastructure rotation.
+
+The JARM fingerprint for a default Cobalt Strike listener (`07d14d16d21d21d07c42d41d00041d24a458a375eef0c576d23a7bab9a9fb1`) has appeared in Shodan scans reliably enough that it is now a standard hunting query. Operators who failed to customize their TLS configuration essentially labeled their infrastructure. The Conti ransomware group, whose internal communications leaked in February 2022, provides a documented case: Conti affiliates were using default Cobalt Strike profiles across hundreds of intrusions. The leaked chat logs confirmed operators were aware of the detection risk but prioritized speed of deployment over profile customization. Defenders running JARM-based Shodan queries had already mapped significant portions of their active infrastructure.
+
+<CollapsibleCode title="YARA Rule: Cobalt Strike Default Beacon Artifacts" language="yara">
+
+```yara
+rule CobaltStrike_Default_Profile_Artifacts {
+    meta:
+        description = "Detects Cobalt Strike beacons using default malleable C2 profile artifacts"
+        reference   = "T1219 - Remote Access Software"
+        tags        = "cobalt-strike,c2,artifact-detection"
+
+    strings:
+        // Default SMB beacon named pipe names (set in default profile, not changed by most operators)
+        $pipe_msagent  = "\\\\.\\pipe\\msagent_"   wide ascii
+        $pipe_postex   = "\\\\.\\pipe\\postex_ssh_" wide ascii
+
+        // Default HTTP beacon User-Agent left unchanged in many deployments
+        $ua_default    = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.0; Trident/5.0)" ascii
+
+        // Single-byte XOR key (0x69) applied across the embedded beacon config block
+        $config_xor    = { 69 69 69 69 69 69 69 69 69 69 69 69 69 69 69 69 }
+
+    condition:
+        any of ($pipe_msagent, $pipe_postex) or
+        ($ua_default and $config_xor)
+}
+```
+
+</CollapsibleCode>
 
 ### Host-Level Artifacts
 
-Host artifacts follow the same logic. <Term concept="emotet">Emotet</Term>, across its many iterations, consistently created <Term concept="mutex">mutex</Term> objects with specific naming patterns. <Term concept="malware">Malware</Term> families often drop files to predictable paths. These patterns persist across campaigns even when infrastructure changes completely.
+Host artifacts follow the same logic. <Term concept="emotet">Emotet</Term> consistently used a <Term concept="mutex">mutex</Term> derived from a hash of the infected system's volume serial number, producing a victim-unique but structurally patterned mutex name. This behavior was documented across Emotet's operational history from 2014 through its 2022 resurgence in ESET and Checkpoint analyses. Defenders who wrote detection logic around the mutex naming pattern rather than specific mutex values caught every iteration of the malware, including variants with entirely new hashes and infrastructure. <Term concept="malware">Malware</Term> families consistently leave similar host-level traces because those traces reflect design decisions, not configuration. Changing them requires rewriting the code, not rotating a domain.
 
 The practical implication is significant: when analyzing a <Term concept="malware">malware</Term> sample, document every host and network artifact observed. These become the seeds for <Term concept="yara">YARA</Term> rules and <Term concept="sigma">Sigma</Term> detections that remain valid long after the original <Term concept="indicator-of-compromise">IOCs</Term> have rotated. A single artifact-driven detection rule can identify variants and related samples that share the same behavioral signature even when every infrastructure indicator has changed.
 
@@ -81,43 +138,125 @@ The practical implication is significant: when analyzing a <Term concept="malwar
 
 Tools are the software an adversary uses to accomplish their objectives: <Term concept="cobalt-strike">Cobalt Strike</Term>, <Term concept="metasploit">Metasploit</Term>, <Term concept="mimikatz">Mimikatz</Term>, custom loaders, specific <Term concept="rat">remote access trojans (RATs)</Term>. Detecting tool usage is significantly more valuable than detecting infrastructure, because an actor's toolset changes slowly. Developing, testing, and operationalizing a new tool is expensive. Rotating an IP is free.
 
-When you identify that an attacker is using a specific tool, you immediately know its full capability set, its typical usage patterns, and the detection opportunities it creates. If you know an actor uses <Term concept="mimikatz">Mimikatz</Term> for credential harvesting, you can deploy detections for every known <Term concept="mimikatz">Mimikatz</Term> technique across your environment, even before you have observed any activity specific to your organization.
+When you identify that an attacker is using a specific tool, you immediately know its full capability set, its typical usage patterns, and the detection opportunities it creates. If you know an actor uses <Term concept="mimikatz">Mimikatz</Term> for credential harvesting (<Term concept="t1003">T1003.001: LSASS Memory</Term>), you can deploy detections for every known <Term concept="mimikatz">Mimikatz</Term> technique across your environment, even before you have observed any activity specific to your organization.
 
-The tool layer is also where <Term concept="malware">malware</Term> families live. Knowing that a sample belongs to the <Term concept="qakbot">Qakbot</Term> family tells you its <Term concept="persistence">persistence</Term> mechanism, its network communication protocol, its <Term concept="lateral-movement">lateral movement</Term> behavior, and the threat actors known to deploy it. That is significant intelligence derived from a single attribution data point. When a new variant of <Term concept="qakbot">Qakbot</Term> is discovered, defenders familiar with the family can often predict which detection bypasses it will attempt and which capabilities it will retain.
+The tool layer is also where <Term concept="malware">malware</Term> families live. Knowing that a sample belongs to the <Term concept="qakbot">Qakbot</Term> family tells you its <Term concept="persistence">persistence</Term> mechanism, its network communication protocol, its <Term concept="lateral-movement">lateral movement</Term> behavior, and the threat actors known to deploy it. That is significant intelligence derived from a single attribution data point.
+
+The Qakbot case demonstrates exactly how durable this intelligence is. Operation Duck Hunt in August 2023, a coordinated FBI action, disrupted Qakbot's infrastructure entirely and redirected approximately 700,000 infected machines away from operator-controlled servers. By December 2023, Cisco Talos observed fresh Qakbot distribution campaigns. The delivery mechanism was thread hijacking, exactly as before. The execution chain was DLL-based C2 registration via regsvr32, exactly as before. The post-compromise lateral movement used VNC, exactly as before. The infrastructure was entirely new. Every hash was different. The behavioral signatures defenders had built from years of Qakbot analysis caught the resurrection without modification.
+
+<CollapsibleCode title="Sigma Rule: Mimikatz Credential Dumping via LSASS (T1003.001)" language="yaml">
+
+```yaml
+title: Mimikatz LSASS Memory Access (T1003.001)
+status: test
+description: >
+  Detects credential dumping from LSASS memory. Covers Mimikatz sekurlsa::logonpasswords
+  and compatible tools requesting suspicious access masks on lsass.exe.
+references:
+  - https://attack.mitre.org/techniques/T1003/001/
+  - https://github.com/SigmaHQ/sigma
+tags:
+  - attack.credential_access
+  - attack.t1003.001
+logsource:
+  category: process_access
+  product: windows
+detection:
+  selection:
+    TargetImage|endswith: '\lsass.exe'
+    GrantedAccess|contains:
+      - '0x1010'   # PROCESS_QUERY_INFORMATION | PROCESS_VM_READ
+      - '0x1410'   # includes PROCESS_VM_READ
+      - '0x147a'   # broad read access pattern
+      - '0x1fffff' # PROCESS_ALL_ACCESS
+  filter_legit:
+    SourceImage|startswith:
+      - 'C:\Windows\System32\'
+      - 'C:\Windows\SysWOW64\'
+      - 'C:\Program Files\Windows Defender\'
+  condition: selection and not filter_legit
+falsepositives:
+  - Security software with legitimate LSASS access requirements
+  - Password managers that read credentials from the process
+level: high
+```
+
+</CollapsibleCode>
 
 ### The Limits of Tool-Level Detection
 
-Nation-state actors with access to large development resources build custom tools specifically to avoid being detected by signatures for known frameworks. Commodity actors operating at scale are less likely to invest in custom tooling. They continue using Metasploit or Cobalt Strike because the economics favor it. Detection at the tool layer is most effective against the long tail of commodity actors.
+Nation-state actors with access to large development resources build custom tools specifically to avoid being detected by signatures for known frameworks. The documented case is APT29's 2020 COVID-19 vaccine research targeting campaign. Rather than use Cobalt Strike or Metasploit and risk triggering the signatures that most mature security programs had deployed, APT29 used two previously unknown custom frameworks: WELLMESS and WELLMAIL. Both were designed to blend with legitimate TLS traffic and had no existing detection signatures. A joint advisory from NCSC, CSE, NSA, and CISA in July 2020 confirmed the targeting and the tooling. Organizations that had spent months tuning Cobalt Strike detections were fully exposed to an actor that simply chose not to use Cobalt Strike.
 
-Custom tools, while rare, remain a detection challenge because each requires bespoke analysis. However, tools like YARA and specialized memory forensics techniques can often identify novel tools through behavioral or structural characteristics even when no public signatures exist.
+Commodity actors operating at scale rarely invest in custom tooling. They continue using Metasploit or Cobalt Strike because the economics favor it. Detection at the tool layer is most effective against this long tail.
+
+Custom tools remain a detection challenge because each requires bespoke analysis. YARA and memory forensics can often identify novel tools through behavioral or structural characteristics even when no public signatures exist, but that analysis takes time — time the defender does not have if the tool is already executing in the environment.
 
 ## Level 5: TTPs - The Hardest Layer to Change
 
-<Term concept="ttp">TTPs (Tactics, Techniques, and Procedures)</Term> are how an adversary accomplishes their objectives, independent of which specific tool they use or which infrastructure they run on. They answer the "how" and not the "what."
+<Term concept="ttp">TTPs (Tactics, Techniques, and Procedures)</Term> are how an adversary accomplishes their objectives, independent of which specific tool they use or which infrastructure they run on. They answer the "how", not the "what."
 
-An example captures this well: <Term concept="apt41">APT41</Term> uses spearphishing with malicious shortcut files (.lnk) to achieve initial access, followed by DLL sideloading for <Term concept="persistence">persistence</Term>, and uses <Term concept="living-off-the-land">living-off-the-land</Term> binaries for <Term concept="lateral-movement">lateral movement</Term>. This <Term concept="ttp">TTP</Term> description remains valid even if <Term concept="apt41">APT41</Term> changes every piece of infrastructure, replaces their loader with a new variant, and rotates all their hashes because the approach is the same.
+The DOJ's September 2020 indictment of five <Term concept="apt41">APT41</Term> members provides a documented measure of TTP persistence. Investigators traced the same behavioral signature across intrusions spanning 2012 to 2020 — eight years of activity across more than 100 victims in multiple countries. The specific pattern: spearphishing with malicious attachments (<Term concept="t1566">T1566.001</Term>) for initial access, DLL sideloading via their DUSTPAN loader (<Term concept="t1574">T1574.002</Term>) for execution, and <Term concept="living-off-the-land">living-off-the-land</Term> binaries (<Term concept="t1218">T1218</Term>) for <Term concept="lateral-movement">lateral movement</Term>. Infrastructure had rotated completely across those eight years. Tools had been recompiled dozens of times. Hashes were unrecognizable from one campaign to the next. The behavioral fingerprint was, by the DOJ's own evidentiary record, identical.
 
-To change their TTPs, they would need to fundamentally retrain their operators, retool their operational pipeline, and rebuild their tradecraft. That is a multi-month undertaking involving coordination across global teams, validation in test environments, and operational risk during the transition. That is not a weekend rotation.
+To change those <Term concept="ttp">TTPs</Term>, <Term concept="apt41">APT41</Term> would need to fundamentally retrain their operators, retool their operational pipeline, and rebuild their tradecraft. That is a multi-month undertaking involving coordination across global teams, validation in test environments, and operational risk during the transition. That is not a weekend rotation.
 
-<MalwareC2Lifecycle />
+<TTPCampaignTimeline />
 
-The adversary's operational cycle is long and slow when tactics change. By contrast, indicators like hashes and IPs rotate rapidly. This explains why detection strategies anchored to TTPs rather than indicators create lasting defensive value.
+The timeline above shows this in concrete terms. Same campaign, same adversary, same objectives: hash values rotated 31 times over 12 months. Infrastructure rotated 12 times. TTPs rotated zero times. Detection built on TTPs survived every rotation. Detection built on hashes was obsolete before the ink dried on the first blocklist.
 
 MITRE ATT&CK maps TTPs systematically. When you can attribute a technique (T1566.001: Spearphishing Attachment, T1574.002: DLL Side-Loading), you gain access to all the existing detection logic the community has built around that technique. You can build detection that persists across campaign rotations and infrastructure changes.
 
-### Real-World Campaign Example: Tracking a Phishing Campaign
+<CollapsibleCode title="Sigma Rule: Suspicious DLL Side-Loading Pattern (T1574.002)" language="yaml">
 
-Let us make this concrete by tracking a phishing campaign targeting HR teams with fake job application attachments across all pyramid levels:
+```yaml
+title: DLL Side-Loading via Unsigned DLL in Signed Binary Directory (T1574.002)
+status: test
+description: >
+  Detects a signed, trusted executable loading an unsigned DLL from the same directory,
+  a classic DLL side-loading pattern used by APT41, Lazarus, and others.
+references:
+  - https://attack.mitre.org/techniques/T1574/002/
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.defense_evasion
+  - attack.t1574.002
+logsource:
+  category: image_load
+  product: windows
+detection:
+  selection:
+    ImageLoaded|endswith: '.dll'
+    Signed: false
+    Image|contains:
+      - '\Program Files\'
+      - '\Program Files (x86)\'
+  filter_known_good:
+    # Exclude DLLs loaded from System32 / SysWOW64
+    ImageLoaded|startswith:
+      - 'C:\Windows\System32\'
+      - 'C:\Windows\SysWOW64\'
+  condition: selection and not filter_known_good
+falsepositives:
+  - Legitimate software that ships unsigned components alongside signed executables
+  - Development environments with mixed signing requirements
+level: medium
+```
 
-| Pyramid Level | Indicator | Attacker's Cost to Evade |
-|---------------|-----------|--------------------------|
-| Hash | SHA-256 of malicious PDF | One repack, minutes |
-| IP/Domain | hirefast-portal.com / 203.0.113.55 | Register new domain, hours |
-| Network artifact | User-Agent string, URI pattern | Modify C2 profile, hours to days |
-| Tool | IcedID loader identified | Switch to new loader, weeks |
-| TTP | Phishing then IcedID then Cobalt Strike then Kerberoasting | Restructure entire operation, months |
+</CollapsibleCode>
 
-The same campaign appears at five different layers of the pyramid. Each layer offers detection opportunity. Yet only the top two layers survive infrastructure rotation. This is why investment in the top layers yields exponentially higher defensive value.
+### Real-World Campaign: TA551 (Shathak)
+
+Proofpoint tracked TA551, also known as Shathak, across 2021-2023 and documented the same behavioral chain repeating across entirely different infrastructure rotations. The group ran new domains and IPs with every campaign wave, repackaged their loaders regularly, and still produced the same end-to-end attack sequence every time. The table below maps what defenders observed at each pyramid layer.
+
+| Pyramid Level | TA551 Observable | ATT&CK Technique | Attacker's Cost to Evade |
+|---|---|---|---|
+| Hash | IcedID DLL dropper, repacked per wave | T1027.002 (Packing) | One repack, minutes |
+| IP/Domain | New C2 domain each campaign wave | T1583.001 (Domain) | Automated rotation, hours |
+| Network artifact | IcedID HTTPS beacon URI structure and timing pattern | T1071.001 (HTTP) | Rebuild IcedID config, days |
+| Tool | IcedID loader + Cobalt Strike Beacon identified | T1204.002 (Malicious File) | Switch to new loader, weeks |
+| TTP | Thread-hijacked email → ISO → IcedID → CS → Kerberoasting | T1558.003 (Kerberoasting) | Restructure entire operation, months |
+
+The same group. The same campaign objectives. Dozens of distinct hashes. Continuously rotating infrastructure. One behavioral chain that never changed. Defenders who built detections on the thread-hijacking delivery pattern and the IcedID-to-Cobalt Strike execution sequence caught every wave. Defenders who relied on domain blocklists rebuilt their defenses from scratch with each rotation.
 
 ## Investment Strategy: Where to Allocate Detection Effort
 
@@ -127,7 +266,7 @@ Understanding the pyramid informs how to allocate detection effort for maximum d
 
 Share IOCs aggressively at the bottom of the pyramid. Indicator sharing (hashes, IPs, domains) costs little to produce and provides immediate blocking value for other organizations facing the same threat. MISP was built for exactly this use case. Push fresh IOCs to sharing communities, ingest what others share, and automate the exchange through standardized feeds.
 
-IOC sharing is high volume and low friction. It is your first line of defense but not your last.
+IOC sharing is high-volume and low-friction. It is your first line of defense but not your last.
 
 ### Middle Layers: Behavioral Detection
 
@@ -145,7 +284,16 @@ TTP hunting requires more analytical sophistication. It is also the hardest for 
 
 The pyramid does not suggest ignoring lower levels. It suggests understanding their limitations and calibrating investment accordingly. Many organizations fall into the trap of pyramid inversion: they automate massive amounts of IOC collection and dissemination while leaving their TTP-level detection capabilities underdeveloped.
 
-The result is a program that can identify a threat actor's presence only after infrastructure has burned or detection has already fired. By contrast, a program with mature TTP-based detection can identify threat actor activity proactively, before obvious indicators become available to the broader community.
+The result is a program that can identify a threat actor's presence only after infrastructure has burned or a detection has already fired. By contrast, a program with mature TTP-based detection can identify threat actor activity proactively, before obvious indicators become available to the broader community.
+
+| Investment Type | Typical Program | Inverted Program |
+|---|---|---|
+| Hash/IP blocking | 70% of budget | 20% of budget |
+| Behavioral signatures (YARA/Sigma) | 20% | 40% |
+| TTP hunting + ATT&CK coverage | 10% | 40% |
+| Mean time to detect (estimated) | Days after indicator burn | Before infrastructure rotation |
+
+The inverted model is not the expensive one. It is the effective one. And the talent required to run it, analysts who can translate ATT&CK techniques into hunt queries, is far more leveraged than an analyst whose primary job is updating blocklists.
 
 ## Using the Pyramid as a Planning Tool
 
@@ -154,6 +302,39 @@ When planning a CTI program, use the pyramid to structure your work. For each re
 A CISO planning detection investment should see the pyramid as an argument for rebalancing resources. Most organizations spend 80% of detection budget on hash-based signatures and 20% on behavioral detection. Reverse that allocation. Hash-based detection provides fast triage but minimal defensive friction. Behavioral detection provides friction that meaningfully constrains adversary operations.
 
 The pyramid also explains why MITRE ATT&CK has become so critical to modern security operations. It is the public, standardized, and crowdsourced documentation of exactly what sits at the top layer of the pyramid. An organization that uses ATT&CK to guide detection engineering gains access to years of distributed analytical effort on the hardest layer to detect.
+
+<CollapsibleCode title="ATT&CK Coverage Assessment Template" language="markdown">
+
+```markdown
+# ATT&CK Coverage Assessment: [Threat Actor]
+
+## Target Actor Profile
+- Actor: [Name]
+- Primary sector targeting: [Industry]
+- Source: [ATT&CK group page + public reporting]
+
+## TTP Inventory (from ATT&CK)
+| Tactic | Technique ID | Technique Name | Current Coverage | Gap |
+|--------|-------------|----------------|------------------|-----|
+| Initial Access | T1566.001 | Spearphishing Attachment | Partial | Email gateway missing link detonation |
+| Execution | T1059.001 | PowerShell | Covered | EDR + Sigma rule deployed |
+| Persistence | T1574.002 | DLL Side-Loading | None | No image_load monitoring configured |
+| Credential Access | T1003.001 | LSASS Memory Dump | Covered | Sigma rule + EDR block |
+| Lateral Movement | T1021.002 | SMB/Windows Admin Shares | Partial | Lateral movement hunting not scheduled |
+
+## Detection Investment Priority (Based on Gap Analysis)
+1. [Highest gap technique] → Required: [Detection rule type]
+2. [Second gap] → Required: [YARA/Sigma/Hunt query]
+3. ...
+
+## Metrics to Track
+- Techniques with zero coverage: [Count]
+- Techniques with partial coverage: [Count]
+- Techniques with full coverage: [Count]
+- Coverage score: [Full / (Full + Partial + None)]
+```
+
+</CollapsibleCode>
 
 ## Conclusion
 
@@ -190,8 +371,5 @@ In Part 3, we will move to practical reconnaissance methodology: passive OSINT t
 7. JARM Fingerprinting. [https://github.com/salesforce/jarm](https://github.com/salesforce/jarm)
    Understanding TLS fingerprinting as a behavioral artifact. JARM provides a method to identify infrastructure based on TLS response patterns rather than specific IPs.
 
-8. LockBit 3.0 Analysis: The Leaked Builder and Its Variants. Multiple security vendors.
-   Real-world case study showing hash-level futility when builders enable rapid variant generation.
-
-9. OWASP Detection Engineering. [https://owasp.org/www-project-detection-rules/](https://owasp.org/www-project-detection-rules/)
-   Framework for translating intelligence into detection implementations across the pyramid layers.
+8. OWASP ModSecurity Core Rule Set. [https://owasp.org/www-project-modsecurity-core-rule-set/](https://owasp.org/www-project-modsecurity-core-rule-set/)
+   A reference for detection rule structure and layered defensive logic, applicable to understanding how behavioral rules are composed across multiple indicator types.

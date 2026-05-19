@@ -10,6 +10,31 @@ import { DNSResolution } from "@/components/visualizations/dns-resolution"
 import { ProtectedProcessBypass } from "@/components/visualizations/protected-process-bypass"
 import { PEHeaderViewer } from "@/components/visualizations/pe-header-viewer"
 import { ExportTableWalker } from "@/components/visualizations/export-table-walker"
+import { C2InfrastructureMap } from "@/components/visualizations/c2-infrastructure-map"
+import { C2JitterAndSleep } from "@/components/visualizations/c2-jitter-and-sleep"
+import { MalwareC2Lifecycle } from "@/components/visualizations/malware-c2-lifecycle"
+import { ProcessMemoryMap } from "@/components/visualizations/process-memory-map"
+import LOLBASCategories from "@/components/visualizations/lolbas-categories"
+import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
+import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
+import { PowerShellPlayground } from "@/components/visualizations/powershell-playground"
+import { WindowsProtectionHierarchy } from "@/components/visualizations/windows-protection-hierarchy"
+import { ThreadSynchronization } from "@/components/visualizations/thread-synchronization"
+import { Win32MessageLoop } from "@/components/visualizations/win32-message-loop"
+import { DnsTunnelingFlow } from "@/components/visualizations/dns-tunneling-flow"
+import { EncryptedDnsFlow } from "@/components/visualizations/encrypted-dns-flow"
+import { IdnHomographDetection } from "@/components/visualizations/idn-homograph-detection"
+import { ChomskySecurityHierarchy } from "@/components/visualizations/chomsky-security-hierarchy"
+import { FiniteAutomatonVisualizer } from "@/components/visualizations/finite-automaton-visualizer"
+import { PushdownAutomatonVisualizer } from "@/components/visualizations/pushdown-automaton-visualizer"
+import { LanguageHierarchyVenn } from "@/components/visualizations/language-hierarchy-venn"
+import { GoDataStructures } from "@/components/visualizations/go-data-structures"
+import { StealerParserDemo } from "@/components/visualizations/stealer-parser-demo"
+import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
+import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
+import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
+import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
+import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
@@ -26,6 +51,7 @@ interface VisualizationPageProps {
 
 // Component mapping - maps the component field from frontmatter to actual components
 const visualizationComponents = {
+  // Originally registered
   'hill-cipher': HillCipher,
   'WindowsAPIFlow': WindowsAPIFlow,
   'LagrangeInterpolation': LagrangeInterpolation,
@@ -36,6 +62,39 @@ const visualizationComponents = {
   'ProtectedProcessBypass': ProtectedProcessBypass,
   'PEHeaderViewer': PEHeaderViewer,
   'ExportTableWalker': ExportTableWalker,
+  // C2 / malware
+  'C2InfrastructureMap': C2InfrastructureMap,
+  'C2JitterAndSleep': C2JitterAndSleep,
+  'MalwareC2Lifecycle': MalwareC2Lifecycle,
+  'ProcessMemoryMap': ProcessMemoryMap,
+  // Living off the land
+  'LOLBASCategories': LOLBASCategories,
+  'BITSAdminAttackFlow': BITSAdminAttackFlow,
+  'WMIRemoteFlow': WMIRemoteFlow,
+  'PowerShellPlayground': PowerShellPlayground,
+  // Windows internals
+  'WindowsProtectionHierarchy': WindowsProtectionHierarchy,
+  'ThreadSynchronization': ThreadSynchronization,
+  'Win32MessageLoop': Win32MessageLoop,
+  // DNS
+  'DnsTunnelingFlow': DnsTunnelingFlow,
+  'EncryptedDnsFlow': EncryptedDnsFlow,
+  'IdnHomographDetection': IdnHomographDetection,
+  // Language theory
+  'ChomskySecurityHierarchy': ChomskySecurityHierarchy,
+  'FiniteAutomatonVisualizer': FiniteAutomatonVisualizer,
+  'PushdownAutomatonVisualizer': PushdownAutomatonVisualizer,
+  'LanguageHierarchyVenn': LanguageHierarchyVenn,
+  // Golang / malware analysis
+  'GoDataStructures': GoDataStructures,
+  'StealerParserDemo': StealerParserDemo,
+  // CTI
+  'IntelligenceLifecycle': IntelligenceLifecycle,
+  'PyramidOfPain': PyramidOfPain,
+  'TTPCampaignTimeline': TTPCampaignTimeline,
+  // SaltStack
+  'SaltArchitecture': SaltArchitecture,
+  'SaltExerciseDiagram': SaltExerciseDiagram,
 }
 
 export async function generateStaticParams() {

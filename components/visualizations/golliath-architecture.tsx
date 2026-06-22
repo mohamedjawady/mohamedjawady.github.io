@@ -28,7 +28,7 @@ export function GolliathArchitecture() {
             id: "telegram",
             name: "Telegram MTProto",
             lang: "External",
-            role: "Source — public channels, invite links, file attachments",
+            role: "Source: public channels, invite links, file attachments",
             details: [
                 "MTProto protocol for encrypted transport",
                 "Messages, file attachments, invite links",
@@ -40,7 +40,7 @@ export function GolliathArchitecture() {
             id: "session-manager",
             name: "Session Manager",
             lang: "Python / Telethon",
-            role: "MTProto session pool — scraping, file download, invite resolution",
+            role: "MTProto session pool: scraping, file download, invite resolution",
             details: [
                 "Maintains pool of authenticated Telegram sessions",
                 "iter_messages(min_id=checkpoint, reverse=True, limit=3000)",
@@ -53,7 +53,7 @@ export function GolliathArchitecture() {
             id: "download-worker",
             name: "Download Worker",
             lang: "Go",
-            role: "Scrape mode — fetch messages, publish Kafka events",
+            role: "Scrape mode: fetch messages, publish Kafka events",
             details: [
                 "Claims scrape jobs via SELECT FOR UPDATE SKIP LOCKED",
                 "Publishes messages.discovered to Kafka",
@@ -66,7 +66,7 @@ export function GolliathArchitecture() {
             id: "file-worker",
             name: "File Worker",
             lang: "Go",
-            role: "Files mode — consume download tasks, upload to MinIO",
+            role: "Files mode: consume download tasks, upload to MinIO",
             details: [
                 "5 concurrent download slots",
                 "Priority: text files before archives",
@@ -79,7 +79,7 @@ export function GolliathArchitecture() {
             id: "kafka",
             name: "Kafka KRaft",
             lang: "Infrastructure",
-            role: "Event backbone — messages.discovered, files.priority/archives",
+            role: "Event backbone: messages.discovered, files.priority/archives",
             details: [
                 "Two-tier file priority topics (priority > archives)",
                 "messages.discovered consumed by message-indexer",
@@ -94,7 +94,7 @@ export function GolliathArchitecture() {
             lang: "Go",
             role: "Index messages to OpenSearch, extract invite links to PostgreSQL",
             details: [
-                "Full-text indexing for 234,757+ messages",
+                "Full-text indexing for 2.2M+ messages",
                 "Extracts t.me/+HASH invite link patterns",
                 "Writes to PostgreSQL for invite graph",
                 "1,958 msg/sec IOC extraction baseline",
@@ -105,7 +105,7 @@ export function GolliathArchitecture() {
             id: "neo4j-sync",
             name: "Neo4j Sync",
             lang: "Python",
-            role: "Build knowledge graph — sources, messages, users, relationships",
+            role: "Build knowledge graph: sources, messages, users, relationships",
             details: [
                 "(:Source), (:Message), (:TelegramUser) nodes",
                 "FORWARDED_FROM_SOURCE, ACTIVE_IN edges",
@@ -120,7 +120,7 @@ export function GolliathArchitecture() {
             lang: "Storage",
             role: "Full-text message search + credential and session indices",
             details: [
-                "messages-index: 234,757+ entries",
+                "messages-index: 2.2M+ entries",
                 "credentials-index, cookies-index, sessions-index",
                 "Real-time IOC and watchlist matching",
                 "Domain exposure reports via two-pass aggregations",
@@ -131,7 +131,7 @@ export function GolliathArchitecture() {
             id: "minio",
             name: "MinIO",
             lang: "Storage",
-            role: "Object storage — archives, txt-dumps, quarantine buckets",
+            role: "Object storage: archives, txt-dumps, quarantine buckets",
             details: [
                 "archives/ bucket: ZIP, RAR, 7z, TAR",
                 "txt-dumps/ bucket: credential text files",
@@ -144,7 +144,7 @@ export function GolliathArchitecture() {
             id: "neo4j",
             name: "Neo4j",
             lang: "Storage",
-            role: "Graph database — channel topology and actor relationships",
+            role: "Graph database: channel topology and actor relationships",
             details: [
                 "Cypher queries for forwarding chains",
                 "Actor cross-channel activity detection",

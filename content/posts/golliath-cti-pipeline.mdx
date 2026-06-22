@@ -134,7 +134,7 @@ The result is a ranked expansion surface: a small channel under monitoring often
 
 The **message-indexer** service (Go) consumes the `messages.discovered` Kafka topic and writes every message to OpenSearch. At 1,958.7 messages/second, new content from any monitored channel is searchable within seconds of being published.
 
-After 234,757 indexed messages across the monitored source set, the OpenSearch index becomes a live intelligence feed: analysts can query for a specific domain, an IP range, a malware family name, or a channel handle and get ranked results with full message context.
+After 2.2M+ indexed messages across the monitored source set, the OpenSearch index becomes a live intelligence feed: analysts can query for a specific domain, an IP range, a malware family name, or a channel handle and get ranked results with full message context.
 
 ### 5.2 Sampling and LLM Pre-Labeling
 
@@ -556,7 +556,7 @@ One benchmark run against a real-world corpus:
 | Autofill records | 28,409 |
 | Credit card records | 1,204 |
 | Parser throughput | 10.5 MB/s |
-| Messages indexed | 234,757 |
+| Messages indexed | 2,208,360 |
 | Message indexing rate | 1,958.7 msg/s |
 | IOCs extracted | 277,965 |
 | IOC type breakdown | 68.1% domains, 18.4% URLs, 10.4% IPs, 2.2% wallets, 0.8% CVEs |

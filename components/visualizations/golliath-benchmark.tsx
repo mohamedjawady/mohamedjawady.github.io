@@ -33,7 +33,7 @@ export function GolliathBenchmark() {
         { label: "Credentials", value: "314,717", sub: "URL + username + password" },
         { label: "Cookies", value: "14.9 M", sub: "Netscape-format records" },
         { label: "Throughput", value: "10.5 MB/s", sub: "end-to-end archive parsing" },
-        { label: "IOCs extracted", value: "277,965", sub: "from 234,757 messages" },
+        { label: "IOCs extracted", value: "277,965", sub: "from 2.2M+ indexed messages" },
         { label: "Autofill records", value: "28,409", sub: "form field name/value pairs" },
         { label: "Msg indexing", value: "1,958 msg/s", sub: "IOC extraction baseline" },
     ]
@@ -51,7 +51,7 @@ export function GolliathBenchmark() {
         { name: "DistilBERT-NER", f1: "0.81", speed: "fast", lang: "en", note: "Default; balanced accuracy/speed on English logs" },
         { name: "CyNER", f1: "0.74", speed: "fast", lang: "en", note: "Cybersecurity-specific NER, best for en CTI text" },
         { name: "XLM-RoBERTa", f1: "0.76", speed: "slow", lang: "multilingual", note: "Best for non-English archives (RU/TR stealer logs)" },
-        { name: "HDBSCAN", f1: "—", speed: "fast", lang: "any", note: "Session dedup via multilingual embeddings; ~12% duplicate reduction" },
+        { name: "HDBSCAN", f1: "N/A", speed: "fast", lang: "any", note: "Session dedup via multilingual embeddings; ~12% duplicate reduction" },
     ]
 
     const iocMax = 189432
@@ -142,7 +142,7 @@ export function GolliathBenchmark() {
                                 ))}
                             </div>
                             <div className="text-xs text-muted-foreground pt-1">
-                                Total: 277,965 IOCs across 234,757 indexed messages. Domain TLD allowlist eliminates false positives from free-form text.
+                                Total: 277,965 IOCs across 2.2M+ indexed messages. Domain TLD allowlist eliminates false positives from free-form text.
                             </div>
                         </motion.div>
                     )}
@@ -154,7 +154,7 @@ export function GolliathBenchmark() {
                                     <div className="flex items-center justify-between">
                                         <span className="font-mono font-semibold text-sm">{row.name}</span>
                                         <div className="flex items-center gap-2">
-                                            {row.f1 !== "—" && <Badge variant="outline" className="text-xs font-mono">F1 {row.f1}</Badge>}
+                                            {row.f1 !== "N/A" && <Badge variant="outline" className="text-xs font-mono">F1 {row.f1}</Badge>}
                                             <Badge variant="secondary" className="text-xs">{row.speed}</Badge>
                                             <Badge variant="outline" className="text-xs">{row.lang}</Badge>
                                         </div>

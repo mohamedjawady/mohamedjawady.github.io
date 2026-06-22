@@ -72,7 +72,7 @@ const GRAMMARS: Grammar[] = [
     {
         id: "generic",
         name: "GenericGrammar",
-        trigger: "Fallback — always 0.0",
+        trigger: "Fallback (always 0.0)",
         confidence: 0.0,
         evidence: [
             "No family-specific signature found",
@@ -124,7 +124,7 @@ export function GolliathGrammarRouter() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <GitMerge className="w-5 h-5 text-primary" />
-                        Grammar Router — Confidence Competition
+                        Grammar Router: Confidence Competition
                     </CardTitle>
                     <CardDescription>
                         Each FamilyGrammar scores the layout evidence. Highest above 0.60 wins. Explore family signatures or simulate your own archive layout.
@@ -189,8 +189,8 @@ export function GolliathGrammarRouter() {
                                         </div>
                                         <div className="text-xs text-muted-foreground">
                                             {sel.confidence > 0
-                                                ? "Above 0.60 threshold — wins routing"
-                                                : "Always fallback — activates when all others fail"}
+                                                ? "Above 0.60 threshold: wins routing"
+                                                : "Always fallback: activates when all others fail"}
                                         </div>
                                     </div>
 

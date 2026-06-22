@@ -38,6 +38,10 @@ import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
 import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
 import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
+import { GolliathArchitecture } from "@/components/visualizations/golliath-architecture"
+import { GolliathParserPipeline } from "@/components/visualizations/golliath-parser-pipeline"
+import { GolliathGrammarRouter } from "@/components/visualizations/golliath-grammar-router"
+import { GolliathBenchmark } from "@/components/visualizations/golliath-benchmark"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -242,6 +246,10 @@ export const mdxComponents = {
   TTPCampaignTimeline: () => <TTPCampaignTimeline />,
   SaltArchitecture: () => <SaltArchitecture />,
   SaltExerciseDiagram: () => <SaltExerciseDiagram />,
+  GolliathArchitecture: () => <GolliathArchitecture />,
+  GolliathParserPipeline: () => <GolliathParserPipeline />,
+  GolliathGrammarRouter: () => <GolliathGrammarRouter />,
+  GolliathBenchmark: () => <GolliathBenchmark />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

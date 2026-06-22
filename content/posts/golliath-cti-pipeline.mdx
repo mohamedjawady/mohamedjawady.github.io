@@ -1,0 +1,520 @@
+---
+title: "From Shadows to Signals: Building a Cyber Threat Intelligence Pipeline Over Telegram at Scale"
+date: "2026-06-22"
+description: "How I designed and built Golliath — a modular CTI platform that scrapes Telegram channels at scale, parses stealer-log archives with family-aware grammar routing, and feeds structured intelligence into OpenSearch, Neo4j, and MinIO."
+author: "Mohamed Habib Jaouadi"
+tags: ["cti", "telegram", "stealer-logs", "threat-intelligence", "go", "python", "kafka", "opensearch", "neo4j", "architecture"]
+banner: "https://images.unsplash.com/photo-1714901423336-1884cd3fb50f?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+visibility: "public"
+---
+
+> **Authorized research only.** Everything described here was conducted in a controlled environment against data I had lawful authorization to analyze. Golliath does not facilitate unauthorized access, credential use, or victim contact of any kind.
+
+Every day, hundreds of Telegram channels publish stealer logs — archives packed with credentials, cookies, and system fingerprints from compromised machines. Most <Term concept="Threat Intelligence" /> teams consume this data passively, via commercial feeds, by the time the intelligence is already stale. I wanted to get closer to the source: build something that scraped channels in real time, parsed the archive formats properly, and gave me a structured, searchable view of what was being shared.
+
+That project became **Golliath** — a six-subsystem platform written in Go and Python, backed by Kafka, OpenSearch, Neo4j, MinIO, and PostgreSQL, with a Next.js frontend for exploration. This post is a deep dive into how it works, why it's built the way it is, and what the numbers look like after running it against a real-world corpus.
+
+---
+
+## 1. Why Telegram? Why Now?
+
+Telegram has become the dominant distribution channel for <Term concept="Initial Access Broker" /> activity and stealer-log marketplaces. The reasons are structural: channels support large file attachments (up to 2 GB), messages are persistent and indexed by Telegram's own servers, and invite-link-based access creates a discoverable social graph of threat actor infrastructure.
+
+Unlike paste sites or dark-web forums, Telegram doesn't require Tor and responds well to programmatic access via MTProto. The channel topology itself is intelligence — who forwards whom, which channels share an admin, how a new log pack propagates across the ecosystem within hours of publication.
+
+The challenge is volume. A single active channel might post dozens of archives per day, and a monitoring operation watching 50+ channels accumulates data faster than any manual triage workflow can handle. The only way to turn that volume into signal is automation, and automation requires understanding the archive formats.
+
+---
+
+## 2. Golliath at a Glance
+
+Golliath is not a single application. It's six loosely-coupled subsystems that share storage and communicate through Kafka and HTTP:
+
+| Subsystem | Language | Role |
+|---|---|---|
+| **data_lake** | Go + Python | Collection, scraping, file download, event streaming, indexing |
+| **parser_logs** | Python | Archive parsing pipeline — stealer family grammars, field extractors, NLP enrichment |
+| **intelligence-analysis** | Python | ML benchmarking, IOC extraction, threat classification, clustering |
+| **frontend** | Next.js 14 | Dashboards, search, graph explorer, source management |
+| **infra** | Docker Compose | Kafka KRaft, OpenSearch, MinIO, Neo4j, Redis, PostgreSQL, Prometheus, MLflow |
+| **sdk** | Go | Shared HTTP client, job types, retry logic |
+
+<GolliathArchitecture />
+
+The collection subsystem (data_lake) is the entry point. It scrapes channels, downloads files, and publishes events. Everything downstream — parser, analysis, frontend — consumes from shared storage and search indices. This separation means I can run the parser against the same corpus multiple times as the grammar logic evolves, without re-scraping anything.
+
+---
+
+## 3. Scraping at Scale — The Collection Subsystem
+
+### 3.1 The Session Pool
+
+Telegram's MTProto API doesn't expose a simple REST endpoint — you authenticate as a user account (or bot) and maintain a session. The **session-manager** service (Python/Telethon) maintains a pool of authenticated sessions and exposes a small HTTP API that the Go services call.
+
+Scraping a channel means calling `iter_messages` with a checkpoint cursor:
+
+```python
+async for message in client.iter_messages(
+    entity,
+    min_id=checkpoint_id,
+    reverse=True,
+    limit=3000,
+):
+    await publish_to_worker(message)
+```
+
+`reverse=True` walks forward from the checkpoint, so resuming a scrape after a restart doesn't re-process old messages. The checkpoint is stored in PostgreSQL and updated atomically after each batch commits to Kafka.
+
+Invite link resolution uses `CheckChatInviteRequest` — Telegram's RPC for probing private channel metadata without joining. This gives us channel title, member count, and admin signatures from an invite hash alone, which feeds the graph subsystem's topology map.
+
+File downloads use the same session pool. Telethon streams file data in chunks; the session-manager relays those chunks to the **download-worker** over HTTP. I settled on 512 KB chunks after testing: larger chunks caused session timeouts on slow connections; smaller chunks introduced too much HTTP overhead per file.
+
+### 3.2 Job Dispatch with SKIP LOCKED
+
+The download-worker claims scrape jobs from PostgreSQL using a pattern that avoids distributed locks:
+
+```sql
+SELECT id, source_id, channel_identifier
+FROM scrape_jobs
+WHERE status = 'pending'
+  AND scheduled_at <= NOW()
+ORDER BY priority DESC, scheduled_at ASC
+FOR UPDATE SKIP LOCKED
+LIMIT 1;
+```
+
+`SKIP LOCKED` means multiple workers can race for jobs without blocking each other. Jobs that are locked by another worker are transparently skipped. This gives horizontal scalability for free — spin up more download-worker replicas and the queue drains faster with zero coordination overhead.
+
+### 3.3 Kafka and Three-Tier File Priority
+
+Once a message is fetched, the download-worker publishes it to the `messages.discovered` Kafka topic. Files attached to that message get routed to one of three priority topics:
+
+- `files.priority` — text files (credential dumps, plain-text logs)
+- `files.archives` — ZIP, RAR, 7z, TAR
+- `files.pending` — everything else (images, documents, binaries)
+
+The file-worker consumes these topics in strict priority order. Text files land in MinIO's `txt-dumps/` bucket for immediate parsing; archives go to `archives/`; executables and unknown formats are quarantined. SHA-256 is computed at download time and stored in PostgreSQL — duplicate files are detected before they're written, keeping the bucket clean.
+
+---
+
+## 4. The Archive Problem
+
+Open any stealer-log archive and you'll find a surprisingly consistent internal structure. The stealer client runs on the victim machine, collects credentials from browsers, writes everything to a local directory, and then compresses it before exfiltrating to the C2 server or dropping it directly to a Telegram channel.
+
+Each stealer family has evolved its own layout convention. A Lumma archive looks like this:
+
+```
+LummaC2_2024_01_15_SESSION_12345/
+├── domain_detect.txt          ← family fingerprint
+├── Passwords/
+│   ├── Chrome_Default.txt
+│   └── Firefox.txt
+├── Cookies/
+│   ├── Chrome_Default.txt
+│   └── network.txt
+├── Autofill/
+│   └── Chrome_Default.txt
+└── System Info.txt
+```
+
+A WhiteSnake archive looks entirely different:
+
+```
+System_HOSTNAME_WIN10PRO/
+├── Browsers/
+│   ├── Passwords/
+│   └── Cookies/
+├── Cookies/                   ← root-level cookies too
+├── BankCards.txt
+└── System.txt
+```
+
+These are not cosmetic differences. A parser that assumes Lumma layout on a WhiteSnake archive will misroute the password files and produce nothing. Before I could write a single extractor, I needed a way to identify the family and select the right parsing logic.
+
+---
+
+## 5. The Parser Pipeline
+
+The **parser_logs** subsystem implements a six-stage pipeline. Archives go in, structured JSON records come out.
+
+<GolliathParserPipeline />
+
+### 5.1 Safety Before Parsing
+
+The walker enforces hard limits before extracting a single byte of content. This matters because attackers have started distributing archive bombs — intentionally malformed archives that expand to hundreds of gigabytes — and zip-slip payloads that try to write outside the extraction directory.
+
+```python
+ARCHIVE_BOMB_RATIO = 20        # compressed:uncompressed > 20× → abort
+ARCHIVE_BOMB_MIN_SIZE = 1_048_576  # only apply ratio check above 1 MB
+MAX_ENTRY_COUNT = 100_000
+MAX_NESTED_DEPTH = 3
+```
+
+Zip-slip protection resolves all paths relative to the extraction root and rejects any entry whose resolved path escapes it:
+
+```python
+def _safe_extract_path(archive_root: Path, entry_name: str) -> Path:
+    target = (archive_root / entry_name).resolve()
+    if not str(target).startswith(str(archive_root.resolve())):
+        raise ZipSlipError(f"Attempted path traversal: {entry_name}")
+    return target
+```
+
+These aren't theoretical risks. I found zip-slip payloads in the wild corpus during testing.
+
+### 5.2 Layout Classification and Grammar Selection
+
+After safe extraction, the **layout classifier** surveys the directory tree without reading file contents. It looks for family-specific structural signatures:
+
+- `domain_detect.txt` or `domaindetect.txt` at root → **Lumma** signal
+- `Network/` containing `UserName_*` subdirectories → **RisePro** signal
+- `System_HOSTNAME/` directories at root → **WhiteSnake** signal
+- `log.txt` at root with a `Passwords/` sibling → **RedLine** signal
+
+These signals are passed to the **GrammarRouter**, which calls `matches()` on every registered grammar and picks the highest scorer above 0.60:
+
+```python
+class GrammarRouter:
+    def __init__(self, grammars: list[FamilyGrammar]) -> None:
+        self._grammars = sorted(grammars, key=lambda g: g.priority, reverse=True)
+
+    def route(self, layout: ArchiveLayout) -> FamilyGrammar:
+        scores = [(g, g.matches(layout)) for g in self._grammars]
+        best_grammar, best_score = max(scores, key=lambda x: x[1])
+        if best_score >= CONFIDENCE_THRESHOLD:
+            return best_grammar
+        return self._generic  # unconditional fallback
+```
+
+<GolliathGrammarRouter />
+
+The threshold of 0.60 was chosen empirically: below it, the grammar was wrong more often than the generic fallback would be. Tie-breaking favors more-specific grammars — `GenericGrammar` always returns 0.0, so it never wins a competition.
+
+---
+
+## 6. Family Grammars
+
+Every stealer family gets its own `FamilyGrammar` subclass. The abstract base defines a simple contract:
+
+<CollapsibleCode title="FamilyGrammar ABC" language="python">
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
+
+@dataclass
+class ArchiveLayout:
+    root: Path
+    entries: list[str]
+    file_tree: dict[str, list[Path]]
+
+class FamilyGrammar(ABC):
+    priority: int = 0  # higher = tried first in sort order
+
+    @abstractmethod
+    def matches(self, layout: ArchiveLayout) -> float:
+        """Return confidence 0.0–1.0. Above 0.60 wins routing."""
+        ...
+
+    @abstractmethod
+    def extract(self, layout: ArchiveLayout) -> SessionRecord:
+        """Parse the layout and return a structured session record."""
+        ...
+```
+</CollapsibleCode>
+
+### 6.1 LummaGrammar
+
+Lumma is the dominant stealer-as-a-service family in the current corpus. Its archives are identified by `domain_detect.txt` — a list of domains that the stealer was configured to target, one per line.
+
+<CollapsibleCode title="LummaGrammar.matches()" language="python">
+```python
+class LummaGrammar(FamilyGrammar):
+    priority = 80
+
+    def matches(self, layout: ArchiveLayout) -> float:
+        has_domain_detect = any(
+            e.lower() in ("domain_detect.txt", "domaindetect.txt")
+            for e in layout.entries
+        )
+        if not has_domain_detect:
+            return 0.05
+        has_passwords = "Passwords" in layout.file_tree
+        has_cookies = "Cookies" in layout.file_tree
+        score = 0.70
+        if has_passwords:
+            score += 0.07
+        if has_cookies:
+            score += 0.05
+        return min(score, 1.0)
+```
+</CollapsibleCode>
+
+The `domain_detect.txt` file is also intelligence in itself — it reveals which domains the affiliate configured the stealer to prioritize, often including specific banking, crypto exchange, and corporate SSO domains.
+
+### 6.2 RiseProGrammar
+
+RisePro organizes each victim session into a named subdirectory under `Network/`. The directory name encodes a username hash: `Network/UserName_a3f9b2/`. This layout is distinctive enough that the classifier scores it at ~0.88.
+
+<CollapsibleCode title="RiseProGrammar.matches()" language="python">
+```python
+class RiseProGrammar(FamilyGrammar):
+    priority = 88
+
+    _USERNAME_PATTERN = re.compile(r"^UserName_[A-Za-z0-9]+$")
+
+    def matches(self, layout: ArchiveLayout) -> float:
+        network_children = layout.file_tree.get("Network", [])
+        username_dirs = [
+            p for p in network_children
+            if p.is_dir() and self._USERNAME_PATTERN.match(p.name)
+        ]
+        if not username_dirs:
+            return 0.04
+        ratio = len(username_dirs) / max(len(network_children), 1)
+        return 0.75 + (0.13 * ratio)
+```
+</CollapsibleCode>
+
+### 6.3 WhiteSnakeGrammar
+
+WhiteSnake is the highest-confidence detection at 0.95 when both signals co-occur: `System_HOSTNAME/` directories (one per victim session in aggregator repacks) and a root-level `Cookies/` directory.
+
+### 6.4 GenericGrammar — The Fallback
+
+When no family grammar scores above 0.60, `GenericGrammar` takes over. It runs all four password format parsers in cascade and tries the best-effort cookie parser. Coverage is lower than a matched grammar, but it's still far better than discarding the archive entirely.
+
+The fallback handles roughly 15% of the corpus in practice — mostly aggregator repacks that strip or rename the family-specific files before redistribution.
+
+---
+
+## 7. Field Extractors
+
+Once the grammar routes the archive, per-role extractors run against the classified file list. The most complex is the **password extractor**, which handles four distinct formats across stealer families.
+
+### 7.1 Password Format Cascade
+
+Passwords are parsed in priority order, stopping at the first format that yields results:
+
+**1. Key:value blocks** (Lumma, some RedLine variants):
+```
+URL: https://example.com/login
+UserName: alice@corp.com
+Password: hunter2
+
+URL: https://bank.example/auth
+...
+```
+
+**2. TSV format** (RisePro):
+```
+https://mail.google.com	alice@gmail.com	••••••••
+https://github.com	alice	gh_token_abc123
+```
+
+**3. Pipe-separated** (RedLine v22+):
+```
+https://twitter.com/|alice|P@ssw0rd!
+```
+
+**4. Colon-separated** (WhiteSnake, generic):
+```
+https://corp.okta.com:alice@corp.com:S3cur3P@ss
+```
+
+Each format parser is implemented as a standalone function that returns `list[PasswordRecord] | None`. The cascade tries them in order and short-circuits on the first non-empty result. If all four fail, the file is logged as unparseable and added to the backlog.
+
+### 7.2 Cookie Parsing
+
+Cookies follow the Netscape 7-column TSV format that browsers export. The parser enforces strict column counts — the most common corruption in wild archives is lines with missing tab separators, which a lenient parser would silently misparse into wrong fields.
+
+```python
+NETSCAPE_COLUMNS = 7
+
+def parse_netscape_cookies(text: str) -> list[CookieRecord]:
+    records = []
+    for line in text.splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        cols = line.split("\t")
+        if len(cols) != NETSCAPE_COLUMNS:
+            # Log and skip — do not attempt partial parsing
+            continue
+        domain, include_subdomains, path, secure, expiry, name, value = cols
+        records.append(CookieRecord(
+            domain=domain.lstrip("."),
+            path=path,
+            name=name,
+            value=value,
+            secure=secure.upper() == "TRUE",
+            http_only=False,
+            expires=int(expiry) if expiry.isdigit() else None,
+        ))
+    return records
+```
+
+The 14.9 million cookies in the benchmark corpus made this the highest-volume extractor by a wide margin. Session cookies are the primary target: a valid session cookie bypasses MFA entirely.
+
+### 7.3 System Info and the Alias Map
+
+Every stealer writes a system fingerprint file, but the field names are not standardized. Lumma calls it `System Info.txt` with `IP: 1.2.3.4` lines; WhiteSnake uses `System.txt` with `Ip =` lines; RedLine uses `log.txt` with `IP Address:` lines.
+
+The system info extractor maintains an alias map:
+
+```python
+FIELD_ALIASES: dict[str, list[str]] = {
+    "hostname": ["computer name", "hostname", "pc name", "computername"],
+    "ip": ["ip", "ip address", "external ip", "wan ip"],
+    "os": ["os", "operating system", "windows version"],
+    "hardware": ["hardware", "cpu", "gpu", "ram", "processor"],
+    "country": ["country", "location", "geo"],
+    "hwid": ["hwid", "machine id", "hardware id", "uuid"],
+}
+```
+
+Normalization means downstream queries (`WHERE system_info.country = 'US'`) work regardless of which stealer family produced the record.
+
+---
+
+## 8. NLP Enrichment
+
+After extraction, every session passes through the **NLP enrichment pipeline**. Two things happen here: <Term concept="Indicator of Compromise" /> extraction and named-entity recognition on the free-text fields.
+
+### 8.1 IOC Extraction
+
+IOC extraction uses compiled regex patterns with domain TLD validation:
+
+```python
+IOC_PATTERNS = {
+    "domain":  re.compile(r"\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b"),
+    "ipv4":    re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"),
+    "url":     re.compile(r"https?://[^\s\"'<>]+"),
+    "wallet":  re.compile(r"\b(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}\b|0x[a-fA-F0-9]{40}"),
+    "cve":     re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE),
+}
+```
+
+The domain extractor runs every match through a TLD allowlist before accepting it. This eliminates the long tail of false positives you get from free-form text — words like `example.log` or `victim.txt` look like domains to a naive regex but are discarded after TLD rejection.
+
+### 8.2 Named Entity Recognition
+
+The enrichment pipeline supports three NER configurations:
+
+| Model | F1 | Speed | Best for |
+|---|---|---|---|
+| **DistilBERT-NER** | 0.81 | Fast | Default; English stealer logs |
+| **CyNER** | 0.74 | Fast | CTI-specific entity types (TTP, malware) |
+| **XLM-RoBERTa** | 0.76 | Slow | Non-English archives (Russian, Turkish) |
+
+CyNER was developed specifically for cybersecurity text and handles entity types that general NER models miss, but its overall F1 on the benchmark was slightly below DistilBERT. XLM-RoBERTa is the right choice for archives from Eastern European operator groups where the system info and file paths contain Cyrillic text.
+
+### 8.3 Session Deduplication via HDBSCAN
+
+Aggregators routinely repackage the same victim sessions under different branding. A session that appeared in three separate archive releases would count three times without deduplication.
+
+<Term concept="HDBSCAN" /> clustering on multilingual embeddings catches near-duplicate sessions: if two sessions have the same hostname, IP, and browser profile fingerprint, they cluster tightly regardless of the archive they came from. The benchmark showed ~12% of sessions in the corpus were duplicates by this measure.
+
+<GolliathBenchmark />
+
+---
+
+## 9. The Aggregator Problem
+
+A significant fraction of Telegram stealer-log channels are not operators — they're **aggregators**. They buy log packs from multiple stealer networks, strip identifying metadata, rebrand the archives, and resell them to credential stuffers.
+
+This matters for two reasons. First, the rebranding often removes or renames the family-specific files (like `domain_detect.txt`), pushing more archives into the generic fallback. Second, aggregators sometimes use the password field itself as advertising space:
+
+```
+URL: https://mail.google.com
+UserName: alice@gmail.com
+Password: JOIN @BESTLOGS FOR MORE  ← channel promotion, not a credential
+```
+
+The extractor detects and discards these entries using a heuristic: if the password field matches a `@` handle, a `t.me/` URL, or common promotional phrases, the record is flagged and excluded from the credential index.
+
+Known aggregator brands encountered in the corpus: **Exodus**, **AzoriX**, **MOAB Stealer**, **PureLog**, **Shadow Logs**, **UnknownStealer**, **Meduza**, **StealC** repacks, and several unnamed ones identified only by watermark patterns.
+
+The watermark removal is a separate post's worth of content. In short: most watermarks are added as directory name prefixes (`[EXODUS] SESSION_123/`) or injected into `System Info.txt` headers. Both are stripped during layout classification before the grammar sees them.
+
+---
+
+## 10. Intelligence at the Top — Querying the Corpus
+
+With the parsed data in OpenSearch and the relationship graph in Neo4j, meaningful intelligence queries become fast.
+
+### 10.1 Domain Exposure Reports
+
+The most common operational query: "Is domain X in the credential set?" Two-pass OpenSearch aggregation:
+
+1. First pass: count sessions containing credentials for the target domain
+2. Second pass: enumerate unique username/password pairs, deduplicated by credential hash
+
+Results feed directly into the `/hunt` API endpoint and surface in the frontend's domain search.
+
+### 10.2 Channel Topology via Neo4j
+
+The graph model captures how threat actor infrastructure connects:
+
+```cypher
+MATCH (a:Source)-[:FORWARDED_FROM_SOURCE]->(b:Source)
+WHERE b.identifier = '@target_channel'
+RETURN a.title, a.member_count, a.created_at
+ORDER BY a.member_count DESC
+```
+
+This surfaces every channel that has forwarded content from a target channel — revealing distribution networks and shared admin infrastructure that's invisible from message-level analysis.
+
+### 10.3 Actor Pivoting
+
+```cypher
+MATCH (u:TelegramUser)-[:ACTIVE_IN]->(s:Source)
+WHERE s.identifier IN ['@chan_a', '@chan_b']
+WITH u, collect(s.identifier) AS channels
+WHERE size(channels) > 1
+RETURN u.username, channels
+```
+
+A user active in multiple monitored channels is a pivot point — potentially an operator, reseller, or admin cross-posting content.
+
+---
+
+## 11. Results
+
+One benchmark run against a real-world corpus:
+
+| Metric | Value |
+|---|---|
+| Credentials | 314,717 |
+| Cookies | 14,900,000 |
+| Autofill records | 28,409 |
+| Credit card records | 1,204 |
+| Parser throughput | 10.5 MB/s |
+| Messages indexed | 234,757 |
+| Message indexing rate | 1,958.7 msg/s |
+| IOCs extracted | 277,965 |
+| IOC type breakdown | 68.1% domains, 18.4% URLs, 10.4% IPs, 2.2% wallets, 0.8% CVEs |
+
+The grammar router correctly identified the family for 85% of archives. The remaining 15% fell through to `GenericGrammar`, which still extracted credentials from most of them — just with lower field completeness.
+
+---
+
+## What's Next
+
+The parser backlog has a few open items: **email extraction** (deferred because regexes produce too many false positives without a verification step), **browser history parsing** (the files exist in most archives but aren't yet structured), and **MLflow integration** for tracking grammar performance across corpus versions.
+
+On the collection side, I want to add **reaction-weighted scrape priority** — channels where file posts get heavy reactions (indicating active buyers) should be scraped more aggressively than quiet channels.
+
+The frontend's `/explorer` view is partially built — it can display sessions and credentials but doesn't yet surface the HDBSCAN cluster view or the actor-pivot graph inline. That's the next frontend sprint.
+
+If you're working on something in the same space — authorized Telegram CTI, stealer-log parsing, or threat actor graph analysis — the source is at [github.com/0xhabib/Golliath](#). I'm also happy to talk through the grammar design or the Kafka topology in more detail.
+
+---
+
+## References & Further Reading
+
+- Telethon documentation — MTProto client for Python
+- OWASP ZIP Slip Vulnerability — archive traversal attack surface
+- Bianco, D. — *The Pyramid of Pain* (referenced in [CTI Foundations](/posts/cti-foundations-the-threat-intelligence-pyramid))
+- CyNER: Cybersecurity Named Entity Recognition — Ranade et al., 2021
+- HDBSCAN: Density-Based Clustering — Campello et al., 2013
+- *Grammar-Based Stealer Log Parsing* — [previous post](/posts/grammar-based-stealer-parser) on the parsing approach that Golliath's grammar system extends

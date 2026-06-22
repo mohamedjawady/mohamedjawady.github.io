@@ -35,6 +35,10 @@ import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
 import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
 import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
+import { GolliathArchitecture } from "@/components/visualizations/golliath-architecture"
+import { GolliathParserPipeline } from "@/components/visualizations/golliath-parser-pipeline"
+import { GolliathGrammarRouter } from "@/components/visualizations/golliath-grammar-router"
+import { GolliathBenchmark } from "@/components/visualizations/golliath-benchmark"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
@@ -95,6 +99,11 @@ const visualizationComponents = {
   // SaltStack
   'SaltArchitecture': SaltArchitecture,
   'SaltExerciseDiagram': SaltExerciseDiagram,
+  // Golliath CTI
+  'GolliathArchitecture': GolliathArchitecture,
+  'GolliathParserPipeline': GolliathParserPipeline,
+  'GolliathGrammarRouter': GolliathGrammarRouter,
+  'GolliathBenchmark': GolliathBenchmark,
 }
 
 export async function generateStaticParams() {

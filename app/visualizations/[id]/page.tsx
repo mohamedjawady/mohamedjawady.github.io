@@ -39,6 +39,7 @@ import { GolliathArchitecture } from "@/components/visualizations/golliath-archi
 import { GolliathParserPipeline } from "@/components/visualizations/golliath-parser-pipeline"
 import { GolliathGrammarRouter } from "@/components/visualizations/golliath-grammar-router"
 import { GolliathBenchmark } from "@/components/visualizations/golliath-benchmark"
+import { GolliathCountryMap } from "@/components/visualizations/golliath-country-map"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 import { MDXRemote } from "next-mdx-remote/rsc"
@@ -104,6 +105,7 @@ const visualizationComponents = {
   'GolliathParserPipeline': GolliathParserPipeline,
   'GolliathGrammarRouter': GolliathGrammarRouter,
   'GolliathBenchmark': GolliathBenchmark,
+  'GolliathCountryMap': GolliathCountryMap,
 }
 
 export async function generateStaticParams() {

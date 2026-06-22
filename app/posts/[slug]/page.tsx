@@ -52,6 +52,7 @@ import { GolliathArchitecture } from "@/components/visualizations/golliath-archi
 import { GolliathParserPipeline } from "@/components/visualizations/golliath-parser-pipeline"
 import { GolliathGrammarRouter } from "@/components/visualizations/golliath-grammar-router"
 import { GolliathBenchmark } from "@/components/visualizations/golliath-benchmark"
+import { GolliathCountryMap } from "@/components/visualizations/golliath-country-map"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { SeriesNavigation } from "@/components/series-navigation"
@@ -103,6 +104,7 @@ const postComponents = {
   GolliathParserPipeline: () => <GolliathParserPipeline />,
   GolliathGrammarRouter: () => <GolliathGrammarRouter />,
   GolliathBenchmark: () => <GolliathBenchmark />,
+  GolliathCountryMap: () => <GolliathCountryMap />,
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   CollapsibleCode: CollapsibleCode,

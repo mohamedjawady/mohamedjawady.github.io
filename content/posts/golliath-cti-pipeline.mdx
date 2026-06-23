@@ -615,7 +615,7 @@ Pipelines are defined declaratively, trigger plus condition plus action, rather 
 
 ## 15. TLD Analytics and Geographic Density
 
-After roughly a month of continuous parsing, deduplicating repeated archive releases across that window brings the corpus to **315M+ unique credentials** across 60 TLDs, revealing a clear geographic picture of who is being targeted. The `.com` namespace dominates at 148M credentials, unsurprising given that most global services use `.com` domains. Among country-code TLDs, Brazil leads by a wide margin (7.1M), followed by India (4.8M) and Indonesia (3.6M).
+After roughly a month of continuous parsing, deduplicating repeated archive releases across that window brings the corpus to **315M+ unique credentials** across 60 TLDs. The ULP parsing pipeline alone has processed roughly **16 billion raw ULP lines** to arrive at that deduplicated count, the scale at which silent misparsing in the cascade becomes a real data-quality problem rather than a theoretical one. The result reveals a clear geographic picture of who is being targeted. The `.com` namespace dominates at 148M credentials, unsurprising given that most global services use `.com` domains. Among country-code TLDs, Brazil leads by a wide margin (7.1M), followed by India (4.8M) and Indonesia (3.6M).
 
 The per-capita view is more revealing. When normalized against population, smaller countries can surface as disproportionately targeted. Countries in Latin America (Peru, Chile) and Southeast Asia (Vietnam, Indonesia) rank higher per-capita than their absolute numbers suggest, consistent with the known geographic distribution of stealer-malware campaigns that favor regions with high smartphone penetration but lower security awareness.
 

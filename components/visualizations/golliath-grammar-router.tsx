@@ -51,7 +51,6 @@ const GRAMMARS: Grammar[] = [
         evidence: [
             "System_<HOSTNAME>/ directories in root",
             "Cookies/ directory at root level",
-            "BankCard*.txt files present",
         ],
         fields: ["passwords (colon-separated)", "cookies", "autofill", "credit cards"],
         example: "WhiteSnake Stealer aggregator repacks",

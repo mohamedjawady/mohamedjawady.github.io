@@ -8,7 +8,7 @@ banner: "https://images.unsplash.com/photo-1714901423336-1884cd3fb50f?q=80&w=147
 visibility: "public"
 ---
 
-> **Authorized research only.** Everything described here was conducted in a controlled environment against data I had lawful authorization to analyze. Golliath does not facilitate unauthorized access, credential use, or victim contact of any kind.
+> **Authorized research only.** Everything described here was conducted in a controlled environment against data I had lawful authorization to analyze. Golliath does not facilitate unauthorized access, credential use, or victim contact of any kind. Once analytics and processing for an authorized engagement are complete, the underlying raw data is deleted; only derived, non-sensitive metrics and aggregates of the kind shown in this post are retained.
 
 Every day, hundreds of Telegram channels publish stealer logs, archives packed with credentials, cookies, and system fingerprints from compromised machines. Most <Term concept="Threat Intelligence" /> teams consume this data passively, via commercial feeds, by the time the intelligence is already stale. I wanted to get closer to the source: build something that scraped channels in real time, parsed the archive formats properly, and gave me a structured, searchable view of what was being shared.
 
@@ -56,6 +56,20 @@ Golliath is not a single application. It is six loosely-coupled subsystems that 
 <GolliathArchitecture />
 
 The collection subsystem (data_lake) is the entry point. It scrapes channels, downloads files, and publishes events. Everything downstream (parser, analysis, frontend) consumes from shared storage and search indices. This separation means I can run the parser against the same corpus multiple times as the grammar logic evolves, without re-scraping anything.
+
+### 3.1 Why These Technologies
+
+None of these choices were made in a vacuum; each is a direct answer to a constraint that shows up elsewhere in this post.
+
+**Go for collection, Python for everything downstream.** Collection is almost entirely I/O-bound: hundreds of concurrent Telegram sessions, file downloads, Kafka publishes, exactly the workload goroutines and channels are built for, and a single static binary is easy to run as a horizontally-scaled worker fleet (Section 5.2's `SKIP LOCKED` dispatch assumes you can cheaply spin up more workers). Parsing and analysis go the other way: archive-format support (`zipfile`, `rarfile`, `py7zr`) and the entire ML/NLP ecosystem (scikit-learn, HDBSCAN, transformer libraries) live in Python first. Writing either side in the other language would mean fighting the ecosystem instead of using it.
+
+**Kafka as the event backbone.** The alternative was wiring scraping directly into parsing: scrape a message, parse whatever's attached, move on. That breaks the moment grammar logic changes, because re-running the parser then means re-scraping. Kafka decouples the two: `messages.discovered` and the file-priority topics let collection run at its own pace while parsing replays from the same topic whenever a grammar gets fixed or a new one gets added, with zero re-scraping. The two-tier `files.priority` / `files.archives` split exists for a smaller version of the same reason: text dumps are cheap to parse and worth indexing immediately, archives are not, so they shouldn't compete for the same worker slot.
+
+**OpenSearch for search, Neo4j for relationships.** These solve different query shapes, and neither engine is good at the other's job. "Does domain X appear in the credential set" (Section 14.1) is a full-text and aggregation problem; "who has this user been active with across channels" (Section 14.3) is a multi-hop graph traversal. Expressing the second one as SQL joins or a manual OpenSearch aggregation gets ugly fast, where Cypher pattern matching reads almost like the question itself. Running both engines, rather than forcing one to do the other's job, keeps each query at the complexity it actually deserves.
+
+**MinIO over a managed object store.** Archives and txt-dumps are large, numerous, and need to be addressable by SHA-256 without a recurring cloud-storage bill or a dependency on a specific provider's API. MinIO is S3-compatible, so the SDK code doesn't care that it's self-hosted, and self-hosting it keeps the entire pipeline runnable inside a controlled environment instead of handing this category of data to third-party infrastructure.
+
+**PostgreSQL for state, not just storage.** Job state, the source registry, and the invite-link graph are all relational by nature, and `SELECT ... FOR UPDATE SKIP LOCKED` (Section 5.2) gives the download-worker queue semantics, multiple workers claiming jobs without blocking each other, without needing a separate queue product layered on top of a database the rest of the system already required.
 
 ---
 
@@ -154,7 +168,7 @@ After 2,208,360 indexed messages (2.2M+) across the monitored source set, the Op
 
 Two separate sampling pipelines run against this corpus, and it's easy to conflate them since both start with "grab some content, send it to an LLM." They solve different problems.
 
-**Channel categorization.** Manually reviewing hundreds of messages per source to decide its category does not scale. Golliath samples a random subset of *messages* from each unclassified source (typically 20-50) and passes them to **Gemini 2.5 Flash**, which returns a category guess for the source, logs, chatter, ULP, combos, marketplace, and so on, along with the signal it used to decide. A human analyst reviews the labels in Doccano, correcting errors; the labeled set trains a Gradient Boosting Classifier (85/15 train/test split, confidence threshold 0.70) that auto-categorizes future sources. This is the step that reduced manual categorization effort by roughly 80%; the residual ~20% (sources where classifier confidence falls below threshold or the content is ambiguous) still go to human review.
+**Channel categorization.** Manually reviewing hundreds of messages per source to decide its category does not scale. Golliath samples a random subset of *messages* from each unclassified source (typically 20-50) and passes them to **Gemini 2.5 Flash**, picked over a larger model because the sample is small, the categories are coarse-grained, and at the volume of sources Golliath processes, per-token cost and latency dominate over the marginal accuracy a bigger model would add. Gemini returns a category guess for the source, logs, chatter, ULP, combos, marketplace, and so on, along with the signal it used to decide. A human analyst reviews the labels in **Doccano**, chosen because it's open-source and self-hostable, which matters when the data being annotated is credential-adjacent and shouldn't leave a controlled environment, correcting errors; the labeled set trains a **Gradient Boosting Classifier** (85/15 train/test split, confidence threshold 0.70) that auto-categorizes future sources. A tree ensemble was enough here because the category signal is a handful of coarse per-source features, not raw free text; it retrains in seconds on a CPU whenever new labeled sources arrive, which a deep model would not meaningfully outperform at this scale. This is the step that reduced manual categorization effort by roughly 80%; the residual ~20% (sources where classifier confidence falls below threshold or the content is ambiguous) still go to human review.
 
 **Field extraction sampling.** Separately, Golliath samples raw `.txt` files from the same corpus, not Telegram messages, and asks Gemini to extract structured fields per line: URL, USERNAME, PASSWORD, DOMAIN, SUBDOMAIN. The prompt handles all four common credential delimiters, `email:password`, `url:user:pass`, `url|user|pass`, and variants where the password itself contains a colon (joined as trailing fields), and returns a strict JSON array with no markdown. Labels for the hardest 1,000 lines were fully reviewed by hand before being committed to the training set.
 
@@ -509,7 +523,7 @@ In the same benchmark run referenced above, this surfaced 28,409 autofill record
 
 The 15% of archives that fall through to `GenericGrammar` aren't just overflow to tolerate. They're also where the next family lives before anyone has named it. Underground stealer development moves fast: builders fork, forks get rebranded, rebrands get sold under a new name on a different channel. By the time a "new" stealer gets a name in public threat reporting, an unnamed variant may already have been circulating in the corpus for weeks, quietly falling through to the generic parser the entire time.
 
-The approach is to stop treating every fallback archive as an independent failure and instead look at them as a population. Each fallback archive gets embedded, not at the credential level, but at the structural level: directory depth, file-name n-grams, the order in which roles appear, the presence or absence of specific markers (a `domain_detect.txt`-shaped file under a different name, say). Those structural feature vectors get clustered with HDBSCAN, the same density-based clustering Golliath already relies on elsewhere in the pipeline, on multilingual embeddings so that a Russian-language variant and an English-language variant of the same underlying builder still land in the same cluster.
+The approach is to stop treating every fallback archive as an independent failure and instead look at them as a population. Each fallback archive gets embedded, not at the credential level, but at the structural level: directory depth, file-name n-grams, the order in which roles appear, the presence or absence of specific markers (a `domain_detect.txt`-shaped file under a different name, say). Those structural feature vectors get clustered with HDBSCAN, the same density-based clustering Golliath already relies on elsewhere in the pipeline, on multilingual embeddings so that a Russian-language variant and an English-language variant of the same underlying builder still land in the same cluster. HDBSCAN specifically, rather than something like k-means, because it doesn't require deciding the number of families in advance, and because it leaves sparse, one-off archives unclustered as noise instead of forcing them into the nearest group. That second property matters more than the first here: most fallback archives really are one-offs, not a new family in disguise, and a clustering method that has to assign every point to a cluster would manufacture false positives out of pure noise.
 
 A cluster that's large enough and tight enough, dozens of archives sharing an unusual but consistent layout, is worth a human look. Two outcomes follow from that look. Either it's a genuine new stealer family or a rebrand significant enough to warrant its own `FamilyGrammar`, in which case the fix is writing a new `matches()` / `extract()` pair and registering it the way the five in Section 9 were. Or it's an existing family whose builder changed, a file got renamed, a folder got moved, in which case the fix is usually a one-line addition to an existing grammar's signal set rather than a whole new grammar.
 
@@ -627,12 +641,13 @@ If you are working on something in the same space (authorized Telegram CTI, stea
 
 ## References & Further Reading
 
-- Telethon documentation: MTProto client for Python
-- OWASP ZIP Slip Vulnerability: archive traversal attack surface
-- MITRE ATT&CK, Credential Access (T1555 / T1539): the technique classes Golliath's extractors target
-- Doccano: open-source text annotation tool used for human review of LLM pre-labels
-- scikit-learn: `GradientBoostingClassifier`, used for the channel-categorization model in Section 6.2
+- [Telethon Documentation](https://docs.telethon.dev/en/stable/): the MTProto client library behind the session-manager service
+- [Snyk: The Zip Slip Vulnerability](https://snyk.io/research/zip-slip-vulnerability): the original disclosure research behind the archive-traversal protection in Section 8.1
+- [MITRE ATT&CK T1555: Credentials from Password Stores](https://attack.mitre.org/techniques/T1555/): the technique class the password extractor in Section 10.1 targets
+- [MITRE ATT&CK T1539: Steal Web Session Cookie](https://attack.mitre.org/techniques/T1539/): the technique class the cookie extractor in Section 10.2 targets
+- [Doccano](https://github.com/doccano/doccano): the open-source annotation tool used for human review of LLM pre-labels in Section 6.2
+- [scikit-learn: GradientBoostingClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingClassifier.html): the model behind the channel-categorization classifier in Section 6.2
+- [HDBSCAN: How It Works](https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html): the density-based clustering algorithm behind new-family discovery in Section 11
 - Bianco, D. *The Pyramid of Pain* (referenced in [CTI Foundations](/posts/cti-foundations-the-threat-intelligence-pyramid))
-- HDBSCAN: Density-Based Clustering, Campello et al., 2013
-- Krebs on Security: ongoing reporting on stealer-log markets and the underground credential economy
+- [Troy Hunt: Begging for Bounties and More Info Stealer Logs](https://www.troyhunt.com/begging-for-bounties-and-more-info-stealer-logs/): on the scale and resale dynamics of the stealer-log economy described in Section 2
 - *Grammar-Based Stealer Log Parsing* [previous post](/posts/grammar-based-stealer-parser) on the parsing approach that Golliath's grammar system extends

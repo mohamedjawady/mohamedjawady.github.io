@@ -1,4 +1,6 @@
 import { getAllPosts } from '@/lib/posts'
+
+export const dynamic = 'force-static'
 import { getAllVisualizations } from '@/lib/visualizations'
 import { getAllCheatsheets } from '@/lib/cheatsheets'
 import { getAllNotes } from '@/lib/notes'

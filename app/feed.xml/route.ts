@@ -1,6 +1,8 @@
 import { getAllPosts } from '@/lib/posts'
 import { getCanonicalUrl } from '@/lib/url'
 
+export const dynamic = 'force-static'
+
 export async function GET() {
   const posts = await getAllPosts()
   

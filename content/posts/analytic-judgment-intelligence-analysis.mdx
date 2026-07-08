@@ -27,6 +27,33 @@ The half that gets forgotten is synthesis. Intelligence work is not finished whe
 
 It helps to be precise about the raw material, because data, information, and intelligence are not synonyms. Walk one example up the ladder. The fact that `hr-payroll-view[.]com` resolved to 198.51.100.7 yesterday is data: a value with no meaning attached. The finding that this domain serves a credential phishing kit also present on six sibling domains sharing one TLS certificate is information: data organized to answer a factual question. The finding that three of your finance employees received the lure this week is also information. The statement that this is broad opportunistic credential harvesting rather than targeting of your sector, held with medium confidence because the kit's victim list spans more than forty unrelated industries, is intelligence. Only the last statement is a judgment. Only the last statement tells a decision maker what to do about MFA enforcement versus a full targeted-threat response.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 280" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Staircase diagram showing data at the bottom, information in the middle, and intelligence at the top, with the phishing domain example at each level">
+    <defs>
+      <marker id="ladderArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+    <rect x="25" y="185" width="200" height="70" rx="10" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="125" y="212" textAnchor="middle" fill="currentColor" fontSize="15" fontWeight="bold">DATA</text>
+    <text x="125" y="231" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.75" fontFamily="monospace">hr-payroll-view[.]com</text>
+    <text x="125" y="245" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.75" fontFamily="monospace">resolved to 198.51.100.7</text>
+    <rect x="260" y="105" width="200" height="70" rx="10" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.5" />
+    <text x="360" y="132" textAnchor="middle" fill="currentColor" fontSize="15" fontWeight="bold">INFORMATION</text>
+    <text x="360" y="151" textAnchor="middle" fill="currentColor" fontSize="11" opacity="0.75">the domain serves a phishing kit</text>
+    <text x="360" y="165" textAnchor="middle" fill="currentColor" fontSize="11" opacity="0.75">found on six sibling domains</text>
+    <rect x="495" y="25" width="200" height="70" rx="10" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.5" />
+    <text x="595" y="52" textAnchor="middle" fill="currentColor" fontSize="15" fontWeight="bold">INTELLIGENCE</text>
+    <text x="595" y="71" textAnchor="middle" fill="currentColor" fontSize="11" opacity="0.75">opportunistic, not targeted</text>
+    <text x="595" y="85" textAnchor="middle" fill="currentColor" fontSize="11" opacity="0.75">medium confidence, gaps stated</text>
+    <path d="M 232 212 L 254 152" stroke="currentColor" strokeWidth="2" opacity="0.6" fill="none" markerEnd="url(#ladderArrow)" />
+    <text x="258" y="200" fill="currentColor" fontSize="11" opacity="0.65">organize + enrich</text>
+    <path d="M 467 132 L 489 72" stroke="currentColor" strokeWidth="2" opacity="0.6" fill="none" markerEnd="url(#ladderArrow)" />
+    <text x="493" y="120" fill="currentColor" fontSize="11" opacity="0.65">analyze + judge</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The same event at three altitudes. Only the top rung tells a decision maker what to do.</p>
+</div>
+
 Notice what the judgment does not say. It does not claim certainty, because you never have all the collection. Intelligence customers want yes or no. What the discipline can honestly deliver is an assessment with a confidence level and a record of what would change it.
 
 One more inheritance from the traditional world matters here. Classic intelligence organized itself around collection disciplines: <Term concept="humint">HUMINT</Term> from human sources, <Term concept="sigint">SIGINT</Term> from intercepted signals, <Term concept="osint">OSINT</Term> from public material, and so on, with dedicated agencies cultivating deliberate specialization in each. CTI does not get that luxury. Nobody is running agents inside a ransomware crew for you. A CTI analyst is an <Term concept="all-source">all-source</Term> analyst by necessity, fusing malware analysis, infrastructure data, victimology, and open reporting. That is a strength, but it carries a warning: every analyst falls in love with one source. The reverse engineer trusts binaries, the network analyst trusts <Term concept="passive-dns">passive DNS</Term>, and each quietly overweights what their favorite source can see. Treat every source as one data point in an overall assessment, not as the assessment.
@@ -56,6 +83,35 @@ Richards Heuer spent forty-five years at the CIA and distilled what he saw into 
 An <Term concept="analytic-judgment">analytic judgment</Term> is what an intelligence function actually produces. Not indicators, not reports as a format, but a specific composite: an assessment, the confidence behind it, the evidence and assumptions it rests on, and the gaps that remain. A judgment about the past ("the intrusion's objective was pre-positioning, not theft") and a judgment about the future ("blocking this <Term concept="c2">C2</Term> channel will likely trigger re-entry within a week") are both legitimate products. A list of facts with no assessment attached is not.
 
 Hold the judgment to the same standard you would hold a forensic finding: defensible, repeatable, and understandable by someone who was not in the room. Another analyst should be able to walk your reasoning from evidence to conclusion and find where they disagree. If your judgment cannot survive that walk, it is an opinion wearing a confidence level.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 320" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Diagram of an analytic judgment: a central assessment connected to four components, confidence, evidence, assumptions, and gaps with revision triggers">
+    <line x1="205" y1="60" x2="248" y2="118" stroke="currentColor" strokeWidth="1.5" opacity="0.3" strokeDasharray="4 4" />
+    <line x1="515" y1="60" x2="472" y2="118" stroke="currentColor" strokeWidth="1.5" opacity="0.3" strokeDasharray="4 4" />
+    <line x1="205" y1="260" x2="248" y2="202" stroke="currentColor" strokeWidth="1.5" opacity="0.3" strokeDasharray="4 4" />
+    <line x1="515" y1="260" x2="472" y2="202" stroke="currentColor" strokeWidth="1.5" opacity="0.3" strokeDasharray="4 4" />
+    <rect x="235" y="115" width="250" height="90" rx="12" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="2" />
+    <text x="360" y="155" textAnchor="middle" fill="currentColor" fontSize="16" fontWeight="bold">ASSESSMENT</text>
+    <text x="360" y="176" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.7">one falsifiable sentence</text>
+    <rect x="25" y="25" width="180" height="64" rx="10" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="115" y="50" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">CONFIDENCE</text>
+    <text x="115" y="68" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">High / Medium / Low,</text>
+    <text x="115" y="81" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">justified by rubric</text>
+    <rect x="515" y="25" width="180" height="64" rx="10" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.5" />
+    <text x="605" y="50" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">EVIDENCE</text>
+    <text x="605" y="68" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">top supporting facts +</text>
+    <text x="605" y="81" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">what contradicts them</text>
+    <rect x="25" y="231" width="180" height="64" rx="10" fill="#8b5cf6" fillOpacity="0.12" stroke="#8b5cf6" strokeWidth="1.5" />
+    <text x="115" y="256" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">ASSUMPTIONS</text>
+    <text x="115" y="274" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">what this rests on,</text>
+    <text x="115" y="287" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">stated rather than implied</text>
+    <rect x="515" y="231" width="180" height="64" rx="10" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.5" />
+    <text x="605" y="256" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">GAPS + TRIGGERS</text>
+    <text x="605" y="274" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">what is missing + what</text>
+    <text x="605" y="287" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">would change the call</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A judgment ships as a package. Remove any piece and it turns back into an opinion.</p>
+</div>
 
 Confidence itself needs a rubric, or the words high and low mean whatever each analyst feels that day. The one I use is deliberately short. High confidence requires multiple independent sources plus corroborating telemetry, with recent validation. Medium means good supporting evidence from fewer sources or partial telemetry linkage, with identified gaps outstanding. Low means single-source reporting, uncorroborated signals, or a judgment resting on significant untested assumptions. Whatever rubric you adopt, write the top two supporting facts and the one gap that would most reduce confidence directly into the product, so the consumer can calibrate rather than trust.
 
@@ -110,6 +166,33 @@ Mental models earned a mention above as the fuel of System 1, and they deserve t
 
 Sorting data into buckets does two things that unsorted notes cannot. It exposes gaps, because an empty bucket is a visible, nagging question ("we have the delivery and the C2, why do we have nothing on lateral movement?"). And it enables pattern recognition across cases, because two intrusions bucketed the same way can be compared phase by phase, which is how campaigns get identified out of what first looked like unrelated incidents.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 230" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Four buckets labeled delivery, execution, command and control, and lateral movement. The first three contain evidence dots. The last is empty and drawn in dashed red with a question mark">
+    <path d="M 50 60 L 68 170 L 152 170 L 170 60" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <ellipse cx="110" cy="60" rx="60" ry="10" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <circle cx="95" cy="120" r="7" fill="#0ea5e9" />
+    <circle cx="125" cy="140" r="7" fill="#10b981" />
+    <circle cx="110" cy="156" r="7" fill="#f59e0b" />
+    <text x="110" y="196" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">Delivery</text>
+    <path d="M 220 60 L 238 170 L 322 170 L 340 60" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <ellipse cx="280" cy="60" rx="60" ry="10" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <circle cx="265" cy="128" r="7" fill="#8b5cf6" />
+    <circle cx="295" cy="150" r="7" fill="#0ea5e9" />
+    <text x="280" y="196" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">Execution</text>
+    <path d="M 390 60 L 408 170 L 492 170 L 510 60" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <ellipse cx="450" cy="60" rx="60" ry="10" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <circle cx="435" cy="132" r="7" fill="#10b981" />
+    <circle cx="465" cy="152" r="7" fill="#f59e0b" />
+    <text x="450" y="196" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">Command &amp; Control</text>
+    <path d="M 560 60 L 578 170 L 662 170 L 680 60" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 5" />
+    <ellipse cx="620" cy="60" rx="60" ry="10" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 5" />
+    <text x="620" y="140" textAnchor="middle" fill="#ef4444" fontSize="30" fontWeight="bold" opacity="0.85">?</text>
+    <text x="620" y="196" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">Lateral Movement</text>
+    <text x="620" y="214" textAnchor="middle" fill="#ef4444" fontSize="11">no data here is a finding</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>An empty bucket is not missing paperwork. It is a visible collection gap asking a question.</p>
+</div>
+
 The caution is that every model carries axioms, and the model only works where its axioms hold. The Diamond Model paper is admirably explicit about its own. The kill chain quietly assumes an external adversary progressing inward through phases, which is why it fits an insider case so badly. A model applied outside its assumptions does not fail loudly. It keeps producing tidy, structured, wrong pictures. State the axioms and you know when to put the model down.
 
 ## Where Analysis Breaks: Bias
@@ -118,6 +201,34 @@ Everyone has biases. They cannot be removed, because they are a side effect of t
 
 The case study that should be taught in every CTI onboarding is Olympic Destroyer. During the opening ceremony of the Pyeongchang Winter Olympics in February 2018, a wiper took down the Games' IT infrastructure: Wi-Fi, ticketing, the official website. Analysts worldwide dove into the sample, and the sample rewarded them. Its Rich header, a compiler artifact many analysts treat as a reliable fingerprint, matched a wiper previously used by the North Korean Lazarus group, and North Korea attributions promptly appeared in reporting. Then researchers at Kaspersky's GReAT examined the header more closely and found it was forged. The metadata did not match the code it sat on. Someone had deliberately planted Lazarus's fingerprint inside the malware, anticipating precisely which artifact analysts would trust and how fast they would run with it. The operation was later attributed to Russia's GRU: the October 2020 US indictment of six Sandworm officers lists the Olympic attack among their operations.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 210" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Timeline of the Olympic Destroyer attribution: attack in February 2018, forged Lazarus fingerprint drives North Korea reporting within days, Kaspersky exposes the forgery in March 2018, GRU indicted in October 2020">
+    <defs>
+      <marker id="tlArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+    <line x1="40" y1="105" x2="685" y2="105" stroke="currentColor" strokeWidth="2" opacity="0.4" markerEnd="url(#tlArrow)" />
+    <circle cx="90" cy="105" r="9" fill="currentColor" opacity="0.8" />
+    <text x="90" y="78" textAnchor="middle" fill="currentColor" fontSize="12.5" fontWeight="bold">Feb 9, 2018</text>
+    <text x="90" y="134" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">wiper disrupts the</text>
+    <text x="90" y="150" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">opening ceremony</text>
+    <circle cx="265" cy="105" r="9" fill="#ef4444" />
+    <text x="265" y="78" textAnchor="middle" fill="#ef4444" fontSize="12.5" fontWeight="bold">within days</text>
+    <text x="265" y="134" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">Rich header matches Lazarus,</text>
+    <text x="265" y="150" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">North Korea reporting spreads</text>
+    <circle cx="445" cy="105" r="9" fill="#f59e0b" />
+    <text x="445" y="78" textAnchor="middle" fill="#f59e0b" fontSize="12.5" fontWeight="bold">March 2018</text>
+    <text x="445" y="134" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">Kaspersky proves the header</text>
+    <text x="445" y="150" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">was forged: a false flag</text>
+    <circle cx="620" cy="105" r="9" fill="#10b981" />
+    <text x="620" y="78" textAnchor="middle" fill="#10b981" fontSize="12.5" fontWeight="bold">October 2020</text>
+    <text x="620" y="134" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">US indictment: GRU</text>
+    <text x="620" y="150" textAnchor="middle" fill="currentColor" fontSize="11.5" opacity="0.75">Sandworm officers</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Two and a half years separate the confident early attribution from the real one.</p>
+</div>
+
 Read as a bias lesson, the sequence is uncomfortable. The header felt diagnostic because it usually is, so it anchored the analysis. Everything found afterward was read in light of the North Korea hypothesis, which is <Term concept="confirmation-bias">confirmation bias</Term> operating exactly as designed. The geopolitical context made the hypothesis satisfying. And the adversary had engineered the entire experience, which is the modern reality: a competent <Term concept="threat-actor">threat actor</Term> knows your analytic shortcuts and can afford to feed them. A <Term concept="false-flag">false flag</Term> is an exploit against methodology, and the vulnerable component is the unexamined judgment.
 
 The pattern was not new. In April 2015, the French broadcaster TV5Monde was taken off the air across a dozen channels while its hijacked social accounts displayed the banner of the CyberCaliphate, an apparently ISIS-aligned group. The self-attribution anchored early coverage, as self-attribution reliably does. The subsequent investigation pointed instead to APT28, the Russian military intelligence group, using the jihadist persona as cover. The general rule: a claim of responsibility is not evidence about who did it. It is evidence about who someone wants you to think did it, and it should enter your matrix priced accordingly.
@@ -125,6 +236,39 @@ The pattern was not new. In April 2015, the French broadcaster TV5Monde was take
 Two quieter biases round out the set. <Term concept="mirror-imaging">Mirror imaging</Term> is assuming the adversary reasons like you: that they will value what you would value, avoid what you would avoid, and take the path that looks optimal from inside your head. Adversaries run on different economics, doctrine, and constraints, and the canonical demonstration comes from the traditional world: the Iraq WMD estimate, dissected by the Silberman-Robb commission as a case of assumptions so entrenched that contradicting evidence was explained away. The commission's findings are a free education in how a professional apparatus, staffed with smart people, collectively reasons its way to a confident wrong answer.
 
 The last one is structural rather than psychological: field-of-view bias. Your picture of the threat landscape is a function of your collection, and so is every vendor's. A firm whose customer base sits in Western finance sees the actors who target Western finance. An OT-focused vendor sees ICS-shaped threats. A vendor with heavy Middle East telemetry writes reports about actors your US-centric feeds barely mention. None of them are lying. All of them are describing the part of the ocean their nets reach, and only a fraction of the world's active intrusion sets operates in any single region or sector. Every time you ingest third-party reporting without asking what that vendor can and cannot see, you import their field of view as if it were the whole picture. The same applies to your own telemetry, which is why the team-level control for all of this is diversity in the honest, practical sense: analysts with different source loyalties, backgrounds, and mental models, empowered to challenge each other's judgments before publication. Ten reverse engineers produce malware-shaped intelligence. That is not a hiring slogan; it is collection coverage for your analytic process.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 260" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="A field of dots representing active intrusion sets worldwide. Two overlapping ellipses show what two vendors can each see. Several dots sit outside both ellipses, reported by no one">
+    <rect x="20" y="40" width="680" height="180" rx="14" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.35" />
+    <text x="36" y="62" fill="currentColor" fontSize="12" opacity="0.7">known active intrusion sets</text>
+    <ellipse cx="220" cy="130" rx="150" ry="72" fill="#0ea5e9" fillOpacity="0.08" stroke="#0ea5e9" strokeWidth="2" />
+    <ellipse cx="450" cy="130" rx="140" ry="70" fill="#f59e0b" fillOpacity="0.08" stroke="#f59e0b" strokeWidth="2" />
+    <circle cx="150" cy="100" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="190" cy="150" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="240" cy="120" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="120" cy="140" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="260" cy="160" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="200" cy="95" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="330" cy="120" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="345" cy="150" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="420" cy="100" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="455" cy="140" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="490" cy="120" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="410" cy="165" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="60" cy="70" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="75" cy="185" r="5" fill="currentColor" opacity="0.55" />
+    <circle cx="600" cy="80" r="5" fill="#ef4444" opacity="0.8" />
+    <circle cx="630" cy="110" r="5" fill="#ef4444" opacity="0.8" />
+    <circle cx="655" cy="145" r="5" fill="#ef4444" opacity="0.8" />
+    <circle cx="605" cy="175" r="5" fill="#ef4444" opacity="0.8" />
+    <circle cx="668" cy="90" r="5" fill="#ef4444" opacity="0.8" />
+    <text x="628" y="32" textAnchor="middle" fill="#ef4444" fontSize="11.5">reported by no one</text>
+    <line x1="628" y1="38" x2="626" y2="72" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.7" />
+    <text x="190" y="244" textAnchor="middle" fill="#0ea5e9" fontSize="12" fontWeight="bold">vendor A telemetry</text>
+    <text x="490" y="244" textAnchor="middle" fill="#f59e0b" fontSize="12" fontWeight="bold">vendor B telemetry</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every vendor describes the part of the ocean their nets reach. So does your own telemetry.</p>
+</div>
 
 ## Structured Analytic Techniques
 

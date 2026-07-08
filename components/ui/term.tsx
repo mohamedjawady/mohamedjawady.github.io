@@ -87,6 +87,21 @@ const glossary: TermDefinition = {
 	"idempotency": "Idempotency is the property where applying an operation multiple times produces the same result as applying it once. In configuration management, an idempotent state only makes changes when the system deviates from the desired configuration.",
 	"highstate": "Highstate (state.highstate or state.apply) is the Salt command that applies all states defined in the top.sls file to the targeted Minions, bringing them into compliance with their declared configuration.",
 	"jinja": "Jinja is a Python-based templating engine used in Salt state files to insert dynamic values, conditionals, and loops into YAML configuration. It enables states to adapt based on Grains, Pillar data, or other runtime context.",
+	"ach": "Analysis of Competing Hypotheses - a structured analytic technique developed by Richards Heuer. The analyst lists all plausible hypotheses, scores each piece of evidence against every hypothesis, and selects the hypothesis with the least inconsistent evidence rather than the most consistent.",
+	"structured-analytic-techniques": "Structured Analytic Techniques (SATs) - documented methods that externalize an analyst's reasoning so it can be examined, challenged, and reproduced. They reduce the impact of cognitive bias by forcing decomposition and visualization of the problem.",
+	"analytic-judgment": "An analytic judgment is the actual product of intelligence analysis: an assessment paired with an explicit confidence level, the key evidence behind it, the assumptions it rests on, and the gaps that remain.",
+	"confirmation-bias": "The tendency to seek, weight, and remember evidence that supports an existing hypothesis while discounting evidence that contradicts it. One of the most damaging biases in intelligence analysis.",
+	"anchoring-bias": "The tendency to rely too heavily on the first piece of information received. In analysis, an early hypothesis becomes the anchor that all later evidence is interpreted around.",
+	"mirror-imaging": "Assuming that an adversary thinks, values, and decides the way you do. Adversaries operate under different constraints, incentives, and doctrine, so the most logical path from your perspective is often not theirs.",
+	"mental-model": "An experience-based internal representation of how some part of the world works. Mental models let analysts process information quickly, but unexamined models quietly filter what the analyst is able to perceive.",
+	"all-source": "Analysis that fuses every available collection discipline and data type on a subject rather than specializing in one source. CTI is all-source by necessity, combining malware analysis, infrastructure data, victimology, and open sources.",
+	"kill-chain": "A model that breaks an intrusion into sequential phases an adversary must complete to succeed. Interrupting any phase breaks the chain. Popularized for network defense by Lockheed Martin's Intrusion Kill Chain paper (2011).",
+	"diamond-model": "The Diamond Model of Intrusion Analysis structures every intrusion event around four vertices: adversary, capability, infrastructure, and victim. It states its axioms explicitly and supports pivoting and clustering across events.",
+	"false-flag": "An operation deliberately crafted to be attributed to someone else, for example by planting another group's tooling artifacts, language strings, or infrastructure patterns in an intrusion.",
+	"osint": "Open-Source Intelligence - intelligence collection from publicly available sources such as websites, public records, social media, and published reporting.",
+	"humint": "Human Intelligence - intelligence collected through interpersonal contact, the classic domain of case officers and informants.",
+	"sigint": "Signals Intelligence - intelligence derived from intercepted signals and communications.",
+	"diagnosticity": "The degree to which a piece of evidence helps distinguish between competing hypotheses. Evidence consistent with every hypothesis has zero diagnosticity no matter how compelling it feels.",
 }
 
 export interface TermProps {

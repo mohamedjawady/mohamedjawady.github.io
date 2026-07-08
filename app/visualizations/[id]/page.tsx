@@ -33,6 +33,7 @@ import { StealerParserDemo } from "@/components/visualizations/stealer-parser-de
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
+import { ACHMatrix } from "@/components/visualizations/ach-matrix"
 import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
 import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
 import { GolliathArchitecture } from "@/components/visualizations/golliath-architecture"
@@ -97,6 +98,7 @@ const visualizationComponents = {
   'IntelligenceLifecycle': IntelligenceLifecycle,
   'PyramidOfPain': PyramidOfPain,
   'TTPCampaignTimeline': TTPCampaignTimeline,
+  'ACHMatrix': ACHMatrix,
   // SaltStack
   'SaltArchitecture': SaltArchitecture,
   'SaltExerciseDiagram': SaltExerciseDiagram,

@@ -73,23 +73,22 @@ Most of the CTI questions that matter are conceptually driven, which is exactly 
 
 ## How Your Brain Analyzes, and How It Betrays You
 
-Heuer opens his book with perception, because analysis happens inside a perceptual system that is not a passive camera. You do not see what is there. You see what your expectations, experience, and current hypothesis prepare you to see. Try it on the classic test below: read the sentence once, at normal reading speed, and count how many times the letter F appears.
+Heuer opens his book with perception, because analysis happens inside a perceptual system that is not a passive camera. You do not see what is there. You see what your expectations, experience, and current hypothesis prepare you to see. Look at the figure below for a moment before reading on.
 
-<div style={{ margin: "2.5rem auto", maxWidth: "600px", textAlign: "center" }}>
-  <div style={{ border: "1.5px dashed currentColor", borderRadius: "12px", padding: "1.5rem 2rem", fontFamily: "monospace", fontWeight: "bold", fontSize: "1.05rem", letterSpacing: "0.08em", lineHeight: 1.9 }}>
-    FINISHED FILES ARE THE RESULT<br />
-    OF YEARS OF SCIENTIFIC STUDY<br />
-    COMBINED WITH THE EXPERIENCE<br />
-    OF YEARS
-  </div>
-  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Count the letter F. Once through, no rereading.</p>
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 400 315" width="320" role="img" aria-label="Kanizsa triangle illusion: three notched discs arranged so that a bright solid triangle appears to float between them, although no triangle is drawn">
+    <path d="M 200 75 L 176 116.6 A 48 48 0 1 1 224 116.6 Z" fill="currentColor" />
+    <path d="M 105 239.5 L 153 239.5 A 48 48 0 1 1 129 197.9 Z" fill="currentColor" />
+    <path d="M 295 239.5 L 271 197.9 A 48 48 0 1 1 247 239.5 Z" fill="currentColor" />
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>What is sitting in the middle of this figure?</p>
 </div>
 
-The sentence contains six. Most readers find three. The three that disappear all sit inside the word OF, and they disappear for a reason worth understanding: a fluent reader never processes OF letter by letter. It is recognized as a whole, heard internally as "ov" rather than spelled with an F, and skipped as a low-value function word. The letters are right there on the page, and your perceptual system filtered them out before the conscious part of you ever got a vote. If perception edits a single sentence during an exercise where you were explicitly told what to look for, consider what it does to a hundred pages of intrusion data read under time pressure with a hypothesis already in mind.
+Most people see it instantly: a solid triangle lying on top of three discs, its surface seemingly a shade apart from the page behind it, its edges crisp enough to trace with a finger. Now look again. No triangle is drawn anywhere in that figure. It contains exactly three notched discs and nothing else. The edges you see connecting them do not exist, and if you sample the "triangle" with a color picker it is identical to the background around it. This is the Kanizsa triangle, and it shows perception doing something far more alarming than filtering: your visual system decided that a foreground triangle occluding three discs was the most plausible explanation for the aligned notches, and then it manufactured the supporting evidence, contours and even a brightness difference that are simply not in the data. Perception is an inference engine that presents its conclusions as raw observation. If it fabricates edges in a figure this simple, consider what it manufactures across a hundred pages of intrusion data read under time pressure with a hypothesis already in mind.
 
 The experimental version of this is the famous invisible gorilla study by Simons and Chabris. Subjects watching a basketball video and counting passes were so occupied by the counting task that roughly half failed to notice a person in a gorilla suit walk through the middle of the frame, stop, and beat its chest. The analysts' translation: telling someone precisely what to look for is also telling them what they will fail to see. A hunt team tasked narrowly on one actor's tradecraft will walk straight past the second actor in the environment.
 
-Under the perception layer sits the machinery that does the actual matching. Working memory is the small, expensive workspace where inputs get compared and judged, and it overflows quickly, which is why analysts reach for models and buckets at all. Long-term memory supplies the patterns, and it does so in three recognizable modes. Template matching compares the current situation against stored past experiences. Prototype matching compares it against an averaged composite of many experiences, which is what lets you recognize something you have never seen an exact copy of. Top-down matching fills gaps in incomplete information using what you already know, which is why context helps and also why optical illusions work.
+Under the perception layer sits the machinery that does the actual matching. Working memory is the small, expensive workspace where inputs get compared and judged, and it overflows quickly, which is why analysts reach for models and buckets at all. Long-term memory supplies the patterns, and it does so in three recognizable modes. Template matching compares the current situation against stored past experiences. Prototype matching compares it against an averaged composite of many experiences, which is what lets you recognize something you have never seen an exact copy of. Top-down matching fills gaps in incomplete information using what you already know, which is why context helps, and it is exactly the machinery that drew the Kanizsa triangle for you a moment ago.
 
 All three run constantly during triage, and none of them are verification. When an analyst glances at beacon timing and says "that looks like <Term concept="cobalt-strike">Cobalt Strike</Term>," that is prototype matching: fast, frequently right, and worth exactly nothing as evidence until checked, because plenty of frameworks imitate that traffic profile and plenty of red teams run the real thing legitimately.
 
@@ -247,7 +246,7 @@ Then compare your result against the source's language. Did they publish a judgm
 
 ## Conclusion
 
-Analysis is a discipline, not a talent. The machinery in your head that makes you fast, the pattern matching, the mental models, the intuition built from a thousand triaged incidents, is the same machinery that hid half the letters in a one-sentence counting test and handed half the industry a forged North Korean fingerprint. None of that is fixable, and the analysts who believe they are personally unbiased are the ones adversaries design for.
+Analysis is a discipline, not a talent. The machinery in your head that makes you fast, the pattern matching, the mental models, the intuition built from a thousand triaged incidents, is the same machinery that drew crisp edges around a triangle that was never there and handed half the industry a forged North Korean fingerprint. None of that is fixable, and the analysts who believe they are personally unbiased are the ones adversaries design for.
 
 What separates an assessment from a guess is not the analyst's brilliance. It is whether the reasoning was written down, whether alternatives genuinely competed, whether the evidence was scored for what it could refute rather than what it could support, and whether the finished judgment carries its confidence, its assumptions, and the name of the fact that would kill it. That is a process, it fits on a page, and it is the difference between intelligence work and confident storytelling.
 

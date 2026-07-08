@@ -3,6 +3,15 @@ import { getCanonicalUrl } from '@/lib/url'
 
 export const dynamic = 'force-static'
 
+// Escape XML special characters in plain (non-CDATA) text nodes and attributes
+const escapeXml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+
 export async function GET() {
   const posts = await getAllPosts()
   
@@ -23,11 +32,11 @@ export async function GET() {
     <item>
       <title><![CDATA[${post.title}]]></title>
       <description><![CDATA[${post.description}]]></description>
-      <link>${getCanonicalUrl(`/posts/${post.slug}`)}</link>
-      <guid isPermaLink="true">${getCanonicalUrl(`/posts/${post.slug}`)}</guid>
+      <link>${escapeXml(getCanonicalUrl(`/posts/${post.slug}`))}</link>
+      <guid isPermaLink="true">${escapeXml(getCanonicalUrl(`/posts/${post.slug}`))}</guid>
       <pubDate>${postDate.toUTCString()}</pubDate>
-      <author>mjawady31@gmail.com (${post.author})</author>
-      ${post.tags.map(tag => `<category>${tag}</category>`).join('')}
+      <author>mjawady31@gmail.com (${escapeXml(post.author)})</author>
+      ${post.tags.map(tag => `<category>${escapeXml(tag)}</category>`).join('')}
     </item>`
     }).join('')
 
@@ -36,8 +45,8 @@ export async function GET() {
   <channel>
     <title>0xHabib - Mohamed Habib Jaouadi</title>
     <description>Engineering insights, system design, and technical deep dives by Mohamed Habib Jaouadi</description>
-    <link>${getCanonicalUrl('')}</link>
-    <atom:link href="${getCanonicalUrl('/feed.xml')}" rel="self" type="application/rss+xml" />
+    <link>${escapeXml(getCanonicalUrl(''))}</link>
+    <atom:link href="${escapeXml(getCanonicalUrl('/feed.xml'))}" rel="self" type="application/rss+xml" />
     <language>en-US</language>
     <managingEditor>mjawady31@gmail.com (Mohamed Habib Jaouadi)</managingEditor>
     <webMaster>mjawady31@gmail.com (Mohamed Habib Jaouadi)</webMaster>
@@ -45,9 +54,9 @@ export async function GET() {
     <pubDate>${new Date().toUTCString()}</pubDate>
     <ttl>60</ttl>
     <image>
-      <url>${getCanonicalUrl('/favicon.ico')}</url>
+      <url>${escapeXml(getCanonicalUrl('/favicon.ico'))}</url>
       <title>0xHabib</title>
-      <link>${getCanonicalUrl('')}</link>
+      <link>${escapeXml(getCanonicalUrl(''))}</link>
     </image>
     ${rssItems}
   </channel>

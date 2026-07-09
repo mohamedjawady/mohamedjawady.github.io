@@ -1,0 +1,329 @@
+---
+title: "From Indicators to Behavioral Analytics: What CTI Should Actually Hand Detection Engineering"
+description: "Why indicator feeds make a weak handoff, what indicators are actually for, and how to transpose the artifacts of one intrusion into behavioral analytics that survive the next one. The contract between CTI and detection engineering, spelled out."
+date: "2026-07-09"
+author: "Mohamed Habib Jaouadi"
+tags: ["threat-intelligence", "detection-engineering", "behavioral-analytics", "indicators", "sigma", "threat-hunting"]
+banner: "/banners/posts/indicators-behavioral-analytics.jpg"
+bannerAlt: "Server racks representing the telemetry that behavioral detections are built on"
+visibility: "public"
+---
+
+> **Detection Focus:** The handoff between threat intelligence and detection engineering is where most CTI programs quietly fail. This post is about what should cross that boundary: not a CSV of indicators, but behavior described precisely enough to encode once and benefit from for years.
+
+**TL;DR:** Indicators are atomic elements of past intrusions, not detections for future ones. They have three legitimate uses (scoping your own incidents, filling knowledge gaps from others' reporting, and seeding enrichment) and one systematically abused one (serving as the primary real-time detection layer, which is where the 10,000-alert queue comes from). The real product CTI owes detection engineering is the transposition: extracting the behavior that connected an incident's indicators and handing it over as a detection requirement with its false positive profile already thought through. Behaviors survive infrastructure rotation. Atoms do not.
+
+## Introduction
+
+The scene repeats in most security organizations every quarter. The <Term concept="cti">threat intelligence</Term> team finishes an analysis, and what crosses the wall to <Term concept="detection-engineering">detection engineering</Term> is a report with an appendix: two hundred hashes, forty domains, thirty IP addresses. The detection team loads them into the <Term concept="siem">SIEM</Term> because that is what one does with an appendix. Ninety days later the entries have produced either silence, because the adversary rotated everything before the report was even published, or a stream of false positives from recycled cloud infrastructure that now hosts someone's legitimate blog. Nobody acted differently because of any of it.
+
+Neither team is at fault. The product is wrong. Indicators are the exhaust of an intrusion that already happened, and treating them as fuel for detecting the next one misunderstands what they are. This post walks through what an indicator actually is, the life cycle that makes indicators compound in value or in noise, the narrow set of jobs they are genuinely good at, and then the step that matters: transposing them into <Term concept="behavioral-analytic">behavioral analytics</Term>, the detection form that survives the adversary's next infrastructure rotation. It ends with a concrete contract for what a CTI-to-detection-engineering handoff should contain.
+
+## What an Indicator Actually Is
+
+An indicator is data plus context. The equation sounds trivial and almost everyone violates it. The IP address 203.0.113.87 is not an indicator of anything; it is an address, one of four billion. The statement that 203.0.113.87 served command and control for a specific loader between two observed dates, tied to a tracked activity cluster, is an indicator: the data now indicates something, and a defender receiving it knows what a match means and roughly what to do about one.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 210" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Two-row equation diagram: data plus context equals indicator, and indicator minus context equals data indicating nothing">
+    <rect x="20" y="25" width="175" height="60" rx="10" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="107" y="49" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">DATA</text>
+    <text x="107" y="70" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.75" fontFamily="monospace">203.0.113.87</text>
+    <text x="213" y="63" textAnchor="middle" fill="currentColor" fontSize="24" fontWeight="bold" opacity="0.6">+</text>
+    <rect x="232" y="25" width="255" height="60" rx="10" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.5" />
+    <text x="359" y="45" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">CONTEXT</text>
+    <text x="359" y="61" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">C2 for GhostLoader beacons,</text>
+    <text x="359" y="75" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">observed 2026-06-14, cluster K7</text>
+    <text x="505" y="63" textAnchor="middle" fill="currentColor" fontSize="24" fontWeight="bold" opacity="0.6">=</text>
+    <rect x="524" y="25" width="176" height="60" rx="10" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.5" />
+    <text x="612" y="49" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">INDICATOR</text>
+    <text x="612" y="70" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">a defender knows what a match means</text>
+    <rect x="20" y="125" width="175" height="60" rx="10" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.5" />
+    <text x="107" y="149" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">INDICATOR</text>
+    <text x="107" y="170" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">from any feed</text>
+    <text x="213" y="163" textAnchor="middle" fill="currentColor" fontSize="24" fontWeight="bold" opacity="0.6">&#8722;</text>
+    <rect x="232" y="125" width="255" height="60" rx="10" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.5" />
+    <text x="359" y="149" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">CONTEXT</text>
+    <text x="359" y="170" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">stripped by the export pipeline</text>
+    <text x="505" y="163" textAnchor="middle" fill="currentColor" fontSize="24" fontWeight="bold" opacity="0.6">=</text>
+    <rect x="524" y="125" width="176" height="60" rx="10" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 4" />
+    <text x="612" y="149" textAnchor="middle" fill="#ef4444" fontSize="13" fontWeight="bold">DATA</text>
+    <text x="612" y="170" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">an address, indicating nothing</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The equation runs both ways. Most feed pipelines run it in the second direction.</p>
+</div>
+
+The corollary matters more than the definition. Subtract the context and the indicator degrades back into data, and this subtraction is exactly what most sharing pipelines perform: the analyst who found the C2 knew everything about it, the report carried some of that knowledge, the CSV export carried none of it, and the SIEM lookup at the end of the chain is matching bare strings. A feed that ships bare observables is a data feed being sold as intelligence, and an organization consuming twelve of them is not twelve times better informed. It is twelve times noisier.
+
+## The Indicator Life Cycle
+
+Indicators are not static objects; they move through a cycle, and the cycle is where their value is created or destroyed. The model comes from the same Lockheed Martin lineage as the <Term concept="kill-chain">kill chain</Term>, and it deserves to be as well known.
+
+An indicator is first **revealed**. It either came from your own analysis of your own intrusion, or it was reported to you by a partner, a sharing community, or a feed. The distinction is not bureaucratic. An indicator you discovered arrives with full context, known reliability, and a direct answer to "what does a match mean here." An indicator reported to you arrives with whatever context survived the export, unknown collection methodology, and no guarantee it was ever relevant to your environment at all.
+
+Next it must be **vetted**, and this is the step organizations skip under volume pressure. Vetting means running the indicator through discovery first: a <Term concept="retrohunt">retro-hunt</Term> across historical telemetry that answers whether this thing has ever appeared in your environment, whether the hits were malicious or benign, and what the false positive profile of deploying it would look like. Discovery pages nobody and breaks nothing. Only after that does a vetted indicator get **deployed** into detection and, where one exists, a mitigating control. When a deployed indicator matches real activity it is **utilized**, and a utilized indicator triggers the step that makes the whole cycle worthwhile: **analysis** of the activity it fired on, reconstructing the intrusion phase by phase, which reveals new indicators that enter the cycle at the top. Indicators beget indicators. That loop, not any individual atom, is the asset.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 300" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="State diagram of the indicator life cycle: revealed, vetted, deployed, fired, analyzed, looping back to revealed. A red dashed arrow shows unvetted feed indicators bypassing vetting straight into deployment">
+    <defs>
+      <marker id="ilcA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+      <marker id="ilcR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
+      </marker>
+    </defs>
+    <path d="M 80 100 C 150 30, 290 30, 355 95" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 5" markerEnd="url(#ilcR)" />
+    <text x="218" y="40" textAnchor="middle" fill="#ef4444" fontSize="11" fontWeight="bold">unvetted feed dump, straight to production</text>
+    <text x="218" y="56" textAnchor="middle" fill="#ef4444" fontSize="10" opacity="0.85">false positives enter the loop and compound</text>
+    <rect x="20" y="100" width="120" height="52" rx="10" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+    <text x="80" y="131" textAnchor="middle" fill="currentColor" fontSize="12.5" fontWeight="bold">REVEALED</text>
+    <text x="80" y="172" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.65">found or reported</text>
+    <rect x="160" y="100" width="120" height="52" rx="10" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="2" />
+    <text x="220" y="131" textAnchor="middle" fill="currentColor" fontSize="12.5" fontWeight="bold">VETTED</text>
+    <text x="220" y="172" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.65">retro-hunt first</text>
+    <rect x="300" y="100" width="120" height="52" rx="10" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+    <text x="360" y="131" textAnchor="middle" fill="currentColor" fontSize="12.5" fontWeight="bold">DEPLOYED</text>
+    <text x="360" y="172" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.65">detect + mitigate</text>
+    <rect x="440" y="100" width="120" height="52" rx="10" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+    <text x="500" y="131" textAnchor="middle" fill="currentColor" fontSize="12.5" fontWeight="bold">FIRED</text>
+    <text x="500" y="172" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.65">matched activity</text>
+    <rect x="580" y="100" width="120" height="52" rx="10" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1.5" opacity="0.9" />
+    <text x="640" y="131" textAnchor="middle" fill="currentColor" fontSize="12.5" fontWeight="bold">ANALYZED</text>
+    <text x="640" y="172" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.65">full kill chain</text>
+    <line x1="142" y1="126" x2="156" y2="126" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#ilcA)" />
+    <line x1="282" y1="126" x2="296" y2="126" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#ilcA)" />
+    <line x1="422" y1="126" x2="436" y2="126" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#ilcA)" />
+    <line x1="562" y1="126" x2="576" y2="126" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#ilcA)" />
+    <path d="M 640 152 L 640 235 L 80 235 L 80 158" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" markerEnd="url(#ilcA)" />
+    <text x="360" y="256" textAnchor="middle" fill="currentColor" fontSize="11" opacity="0.7">indicators beget indicators: analysis of what fired reveals new ones, and the cycle restarts</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The green step is the one that gets skipped, and the red path is what skipping it looks like.</p>
+</div>
+
+The compounding property of this loop cuts both ways, and that is the part nobody puts on the marketing slide. Vetted indicators compound signal: each one that fires and gets analyzed yields new, contexted, environment-relevant indicators. Unvetted indicators compound noise: a false positive that enters the loop gets analyzed as if it were real, generates downstream artifacts, gets shared onward, and becomes progressively harder to trace back and purge. Once bad atoms have propagated through your detections, your tickets, and your sharing relationships, extracting them approaches impossible. This is why the standing management pressure to "automate feed ingestion" deserves resistance: connecting a firehose of uncontexted observables directly to production detection is not risk management, it is risk avoidance theater that converts someone else's collection into your alert queue.
+
+The empirical case against feed faith is documented. A study presented at USENIX Security in 2020 compared the indicator sets of two market-leading commercial threat intelligence vendors and found that even for the same named threat actors, the overlap between them ranged from roughly one to thirteen percent, with similarly tiny overlap against open feeds. Two professional organizations, watching the same adversaries, produced almost entirely disjoint indicator sets. Neither is wrong; both are reporting their own field of view. The lesson is not to buy more feeds until coverage converges, because it will not. The lesson is that no indicator set is ground truth, and volume is not coverage.
+
+## Indicator Life Span: The Adversary Sets the Clock
+
+Analysts love to rank indicator types in the abstract: domains beat IPs, certificates beat domains, and so on. No such ranking survives contact with a real adversary, because the useful life of an indicator is decided entirely by the adversary's own operational habits. One group rotates its C2 addresses every intrusion, making an IP worthless by the time it is shared. Another group has reused the same delivery infrastructure for years, making a single IP a high-fidelity detection for that entire period. Same indicator type, opposite value, and the only variable is the adversary. The one durable heuristic is the one the Pyramid of Pain formalizes, which this blog has covered in depth: observables closer to the adversary's habits and tooling decay slower than observables tied to their disposable infrastructure.
+
+The practical retirement policy that falls out of this is unfashionable and correct: keep detections and indicators deployed until their presence causes a problem. Retire on false positives, not on age. A dormant indicator costs effectively nothing to keep, indicators can sleep for years before an adversary redeploys old infrastructure, and adversaries reuse old assets precisely because they expect defenders to have aged them out. When computational limits genuinely bite, that is a requirement for better detection architecture, not a reason to discard knowledge.
+
+## What Indicators Are Actually For
+
+None of the above means indicators are worthless. It means they have specific jobs, and the industry assigned them the one job they cannot do.
+
+| Use case | What it looks like | Verdict |
+|---|---|---|
+| Incident scoping and sweeps | Indicators extracted from your own intrusion, swept across your own environment to answer "which hosts were touched, and did the cleanup hold" | The single highest-value use of indicators that exists |
+| Knowledge-gap filling | Someone else's indicators checked against your history to learn whether their intrusion visited you, and to fill kill chain phases your own visibility missed | Strong, provided the source context survived |
+| Enrichment and pivot seeds | An indicator as the starting point for infrastructure mapping and research, not as an alert | Useful in analyst hands, dangerous when automated into alerting |
+| Primary real-time detection layer | Feed volumes piped into the SIEM as alert logic | The abuse that produces the queue where nothing is critical |
+
+The fourth row deserves its own sentence, because it explains a phenomenon usually blamed on analysts. <Term concept="alert-fatigue">Alert fatigue</Term> is not a stamina problem, and it is not solved by hiring, wellness programs, or tuning sprints that trim ten percent of the noise. It is the downstream consequence of an architecture decision: someone chose to treat atoms of other people's past intrusions as the front line of real-time detection. Ten thousand critical alerts a day means the word critical has been defined away, and the queue is working exactly as designed. The fix is upstream, in what gets deployed as detection logic in the first place.
+
+## Key Indicators: When an Atom Is Worth Promoting
+
+A small subset of indicators earns long-term investment, and the criteria are strict. A <Term concept="key-indicator">key indicator</Term> must satisfy all four: it remains consistent across multiple intrusions rather than appearing once; it uniquely distinguishes one activity cluster from all others; it separates malicious activity from benign; and it aligns to a specific phase of adversary action, so a match tells you where in the intrusion you are standing.
+
+What makes key indicators interesting is that they do not have to be understood to be valuable. A reused TLS certificate subject that persists across otherwise fully rotated C2 infrastructure qualifies. So does a distinctive typo in the description field of the scheduled tasks an adversary creates, or a staging directory naming convention that survives across campaigns. The analyst may have no idea why the adversary's tooling produces that artifact, and it does not matter: if it discriminates reliably, aligns to a phase, and persists, it is worth a permanent detection. Aim to hold at least two key indicators in different kill chain phases for any cluster you track seriously, because an adversary can change one habit without noticing, but changing two at once in different operational stages usually means they detected your detection.
+
+## The Four Types of Threat Detection
+
+Before the transposition step makes sense, it helps to see the whole detection landscape at once, because indicators and behavioral analytics are two cells of a two-by-two, not competitors in a vacuum. Every detection approach draws its knowledge either from your environment or from the adversary, and targets either known or unknown activity. Configuration analysis compares the environment against documented good state. <Term concept="anomaly-detection">Anomaly modeling</Term> learns normal statistically and flags deviation. Indicators match known atoms of past intrusions. Threat behaviors encode adversary tradecraft as logic.
+
+The two environmental columns can catch things nobody encoded, including genuinely novel tradecraft, but their alerts arrive without context: the model knows that something deviated, never what it means or what to do about it. The two threat-based columns fire with context built in, but they are blind outside what an analyst encoded. The failure mode common to immature programs is buying one quadrant, usually anomaly modeling with an impressive dashboard, and believing they bought coverage.
+
+<DetectionTypesQuadrant />
+
+The framing comes from Sergio Caltagirone's work at Dragos, and its practical conclusion is the thesis of this post: a mature program runs all four types, but the quadrant where CTI's knowledge converts into durable defensive advantage is threat behaviors, and getting knowledge into that quadrant is a deliberate act of translation. That translation is the transposition.
+
+## The Transposition: Three Indicators In, One Analytic Out
+
+Walk through it with a realistic incident. A user received an email carrying an ISO attachment, a delivery container that became popular after macro blocking, partly because files inside mounted images did not reliably carry the mark of the web. The user mounted the ISO and double-clicked the LNK file inside it, which invoked a <Term concept="living-off-the-land">living-off-the-land</Term> binary to sideload a malicious DLL, which then beaconed out to command and control.
+
+Incident response extracts the obvious indicators: the hash of the ISO, the lure domain that delivered it, the C2 address it called back to, and the DLL's distinctive export name. Every one of them is real, correctly contexted, and useful for exactly one thing: sweeping your environment to scope this incident. As detections for the next campaign they are already dead, because the adversary repacks the ISO per wave, registers lure domains in bulk, and rotates C2 on a schedule.
+
+The transposition asks a different question: what behavior connected these indicators? Strip away every atom and the chain remains: a file executed from the root of a freshly mounted disk image spawned a script host or LOLBin, which within minutes made an outbound network connection from a process that has no business making one. That sentence contains zero indicators from the incident, and it describes every future wave of this campaign regardless of what the hashes, domains, and IPs rotate to. It also describes other adversaries using the same delivery tradecraft, which the indicator list never could.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 300" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Three expired indicator boxes, an ISO hash, a lure domain, and a C2 IP, converge into one behavioral analytic box, which fires across three campaign waves whose indicators have all rotated">
+    <defs>
+      <marker id="trA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+    <rect x="20" y="30" width="185" height="56" rx="10" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="32" y="52" fill="currentColor" fontSize="11" fontWeight="bold">ISO HASH</text>
+    <text x="32" y="72" fill="currentColor" fontSize="10" opacity="0.75" fontFamily="monospace">e3b0c44298fc1c14...</text>
+    <text x="195" y="48" textAnchor="end" fill="#ef4444" fontSize="9" fontWeight="bold">EXPIRED</text>
+    <rect x="20" y="122" width="185" height="56" rx="10" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="32" y="144" fill="currentColor" fontSize="11" fontWeight="bold">LURE DOMAIN</text>
+    <text x="32" y="164" fill="currentColor" fontSize="10" opacity="0.75" fontFamily="monospace">invoice-review[.]net</text>
+    <text x="195" y="140" textAnchor="end" fill="#ef4444" fontSize="9" fontWeight="bold">EXPIRED</text>
+    <rect x="20" y="214" width="185" height="56" rx="10" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="32" y="236" fill="currentColor" fontSize="11" fontWeight="bold">C2 IP</text>
+    <text x="32" y="256" fill="currentColor" fontSize="10" opacity="0.75" fontFamily="monospace">203.0.113.87</text>
+    <text x="195" y="232" textAnchor="end" fill="#ef4444" fontSize="9" fontWeight="bold">EXPIRED</text>
+    <line x1="207" y1="58" x2="278" y2="132" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#trA)" />
+    <line x1="207" y1="150" x2="278" y2="150" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#trA)" />
+    <line x1="207" y1="242" x2="278" y2="168" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#trA)" />
+    <rect x="285" y="105" width="215" height="90" rx="12" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="2" />
+    <text x="392" y="130" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">BEHAVIORAL ANALYTIC</text>
+    <text x="392" y="149" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.8">file run from mounted image spawns</text>
+    <text x="392" y="164" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.8">LOLBin, then connects outbound</text>
+    <text x="392" y="183" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.65" fontFamily="monospace">T1204.001 + T1071</text>
+    <line x1="502" y1="132" x2="540" y2="58" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#trA)" />
+    <line x1="502" y1="150" x2="540" y2="150" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#trA)" />
+    <line x1="502" y1="168" x2="540" y2="242" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#trA)" />
+    <rect x="545" y="32" width="155" height="52" rx="10" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+    <text x="622" y="54" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Campaign wave 1</text>
+    <text x="622" y="72" textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">&#10003; still fires</text>
+    <rect x="545" y="124" width="155" height="52" rx="10" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+    <text x="622" y="146" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Campaign wave 2</text>
+    <text x="622" y="164" textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">&#10003; still fires</text>
+    <rect x="545" y="216" width="155" height="52" rx="10" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+    <text x="622" y="238" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Campaign wave 3</text>
+    <text x="622" y="256" textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">&#10003; still fires</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every atom on the left is stale before the report ships. The behavior in the middle outlives all of them.</p>
+</div>
+
+Four properties separate a good behavioral analytic from a clever one-off. It is transposable, bound to no single atom, so it applies wherever the telemetry exists. It is scalable, covering a class of activity rather than an instance. It carries context in its own name and metadata, so the alert tells the responder what is happening and what to do next instead of emitting a bare match. And it maps to <Term concept="mitre-att-ck">ATT&CK</Term>, so coverage becomes trackable and gaps become visible. The best analytics go one step further and queue the response workflow: an alert that arrives with its own containment checklist converts detection into action with no meeting in between.
+
+<CollapsibleCode title="Sigma Rule: LOLBin Executed From the Root of a Mounted Image (T1204.001)" language="yaml">
+
+```yaml
+title: Script Host or LOLBin Executed From the Root of a Mounted Image
+status: test
+description: >
+  Detects wscript, cscript, mshta, rundll32, or regsvr32 launched with a working
+  directory at the root of a non-system drive: the typical footprint of a user
+  opening a LNK inside a freshly mounted ISO or IMG delivery container. Pair with
+  a network-connection correlation on the spawned process for high-fidelity alerting.
+references:
+  - https://attack.mitre.org/techniques/T1204/001/
+tags:
+  - attack.execution
+  - attack.t1204.001
+  - attack.defense_evasion
+  - attack.t1553.005
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection_image:
+    Image|endswith:
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+      - '\rundll32.exe'
+      - '\regsvr32.exe'
+  selection_root:
+    CurrentDirectory|re: '^[D-Z]:\\$'
+  filter_installers:
+    ParentImage|endswith:
+      - '\setup.exe'
+      - '\msiexec.exe'
+  condition: selection_image and selection_root and not filter_installers
+falsepositives:
+  - Legitimate scripts or tools launched from USB media and secondary data drives
+  - Software installers that stage components on removable volumes
+level: medium
+```
+
+</CollapsibleCode>
+
+If the durability argument sounds theoretical, the 3CX supply chain compromise of March 2023 is the documented counterexample to indicator-first thinking. Attackers trojanized the installers of the 3CX desktop softphone, a product sitting on hundreds of thousands of business endpoints. The malicious builds were signed with 3CX's valid certificate, distributed through the vendor's own update channel, and carried hashes that appeared in no feed on earth, because they were brand new and, by every reputation measure available, legitimate software. Indicator-based detection had structurally nothing to offer on day zero: there was no known-bad atom to match. What surfaced the compromise was behavior. Endpoint detections flagged the 3CX application doing things a softphone has no business doing, beaconing to unfamiliar infrastructure and spawning suspicious activity, and CrowdStrike's public reporting, followed by Mandiant's investigation for 3CX, unraveled the rest. Every organization that caught it early caught it behaviorally, because on day zero of a supply chain compromise, behavior is the only layer that can fire.
+
+## The Handoff Contract
+
+All of which defines what should actually cross the wall from CTI to detection engineering. Not a CSV. A detection requirement, which is a short document with the behavior at the center and everything detection engineering needs to encode, test, and maintain it without walking back to ask.
+
+The behavior comes first, described in one sentence containing no indicators, because if the behavior cannot be stated without atoms, the analysis is not finished. The ATT&CK mapping follows, then the durability argument: why encoding this behavior beats deploying its indicators, stated as what the adversary would have to change about their operation to evade it. Then the false positive profile, thought through by the people who understand the behavior best before it ever reaches an alert queue: which legitimate activity produces the same pattern, and which filters handle it. Then validation criteria, because a detection that was never proven to fire is a hope, not a control: the atomic test, red team command, or replayed telemetry that demonstrates the rule works. And at the end, as an appendix explicitly labeled for scoping rather than detection, the indicators from the source incident with their context and observed dates intact.
+
+<CollapsibleCode title="Detection Requirement Handoff Template" language="markdown">
+
+```markdown
+DETECTION REQUIREMENT HANDOFF
+Source: [incident or report the behavior was extracted from]
+Analyst + date:
+
+BEHAVIOR
+One sentence, zero indicators:
+ATT&CK mapping: [technique IDs]
+Kill chain phase(s):
+
+DURABILITY ARGUMENT
+Why encode the behavior instead of deploying its indicators:
+What the adversary would have to change to evade this detection:
+
+FALSE POSITIVE PROFILE
+Legitimate activity producing the same pattern:
+Pre-thought filters and exclusions:
+
+VALIDATION
+How to prove the rule fires (atomic test, red team command, replayed telemetry):
+Success criteria:
+
+RESPONSE CONTEXT
+What an analyst should do when this fires:
+
+SCOPING APPENDIX (explicitly not the detection)
+Indicators from the source incident, each with context and observed dates:
+```
+
+</CollapsibleCode>
+
+## Where to Start Tomorrow
+
+None of this requires starting from a blank page. Three public collections already hold hundreds of behavioral analytics ready to be adapted to your telemetry rather than written from zero: the MITRE Cyber Analytics Repository, the SigmaHQ rules repository, and the EQL Analytics Library. Adapting a community analytic to your environment, with your own false positive profile and validation, is a legitimate fast path, and studying how those analytics are constructed teaches the transposition skill faster than any course.
+
+For measuring where your program actually stands, Ryan Stillions' Detection Maturity Level model is the honest yardstick. It ranks what a program's detections are keyed on, from atomic indicators at the bottom through artifacts, tools, and procedures, up to techniques, tactics, and ultimately adversary goals. Most programs that self-assess discover their detection portfolio lives almost entirely at the bottom two levels, atoms and artifacts, regardless of what the strategy slides claim. The entire argument of this post compresses into one sentence of that model: CTI's job is to keep pushing the program's center of gravity up the levels, because every level climbed is a category of adversary change your detections no longer care about.
+
+| DML level | Detections keyed on | Survives |
+|---|---|---|
+| 8. Goals | What the adversary is ultimately after | Nearly everything |
+| 7. Strategy | How they pursue it long term | Campaign redesign |
+| 6. Tactics | Operational objectives per phase | Tool and infrastructure change |
+| 5. Techniques | How objectives get accomplished | Retooling |
+| 4. Procedures | Specific action sequences | Infrastructure rotation |
+| 3. Tools | Specific software in use | Repacking, config change |
+| 2. Artifacts | Traces tools leave behind | Hash and IP rotation |
+| 1. Atomic indicators | Hashes, IPs, domains | Nothing |
+
+## Hands-On Exercise
+
+Take one recent public incident report from a vendor or a government advisory. First, extract every indicator into a list and mark each one as almost-certainly-rotated or plausibly-still-live, which is itself a sobering exercise. Then identify the behavioral chain those indicators decorated: what did the adversary actually do, in sequence, that the atoms merely happened to touch? Write one behavioral analytic for the most detectable link in that chain, in Sigma or pseudo-Sigma, and name its top two false positive sources with the filter you would apply for each. Finally, write the one-paragraph handoff per the contract above. Compare what you produced against the indicator list you started with, and ask which of the two you would rather inherit as the detection engineer.
+
+## Conclusion
+
+Indicators are the exhaust of past intrusions. They are genuinely useful for scoping what happened to you, checking whether someone else's incident visited you, and seeding research, and they are structurally incapable of being the thing the industry keeps asking them to be: a durable detection layer. The job of CTI is not to move atoms from feeds into a SIEM. It is to understand intrusions well enough to describe adversary behavior so precisely that detection engineering can encode it once, validate it, and benefit from it across every infrastructure rotation that follows. The teams that internalize this stop measuring themselves by indicators distributed and start measuring by behaviors encoded, and their detection portfolio starts surviving contact with the adversary's next campaign.
+
+For the economics of why behaviors cost adversaries more than atoms, see the Pyramid of Pain post on this blog; for the analytic discipline that produces trustworthy behavioral assessments in the first place, see the Analytic Judgment post.
+
+## References & Further Reading
+
+1. Hutchins, Cloppert, Amin, *Intelligence-Driven Computer Network Defense* (Lockheed Martin). [https://www.lockheedmartin.com/content/dam/lockheed-martin/rms/documents/cyber/LM-White-Paper-Intel-Driven-Defense.pdf](https://www.lockheedmartin.com/content/dam/lockheed-martin/rms/documents/cyber/LM-White-Paper-Intel-Driven-Defense.pdf)
+	The kill chain paper, and the origin of the courses-of-action thinking the indicator life cycle grew out of.
+2. Michael Cloppert, "Security Intelligence: Attacking the Cyber Kill Chain" (SANS). [https://www.sans.org/blog/security-intelligence-attacking-the-cyber-kill-chain/](https://www.sans.org/blog/security-intelligence-attacking-the-cyber-kill-chain/)
+	Key indicators in their original context, from the analyst who coined the framing.
+3. Sergio Caltagirone / Dragos, "The Four Types of Threat Detection" (archived copy; the original resource page has moved). [https://web.archive.org/web/20230928231221/https://www.dragos.com/resource/the-four-types-of-threat-detection-with-case-studies-in-industrial-control-systems-ics/](https://web.archive.org/web/20230928231221/https://www.dragos.com/resource/the-four-types-of-threat-detection-with-case-studies-in-industrial-control-systems-ics/)
+	The two-by-two behind the quadrant component, with ICS case studies.
+4. Bouwman et al., "A different cup of TI? The added value of commercial threat intelligence" (USENIX Security 2020). [https://www.usenix.org/conference/usenixsecurity20/presentation/bouwman](https://www.usenix.org/conference/usenixsecurity20/presentation/bouwman)
+	The measured overlap between commercial TI vendors. Read before renewing a feed contract.
+5. Ryan Stillions, "The DML model" (2014). [http://ryanstillions.blogspot.com/2014/04/the-dml-model_21.html](http://ryanstillions.blogspot.com/2014/04/the-dml-model_21.html)
+	The detection maturity yardstick. Assess your own program against it honestly.
+6. MITRE Cyber Analytics Repository. [https://car.mitre.org/](https://car.mitre.org/)
+	Community behavioral analytics mapped to ATT&CK, ready to adapt.
+7. SigmaHQ rules repository. [https://github.com/SigmaHQ/sigma](https://github.com/SigmaHQ/sigma)
+	The largest open collection of behavioral detection rules; study its structure even if you never deploy it wholesale.
+8. EQL Analytics Library. [https://eqllib.readthedocs.io/en/latest/atomicblue.html](https://eqllib.readthedocs.io/en/latest/atomicblue.html)
+	Behavioral analytics in Event Query Language, mapped to Atomic Red Team tests for validation.
+9. CrowdStrike, 3CXDesktopApp intrusion campaign reporting (March 2023). [https://www.crowdstrike.com/blog/crowdstrike-detects-and-prevents-active-intrusion-campaign-targeting-3cxdesktopapp-customers/](https://www.crowdstrike.com/blog/crowdstrike-detects-and-prevents-active-intrusion-campaign-targeting-3cxdesktopapp-customers/)
+	The behavioral detection record from day zero of the supply chain compromise.
+10. Mandiant, 3CX software supply chain compromise analysis. [https://cloud.google.com/blog/topics/threat-intelligence/3cx-software-supply-chain-compromise](https://cloud.google.com/blog/topics/threat-intelligence/3cx-software-supply-chain-compromise)
+	The full investigation, including the trojanized X_TRADER package that started the chain.
+11. David Bianco, "The Pyramid of Pain". [https://detect-respond.blogspot.com/2013/03/the-pyramid-of-pain.html](https://detect-respond.blogspot.com/2013/03/the-pyramid-of-pain.html)
+	The adversary-cost framing this post leans on; covered in depth elsewhere on this blog.

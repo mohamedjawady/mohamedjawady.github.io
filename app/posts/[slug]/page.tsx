@@ -47,6 +47,7 @@ import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
 import { ACHMatrix } from "@/components/visualizations/ach-matrix"
+import { DetectionTypesQuadrant } from "@/components/visualizations/detection-types-quadrant"
 import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
 import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
 import { GolliathArchitecture } from "@/components/visualizations/golliath-architecture"
@@ -100,6 +101,7 @@ const postComponents = {
   PyramidOfPain: () => <PyramidOfPain />,
   TTPCampaignTimeline: () => <TTPCampaignTimeline />,
   ACHMatrix: () => <ACHMatrix />,
+  DetectionTypesQuadrant: () => <DetectionTypesQuadrant />,
   SaltArchitecture: () => <SaltArchitecture />,
   SaltExerciseDiagram: () => <SaltExerciseDiagram />,
   GolliathArchitecture: () => <GolliathArchitecture />,

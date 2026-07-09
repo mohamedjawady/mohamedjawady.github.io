@@ -102,6 +102,12 @@ const glossary: TermDefinition = {
 	"humint": "Human Intelligence - intelligence collected through interpersonal contact, the classic domain of case officers and informants.",
 	"sigint": "Signals Intelligence - intelligence derived from intercepted signals and communications.",
 	"diagnosticity": "The degree to which a piece of evidence helps distinguish between competing hypotheses. Evidence consistent with every hypothesis has zero diagnosticity no matter how compelling it feels.",
+	"behavioral-analytic": "A detection encoded around adversary behavior rather than specific artifacts: the chain of actions an intrusion performs, expressed so it fires on new campaigns with entirely new infrastructure. Durable where indicators expire, and it carries context in the alert itself.",
+	"indicator-lifecycle": "The cycle an indicator moves through: revealed (discovered or reported), vetted through retro-hunting, deployed to detection and mitigation, fired against real activity, and analyzed, which reveals new indicators that restart the cycle.",
+	"key-indicator": "An indicator that remains consistent across multiple intrusions, uniquely distinguishes one activity cluster from others, separates malicious from benign activity, and aligns to a specific phase of adversary action. The small subset of indicators worth long-term investment.",
+	"alert-fatigue": "The operational failure state where alert volume exceeds what analysts can triage, so genuinely critical alerts receive the same shallow treatment as noise. Usually caused by deploying unvetted indicators as a primary detection layer.",
+	"detection-engineering": "The discipline of turning knowledge about adversary behavior into tested, maintained detection logic: Sigma rules, SIEM correlations, EDR policies, and the pipelines that validate they still fire.",
+	"anomaly-detection": "An environmental detection approach that models normal activity statistically and alerts on deviation. It can catch novel activity nobody encoded, but its alerts arrive without context: the model knows something is unusual, not what it is or what to do.",
 }
 
 export interface TermProps {

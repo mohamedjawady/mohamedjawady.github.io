@@ -1,0 +1,211 @@
+---
+title: "Deny Is Not Free: The Courses of Action Matrix and Intelligence Gain/Loss"
+description: "Blocking is a reflex, not a strategy. The Courses of Action matrix turns one bad indicator into seven possible responses, and intelligence gain/loss makes the hidden cost of each one explicit. How defenders choose the action that protects them without burning their own visibility."
+date: "2026-07-10"
+author: "Mohamed Habib Jaouadi"
+tags: ["threat-intelligence", "incident-response", "courses-of-action", "detection-engineering", "kill-chain", "soc"]
+banner: "/banners/posts/courses-of-action.jpg"
+bannerAlt: "A defender's decision surface: kill chain phases against courses of action"
+visibility: "public"
+---
+
+> **Response Focus:** Finding something bad is the easy part. Choosing what to do about it is where most programs run on reflex, and the reflex is usually to block. This post is about the full menu of responses and the hidden bill that each one carries.
+
+**TL;DR:** When a defender finds a malicious indicator, blocking it is one of seven possible responses and frequently the worst, because it protects you once while telling the adversary exactly which resource is burned. The <Term concept="courses-of-action">Courses of Action</Term> matrix lays out the full option space across the kill chain, and <Term concept="intelligence-gain-loss">intelligence gain/loss</Term> makes the cost of each option explicit. The discipline is simple to state: run both passive actions on every indicator, then choose exactly one mitigating action based on what it gains you and what it costs you in future visibility. Deny is not free. It is paid for in intelligence and in adversary awareness.
+
+## Introduction
+
+A SOC analyst spots a phishing sender that has slipped past the gateway. A firewall rule goes in to block the address, the ticket closes, everyone moves on. It feels like a win, and in the narrowest sense it is one: that sender cannot reach another inbox.
+
+Look at what happened invisibly. The adversary's next attempt bounces, they learn that sending address is dead, they register a new one within the hour, and the organization has traded a permanent detection opportunity for a few hours of relief plus a freshly warned adversary who now knows their infrastructure is being watched. The block was not wrong, exactly. It was chosen without anyone weighing the alternatives, and it was the alternative that gives away the most while teaching you the least.
+
+Every action a defender takes against an adversary is also a signal sent back to that adversary, and every action forecloses some future observation. The Courses of Action matrix is the tool that makes the option space visible, and intelligence gain/loss is the calculus for choosing among the options deliberately instead of reflexively. This post walks through both, works a single realistic indicator all the way through the tradeoff, and shows how the same matrix doubles as a map of exactly where your program should invest next.
+
+## The Reflex and Its Hidden Cost
+
+Deny feels like the natural response because it is legible, fast, and satisfying. You found something bad, you stopped it, the graph of blocked threats ticks up. Nearly every tool on the market is built to make blocking a single click, which quietly trains teams to treat it as the only response worth considering.
+
+The problem is that a block is a loud, permanent statement to the adversary: this specific thing no longer works. For a piece of infrastructure the adversary can regenerate in minutes, that statement costs them almost nothing and costs you everything you might have learned by watching it operate. The <Term concept="kill-chain">kill chain</Term> has seven phases, which means an intrusion offers up to seven distinct places to observe, characterize, and respond to an adversary, and reflexively denying at the first sign of trouble collapses all of that into a single low-value action taken at the earliest possible moment. The mature question is not "can I block this," which is almost always yes. It is "of everything I could do here, which action serves my actual requirement, and what does it cost me in visibility and in tipping my hand."
+
+## The Matrix
+
+The Courses of Action matrix answers that question by laying the options out on a grid. The rows are the phases of the kill chain, the adversary's steps. The columns are the categorical actions a defender can take, the seven Ds. Each cell holds the specific indicators or techniques you would act on for that phase, in that way. If the kill chain is the model of what the adversary must do, the CoA matrix is the model of what you can do back at each step, which is why it is often called the defender's mirror of the kill chain.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 300" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="A grid with seven kill chain phases as rows and seven courses of action as columns. The first two columns, discover and detect, are grouped as passive. The remaining five, deny disrupt degrade deceive destroy, are grouped as mitigating. One row is highlighted to show how a single indicator populates cells across the actions.">
+    <text x="60" y="30" fill="currentColor" fontSize="11" fontWeight="bold" opacity="0.7">phases</text>
+    <rect x="150" y="12" width="150" height="22" rx="5" fill="#0ea5e9" fillOpacity="0.15" stroke="#0ea5e9" strokeWidth="1" />
+    <text x="225" y="27" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">PASSIVE: always both</text>
+    <rect x="305" y="12" width="405" height="22" rx="5" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1" />
+    <text x="507" y="27" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">MITIGATING: choose one</text>
+    {["Discover","Detect","Deny","Disrupt","Degrade","Deceive","Destroy"].map((d,i)=>(
+      <text key={d} x={185+i*77} y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">{d}</text>
+    ))}
+    {["Recon","Weapon.","Delivery","Exploit","Install","C2","Actions"].map((p,r)=>(
+      <text key={p} x="20" y={78+r*32} fill="currentColor" fontSize="10" opacity="0.75">{p}</text>
+    ))}
+    {[0,1,2,3,4,5,6].map((r)=>(
+      [0,1,2,3,4,5,6].map((c)=>{
+        const lit = r===5
+        const passive = c<2
+        return <rect key={r+"-"+c} x={150+c*77} y={66+r*32} width="70" height="24" rx="4"
+          fill={lit ? (passive ? "#0ea5e9" : "#10b981") : "currentColor"}
+          fillOpacity={lit ? (passive ? 0.35 : 0.3) : 0.04}
+          stroke={lit ? (passive ? "#0ea5e9" : "#10b981") : "currentColor"}
+          strokeWidth={lit ? 1.5 : 0.5} strokeOpacity={lit ? 0.8 : 0.25} />
+      })
+    ))}
+    <text x="360" y="292" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">one indicator (here, a C2 domain in the C2 phase) can populate a cell under several actions at once</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The defender's mirror of the kill chain. Passive columns on the left, mitigating on the right.</p>
+</div>
+
+The matrix comes from the same 2011 Lockheed Martin Intelligence-Driven Computer Network Defense paper that gave the field the kill chain. That paper described six actions; the refinement taught here separates Discover as a distinct passive action from Detect, giving seven. The exact count matters less than the structure: a two-dimensional space of when in the intrusion you are acting and how you are acting, so that a response is chosen from the whole surface rather than grabbed from habit.
+
+## The Seven Ds
+
+The seven actions split into two groups, and the split is the most important thing on the matrix.
+
+The two passive actions carry no strategic cost and should be run on nearly every indicator you hold. <Term concept="passive-defense">Discover</Term> means searching history: take the indicator and look backward through your logs and telemetry to answer whether this has happened before, because a callback domain you just found may have been beaconing quietly for months. Detect means the forward complement: make sure that if this indicator appears again, an alert fires. Neither action touches the adversary or reveals anything to them, which is why they compose freely and why skipping them is pure waste.
+
+The five mitigating actions are where cost enters, and they range from crude to sophisticated. Deny prevents the event outright, the perimeter block. Disrupt interferes mid-event to make it fail, an IPS reset or a sandbox that breaks installation. Degrade slows the event to buy responders time without stopping it, tarpitting or rate limits, a last resort because the activity may still eventually succeed. Deceive makes the adversary believe they succeeded when they did not, redirecting their <Term concept="c2">command and control</Term> to a controlled host so their malware talks to you instead of them. Destroy is offensive action to remove the capability entirely, a takedown or a law enforcement arrest, and it is included for completeness rather than practicality: it requires legal authority that almost no organization has, and this is a defensive-context post, so treat that row as the province of governments and the courts, not a hack-back invitation.
+
+| Action | What it does | Example (C2 phase) | Kind |
+|---|---|---|---|
+| Discover | Search history for prior occurrence | Retro-hunt the domain across DNS logs | Passive |
+| Detect | Alert on future occurrence | Beacon-pattern analytic | Passive |
+| Deny | Prevent the event outright | Block the domain at DNS | Mitigating |
+| Disrupt | Interfere mid-event to cause failure | Reset the C2 sessions | Mitigating |
+| Degrade | Slow it to buy response time | Rate-limit the C2 channel | Mitigating |
+| Deceive | Make the adversary believe they won | Sinkhole the domain to your host | Mitigating |
+| Destroy | Remove the capability offensively | Coordinated takedown, arrest | Restricted |
+
+## Why You Choose Exactly One
+
+Passive and mitigating actions behave differently under combination, and that difference is the operating procedure. The passive actions compose with everything: discovering and detecting an indicator never interferes with any other response. The mitigating actions exclude one another, because they act on the same event at the same point and the first one to fire ends the event. You cannot deny a C2 callback and also deceive the adversary through it, because denying it means the malware never reaches the controlled host where the deception would happen. Deny forecloses deceive; disrupt forecloses degrade; and so on.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 240" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="A decision diagram: an indicator flows into two passive actions that always both fire, discover and detect, and then into a single-select gate that chooses exactly one of five mitigating actions.">
+    <defs>
+      <marker id="coaA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+    <rect x="20" y="98" width="130" height="44" rx="10" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="85" y="124" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">INDICATOR</text>
+    <line x1="150" y1="120" x2="188" y2="120" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#coaA)" />
+    <rect x="192" y="72" width="150" height="42" rx="8" fill="#0ea5e9" fillOpacity="0.15" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="267" y="92" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">DISCOVER + DETECT</text>
+    <text x="267" y="106" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.75">both always fire</text>
+    <rect x="192" y="126" width="150" height="42" rx="8" fill="#10b981" fillOpacity="0.1" stroke="#10b981" strokeWidth="1.5" strokeDasharray="5 4" />
+    <text x="267" y="146" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">SINGLE-SELECT GATE</text>
+    <text x="267" y="160" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.75">pick exactly one below</text>
+    <line x1="342" y1="147" x2="380" y2="147" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#coaA)" />
+    {["Deny","Disrupt","Degrade","Deceive","Destroy"].map((d,i)=>(
+      <g key={d}>
+        <rect x="386" y={30+i*38} width="150" height="30" rx="7" fill="#10b981" fillOpacity={d==="Deceive"?0.25:0.08} stroke="#10b981" strokeWidth={d==="Deceive"?2:1} strokeOpacity={d==="Deceive"?0.9:0.5} />
+        <text x="461" y={50+i*38} textAnchor="middle" fill="currentColor" fontSize="11" fontWeight={d==="Deceive"?"bold":"normal"}>{d}</text>
+      </g>
+    ))}
+    <text x="620" y={30+3*38+20} textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">often the</text>
+    <text x="620" y={30+3*38+33} textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">best trade</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Both passive actions, always. Then one mitigating action, chosen. The whole post is about choosing that one.</p>
+</div>
+
+So the procedure writes itself: for every piece of intelligence, run both passive courses, then select a single mitigating course. Which one is the entire decision, and it is the decision that intelligence gain/loss exists to make.
+
+## Intelligence Gain/Loss
+
+Intelligence gain/loss is a concept borrowed from the intelligence community, and it names the tradeoff hiding inside every mitigating action. The gain is what the action teaches you. The loss is everything the action costs you: the observation you forgo, plus the information the action leaks to the adversary about what you know. Analysts struggle with this balance constantly, because it is genuinely a judgment call about how much intelligence is enough before it is time to act.
+
+Work it on one indicator. You have identified a C2 callback domain used by a loader on a single infected host. The passive actions are automatic: retro-hunt the domain across your DNS history to find any earlier victims, and stand up an alert for future beacons. Now choose the one mitigating action, and watch how differently the four realistic options score.
+
+| Action | Intelligence gain | Intelligence loss and signal |
+|---|---|---|
+| Deny (block the domain at DNS) | Nothing new. The one host is protected. | The next beacon fails, the adversary learns the domain is burned, they rotate within hours, and all further visibility into the loader is gone. |
+| Disrupt (reset the C2 sessions) | Partial. You may capture the session before it dies and you stop this instance. | The adversary may notice the instability and investigate. Ongoing observation ends. |
+| Degrade (rate-limit the channel) | Time. Responders get a wider window. | Low intelligence value, and the activity may still succeed. A last resort, not a plan. |
+| Deceive (sinkhole the domain to your host) | Highest. Every infected host beacons to you, you observe the loader's second-stage behavior, and you can measure the campaign's true scope. | Near zero if done quietly. The adversary believes their infrastructure is live and keeps operating in the open. |
+
+The reflexive choice, Deny, sits at the bottom of the value ranking and the top of the signal ranking: it is the option that teaches you the least and warns the adversary the most. Deceive, when you have the capability to sinkhole cleanly, is the option that protects the host and turns a single indicator into a census of every other victim, all while the adversary keeps operating as though nothing happened. Same indicator, same starting protection, opposite intelligence outcomes.
+
+Explore the full matrix and the gain/loss for each mitigating action below.
+
+<CoAMatrix />
+
+None of this makes Deny wrong in every case. If you lack the capability to deceive, if the requirement is simply to stop the bleeding on a critical system right now, or if the intelligence value is genuinely low, blocking is the correct call. The point is that it should be a call, weighed against the alternatives, not a reflex that fires before the alternatives are even considered.
+
+## When Watching Beat Blocking
+
+The clearest real-world proof that deception can outrank denial is the Coreflood takedown of April 2011. Coreflood was a botnet that had infected an estimated two million computers over nearly a decade, stealing banking credentials and financial data. The obvious response to a known-malicious botnet is to block and seize its infrastructure, and blocking the command and control domains would indeed have severed the operators' control.
+
+It would also have left two million machines infected, silently, with no way to reach the victims. The US Department of Justice and FBI did something more sophisticated, and it maps precisely onto the Deceive course of action. Under court authorization, they seized the Coreflood domains and stood up a substitute command and control server of their own. When the infected bots beaconed to what they believed was their controller, the substitute server answered with a command instructing the Coreflood malware to stop running. Instead of merely cutting the operators off, the operation impersonated the operators to neutralize the malware on victim machines and to measure the true scale of the infection from the beacons arriving at the controlled server. A block would have protected the networks that happened to have the domains on a blocklist. Substituting the controller measured the botnet and began dismantling it from the inside. That is intelligence gain/loss reasoning at national scale: the loud action was available and inferior, and the deceptive action gained visibility and reach that denial never could.
+
+## The Matrix as an Investment Map
+
+The Courses of Action matrix has a second life that most teams never use: it is a map of your own capability gaps. When you sit down to fill in the cells for a real intrusion, some of them come up empty not because no action is possible in theory, but because you cannot take that action, you lack the tooling, the access, or the authority. Those empty cells are the most valuable thing on the page.
+
+The pattern to watch for is the repeatedly blocked optimal action. Time after time the gain/loss analysis points to Deceive, and time after time you cannot execute it because nobody will approve the internal DNS change that a sinkhole requires. Log it every single time. One analyst grumbling that they wish they could sinkhole is noise; a documented record of twelve incidents where the analytically best response was foreclosed by the same missing capability is a business case. That record is what converts "we would like better tooling" into "here are twelve times we took a worse action than we knew was right, and here is what fixing it costs."
+
+Prioritize the gaps on two axes, the value of the action and the cost to enable it. High-value, low-cost gaps are immediate wins that a team should close on its own authority. High-value, high-cost gaps, the sinkhole capability, a deception environment, the authority to act, are the budget and roadmap items that leadership funds precisely because the CoA record shows what their absence keeps costing.
+
+<CollapsibleCode title="Gain/Loss Worksheet for One Indicator" language="markdown">
+
+```markdown
+INDICATOR
+Value:
+Kill chain phase:
+Diamond vertex:
+
+PASSIVE (run both, always)
+[x] Discover: where you searched history, and what you found
+[x] Detect: the alert or rule you deployed
+
+MITIGATING (score each, then choose one)
+Deny     | gain: | loss + signal:
+Disrupt  | gain: | loss + signal:
+Degrade  | gain: | loss + signal:
+Deceive  | gain: | loss + signal:
+(Destroy | only if you hold legal authority)
+
+DECISION
+Chosen action:
+Why, in gain/loss terms:
+
+CAPABILITY GAP (if the best action was not executable)
+Action you wanted:
+What you lacked (tooling / access / authority):
+Estimated cost to enable:
+```
+
+</CollapsibleCode>
+
+## Where ATT&CK Fits
+
+The CoA matrix organizes responses by kill chain phase, which is the right altitude for narrative and for reasoning about an intrusion end to end. For finer granularity, MITRE ATT&CK maps the specific adversary techniques you are responding to, and you can drive course-of-action selection per technique rather than per phase, choosing a distinct response for spearphishing attachments versus spearphishing links rather than one response for all of Delivery. MITRE D3FEND goes further and maps defensive techniques directly to the offensive ATT&CK techniques they counter, which is essentially a technique-level courses-of-action vocabulary. ATT&CK is covered elsewhere on this blog; the point here is only that the CoA matrix and ATT&CK are complementary, one supplying the response verbs and the other supplying the technique-level nouns to attach them to.
+
+## Hands-On Exercise
+
+Take one indicator from a recent incident or a public advisory. Place it in its correct kill chain phase. Now write the theoretical action for all seven Ds against it, marking Discover and Detect as always-on. For each of the five mitigating actions, write one line of gain and one line of loss, and make sure the loss line explicitly names what the action signals to the adversary. Choose the single mitigating action you would actually take and justify it in gain/loss terms rather than by habit. Finally, if the action you judged best is one you could not currently execute, write the capability gap in one line: what you would need, and what it would cost to have it. Keep those gap lines. When you have a dozen, you have a budget document.
+
+## Conclusion
+
+Blocking feels like winning, and sometimes it is, but it is the response that trades the most future visibility for the least present effort while handing the adversary a free signal about what you know. The Courses of Action matrix exists so that block is a considered choice among seven rather than the only reflex in the building, and intelligence gain/loss exists so that the choice is made on evidence about what each action gains and costs. Run both passive actions every time. Choose exactly one mitigating action, on purpose. And log every occasion you were forced into a worse action than the one you wanted, because that log is how the reflex finally gets replaced with a capability.
+
+For what your indicators should become once you decide to keep watching, see From Indicators to Behavioral Analytics. For whether you even have the data to observe the phases you are choosing among, see the collection management post. And for why the adversary's behavior is the durable thing worth deceiving your way into observing, see the Pyramid of Pain.
+
+## References & Further Reading
+
+1. Hutchins, Cloppert, Amin, "Intelligence-Driven Computer Network Defense" (Lockheed Martin). [https://www.lockheedmartin.com/content/dam/lockheed-martin/rms/documents/cyber/LM-White-Paper-Intel-Driven-Defense.pdf](https://www.lockheedmartin.com/content/dam/lockheed-martin/rms/documents/cyber/LM-White-Paper-Intel-Driven-Defense.pdf)
+	The origin of both the kill chain and the Courses of Action matrix. The source text for this entire post.
+2. Michael Cloppert, "Security Intelligence: Attacking the Cyber Kill Chain" (SANS). [https://www.sans.org/blog/security-intelligence-attacking-the-cyber-kill-chain/](https://www.sans.org/blog/security-intelligence-attacking-the-cyber-kill-chain/)
+	One of the original authors on applying the model, including the courses of action, in practice.
+3. US Department of Justice, "Department of Justice Takes Action to Disable International Botnet" (April 2011). [https://www.justice.gov/archives/opa/pr/department-justice-takes-action-disable-international-botnet](https://www.justice.gov/archives/opa/pr/department-justice-takes-action-disable-international-botnet)
+	The Coreflood takedown: a court-authorized substitute controller, the deception course of action at national scale.
+4. FBI, "Botnet Operation Disabled" (2011). [https://www.fbi.gov/news/stories/botnet-operation-disabled](https://www.fbi.gov/news/stories/botnet-operation-disabled)
+	The FBI's account of the same operation, with the substitute-server mechanism described plainly.
+5. MITRE D3FEND. [https://d3fend.mitre.org/](https://d3fend.mitre.org/)
+	Defensive techniques mapped to the ATT&CK techniques they counter: a technique-level courses-of-action vocabulary.
+6. MITRE ATT&CK. [https://attack.mitre.org/](https://attack.mitre.org/)
+	The technique-level model to attach course-of-action decisions to when phase-level granularity is too coarse.

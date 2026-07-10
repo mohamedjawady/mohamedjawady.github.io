@@ -1,0 +1,235 @@
+---
+title: "You Can't Answer That: Collection Management and the Questions Your Data Can Actually Support"
+description: "Every intelligence requirement is a question, and your collection decides whether it is answerable before any analysis begins. How to build a Collection Management Framework, find the retention gaps that kill investigations, and turn unanswerable questions into funded collection requirements."
+date: "2026-07-10"
+author: "Mohamed Habib Jaouadi"
+tags: ["threat-intelligence", "collection-management", "cti-program", "visibility", "detection-engineering", "soc"]
+banner: "/banners/posts/collection-management.jpg"
+bannerAlt: "A network of lights across the globe, most of it outside any single sensor's field of view"
+visibility: "public"
+---
+
+> **Collection Focus:** Analysis gets the glory, but collection decides what analysis is possible. This post is about the least glamorous document a CTI team can own, the Collection Management Framework, and why it is the difference between answering the CISO's question and discovering mid-investigation that the answer rotated out of existence weeks ago.
+
+**TL;DR:** Every intelligence requirement is a question, and whether that question is answerable was decided long before it was asked, by what your organization collects and how long it keeps it. Most teams discover their gaps in the middle of an investigation, which is the most expensive possible moment to learn them. A <Term concept="collection-management-framework">Collection Management Framework</Term> maps every source to what it can see, for how long, and what follow-on collection it enables, so that every incoming question can be triaged in minutes into answerable, answerable after collection, or a documented gap with a price tag. The third category, handled well, is the strongest budget argument a CTI team will ever produce.
+
+## The Unanswerable Requirement
+
+Start with how this fails, because everyone who has worked an acquisition has lived some version of it.
+
+Your company closes on a smaller firm. Six weeks after the networks are joined, your CISO asks the reasonable question: was the acquired environment already compromised during the six months before we connected it to ours? It is exactly the kind of question a threat intelligence function exists to answer, it supports a real decision about segmentation and trust, and it has executive attention.
+
+Then the team starts pulling threads. The acquired company never deployed <Term concept="edr">EDR</Term>, so there is no endpoint telemetry at all. Its perimeter firewall keeps thirty days of logs on a loop. The VPN appliance keeps twenty-one. The cloud tenant had audit logging on the default tier, which recorded ninety days of control plane events and captured none of the data access events that would show a mailbox being read. Your own telemetry, the good stuff, sees the acquired network only from integration day forward, which is two weeks of history. The honest answer to the CISO is that of the one hundred eighty days in the question, you can partially reconstruct about ninety from a single low-fidelity source, and the first ninety are gone from every system on earth.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 320" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Timeline diagram: a 180-day requirement window bracketed at the top, with per-source retention bars below reaching back only 14 to 90 days, and the first 90 days shaded red with no coverage at all">
+    <line x1="40" y1="42" x2="680" y2="42" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <line x1="40" y1="34" x2="40" y2="50" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <line x1="680" y1="34" x2="680" y2="50" stroke="currentColor" strokeWidth="2" opacity="0.7" />
+    <text x="360" y="24" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">the question spans 180 days</text>
+    <rect x="40" y="60" width="320" height="240" fill="#ef4444" fillOpacity="0.06" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 5" />
+    <text x="200" y="86" textAnchor="middle" fill="#ef4444" fontSize="12" fontWeight="bold">the first 90 days:</text>
+    <text x="200" y="102" textAnchor="middle" fill="#ef4444" fontSize="11">no source can reach them</text>
+    <text x="44" y="131" fill="currentColor" fontSize="11" opacity="0.8">acquired co: EDR</text>
+    <text x="520" y="131" fill="#ef4444" fontSize="10.5" fontStyle="italic">never deployed</text>
+    <text x="44" y="171" fill="currentColor" fontSize="11" opacity="0.8">acquired co: firewall</text>
+    <rect x="573" y="160" width="107" height="18" rx="4" fill="#0ea5e9" fillOpacity="0.7" />
+    <text x="567" y="173" textAnchor="end" fill="currentColor" fontSize="9.5" fontFamily="monospace" opacity="0.7">30d</text>
+    <text x="44" y="211" fill="currentColor" fontSize="11" opacity="0.8">acquired co: VPN</text>
+    <rect x="605" y="200" width="75" height="18" rx="4" fill="#8b5cf6" fillOpacity="0.7" />
+    <text x="599" y="213" textAnchor="end" fill="currentColor" fontSize="9.5" fontFamily="monospace" opacity="0.7">21d</text>
+    <text x="44" y="251" fill="currentColor" fontSize="11" opacity="0.8">acquired co: cloud audit (default tier)</text>
+    <rect x="360" y="240" width="320" height="18" rx="4" fill="#f59e0b" fillOpacity="0.6" />
+    <text x="354" y="253" textAnchor="end" fill="currentColor" fontSize="9.5" fontFamily="monospace" opacity="0.7">90d</text>
+    <text x="44" y="291" fill="currentColor" fontSize="11" opacity="0.8">your telemetry (post-integration)</text>
+    <rect x="630" y="280" width="50" height="18" rx="4" fill="#10b981" fillOpacity="0.7" />
+    <text x="624" y="293" textAnchor="end" fill="currentColor" fontSize="9.5" fontFamily="monospace" opacity="0.7">14d</text>
+    <line x1="40" y1="308" x2="680" y2="308" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+    <text x="40" y="320" fill="currentColor" fontSize="10" opacity="0.6">180d ago</text>
+    <text x="360" y="320" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.6">90d</text>
+    <text x="573" y="320" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.6">30d</text>
+    <text x="680" y="320" textAnchor="end" fill="currentColor" fontSize="10" opacity="0.6">today</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The question reaches back 180 days. The data reaches back 90, thinly. Nobody did anything wrong during the investigation; it was lost before it started.</p>
+</div>
+
+Nothing about that outcome reflects on the analysts. The investigation was decided by retention policies written years earlier by people solving storage cost problems, and by a licensing tier nobody on the security team chose. The failure is not that the question was unanswerable. Unanswerable questions are normal. The failure is that nobody knew it was unanswerable until the middle of the engagement, after commitments had been made upward and hours had been burned confirming the absence of data.
+
+## What a Collection Management Framework Actually Is
+
+The fix has a name from classic intelligence doctrine, where collection management is its own profession. A Collection Management Framework is a map from every data source you have to what it can observe, which phases of adversary activity it covers, what follow-on collection it enables, how long it retains data, and who owns access to it. The concept was carried into CTI most visibly by Robert M. Lee, whose public whitepaper on collection management frameworks remains the reference treatment, and the underlying discipline traces straight back to doctrinal collection management in JP 2-0.
+
+Two clarifications keep the CMF from degenerating into paperwork. It is not an asset inventory: nobody cares how many firewalls you own, they care what questions firewall logs can answer. And it is not a list of SIEM indices: data you technically ingest but cannot query, cannot interpret, or cannot access without a three-day ticket to another team is not collection, it is decoration. The organizing principle of every row is answerability. An analyst who does not understand their collection at a technical level cannot know which <Term concept="intelligence-requirement">intelligence requirements</Term> are satisfiable against it, and a team in that state is doing its requirements triage by trial and error, one burned investigation at a time.
+
+## Building the Internal CMF
+
+The internal half of the framework covers your own telemetry, and building it is a few days of unglamorous interviews and dashboard archaeology that pay for themselves the first time a hard question arrives. Here is what a first pass looks like for a realistic mid-size environment.
+
+| Source | Data type | Sees | Enables next | Keeps |
+|---|---|---|---|---|
+| Email gateway | Message metadata, verdicts, attachments | Delivery, some exploitation | Original message and attachment retrieval | 90d |
+| EDR (workstations) | Process, file, registry, network telemetry | Exploitation through actions on objectives | Live response, memory capture | 30d |
+| Windows Event Forwarding | Auth, service, and task events | Installation, lateral movement | Targeted log pulls from unforwarded hosts | 180d |
+| DNS resolver logs | Queries and responses | Lure lookups, domain-based C2 | <Term concept="passive-dns">Passive DNS</Term> pivoting | 14d |
+| Web proxy | HTTP/S requests, categories, verdicts | Delivery, web-based C2 | Full URL and sample recovery | 60d |
+| Netflow | Connection metadata, volumes, timing | C2 timing, exfiltration volume | Packet capture on flagged flows | 14d |
+| IdP / SSO logs | Auth events, token grants, MFA outcomes | Credential abuse, password spraying | Session revocation, per-app review | 365d |
+| Cloud audit logs | Control plane and data access events | Cloud persistence, data access | Data-plane log enablement, snapshots | 90d |
+
+The table is never the interesting part. The interesting part is what filling it in surfaces, and it surfaces the same uncomfortable discoveries in almost every organization. The netflow everyone described as "we have netflow" rotates in fourteen days, which means it exists for incident response and is nearly useless for anything retrospective. The DNS logs are collected faithfully by the infrastructure team and no one on the intelligence side has query access. The EDR coverage that anchors every detection conversation stops at the workstation estate, and the servers, where the adversary actually lives, report nothing. The cloud audit logging is enabled on the production tenant and dark on the three development tenants where engineers hold the same credentials. A CMF's first deliverable is always a corrected map of what you assumed you had, and it is always shorter than the assumption.
+
+Explore the same idea interactively below. The coverage grid is one dimension; the time control is the one everybody forgets.
+
+<CollectionCoverageMatrix />
+
+Notice what the matrix makes visible. Coverage has two dimensions, phase and time, and a source that covers the right phase answers nothing if its retention window closed before the question arrived. Move the incident back ninety days and a respectable eight-source program collapses to two sources. Notice also the weaponization column staying gray across every row: some phases of adversary activity are structurally invisible from inside your own network, no matter what you buy. That is not a failure of your collection. It is the reason external collection exists.
+
+## The External CMF
+
+Feeds, vendor reporting, and sharing communities are collection too, and they belong in the framework with the same honesty applied to internal sources, plus two extra columns: what the provider's own field of view is, and what the source adds over collection you already hold.
+
+The field of view column matters because every external producer can only report what their sensors and customer base let them see, a point the Analytic Judgment post on this blog treats in depth as field-of-view bias. The consequences are measurable: the USENIX Security 2020 study by Bouwman and colleagues compared two market-leading commercial threat intelligence vendors and found their indicator sets overlapped in the low single digits even for the same named actors. Neither vendor was wrong. Each was faithfully reporting a different part of the ocean. The procurement lesson is to choose external collection for complementary fields of view rather than volume, and the CMF is where that choice becomes explicit.
+
+| External source | Their field of view | The question only it answers |
+|---|---|---|
+| Commodity indicator feed | Their sensor network and customer telemetry, skewed toward crimeware | "Has this already-burned artifact touched us," and little else |
+| Sector ISAC sharing | Peer organizations in your own industry | "Who else in our sector is seeing this campaign right now" |
+| DFIR vendor reporting | Their incident response engagements, skewed toward victims of serious intrusions | "What does post-compromise tradecraft look like in intrusions we have not suffered ourselves" |
+
+A feed whose field of view duplicates your existing coverage is a subscription to noise, however good its marketing. An external source that sees a region, a sector, or an intrusion phase you are structurally blind to is worth several that do not.
+
+## The Gate: Where Requirements Meet the CMF
+
+The operational payoff of the whole exercise is a triage gate. Every incoming intelligence requirement, before anyone opens a single tool, gets checked against the framework and lands in one of three outcomes. It is answerable now, so it routes to analysis with a known set of sources. It is answerable after follow-on collection, so it routes to collection first with an honest time estimate attached. Or it is unanswerable with current collection, and it becomes a documented <Term concept="collection-gap">collection gap</Term> with the requirement stapled to it.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 720 300" style={{ width: "100%", maxWidth: "680px" }} role="img" aria-label="Flow diagram: an intelligence requirement passes through a CMF decision gate into one of three outcomes, answerable now, collect first, or collection gap, with funded gaps looping back into new collection">
+    <defs>
+      <marker id="cmfA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+    <rect x="20" y="118" width="175" height="64" rx="10" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="107" y="144" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">INTELLIGENCE REQUIREMENT</text>
+    <text x="107" y="163" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">a question with a deadline</text>
+    <line x1="197" y1="150" x2="238" y2="150" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#cmfA)" />
+    <polygon points="330,88 418,150 330,212 242,150" fill="#8b5cf6" fillOpacity="0.12" stroke="#8b5cf6" strokeWidth="2" />
+    <text x="330" y="146" textAnchor="middle" fill="currentColor" fontSize="14" fontWeight="bold">CMF</text>
+    <text x="330" y="164" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">can we answer it?</text>
+    <line x1="418" y1="150" x2="516" y2="60" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#cmfA)" />
+    <line x1="418" y1="150" x2="516" y2="150" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#cmfA)" />
+    <line x1="418" y1="150" x2="516" y2="240" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#cmfA)" />
+    <rect x="520" y="30" width="180" height="56" rx="10" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.5" />
+    <text x="610" y="53" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">ANSWERABLE NOW</text>
+    <text x="610" y="71" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">route to analysis</text>
+    <rect x="520" y="122" width="180" height="56" rx="10" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.5" />
+    <text x="610" y="145" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">COLLECT FIRST</text>
+    <text x="610" y="163" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">follow-on collection, then analysis</text>
+    <rect x="520" y="214" width="180" height="56" rx="10" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.5" />
+    <text x="610" y="237" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">COLLECTION GAP</text>
+    <text x="610" y="255" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.75">register it, attach the requirement</text>
+    <path d="M 610 272 L 610 290 L 330 290 L 330 218" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.5" markerEnd="url(#cmfA)" />
+    <text x="470" y="285" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.7">funded gaps close into new collection</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Three outcomes, all useful. The red one, handled correctly, is the most valuable of the three.</p>
+</div>
+
+The third outcome deserves emphasis because most teams treat it as an embarrassment when it is actually the product. A generic plea for "more logging" has never survived a budget meeting, because it arrives with no decision attached and competes against everything else that also wants money. A collection gap register entry reads differently: here is the question the board asked, here is the decision it was supposed to support, here is why it could not be answered, and here is what closing that gap costs. That is not a request, it is an invoice for a capability the organization already demonstrated it wanted. Teams that run the gate honestly find that their gap register does more for their funding than any metrics dashboard they ever built.
+
+<Term concept="priority-intelligence-requirement">Priority Intelligence Requirements</Term> get one paragraph because they are the gate's most important customers. PIRs are the requirements designated critical to a live decision, and unlike standing requirements they are usually time-bound: an acquisition closing this quarter, a product launch, an active incident. Their deadlines are real, which means running them through the CMF on the day they are levied is not optional hygiene, it is the difference between telling a decision maker "no" on day one and telling them "we tried" on day thirty.
+
+## When Collection Decided Answerability at National Scale
+
+If this framing sounds academic, 2023 supplied the counterexample at government scale. The actor Microsoft tracks as Storm-0558 acquired a consumer signing key and used it to forge authentication tokens, quietly reading Exchange Online mailboxes across roughly two dozen organizations, including US federal agencies. The intrusion was detected by the State Department, and the detail that matters for this post is how: an internal alert built on the MailItemsAccessed audit event, a log entry that records a mailbox item being read. At the time, that event was only available to customers paying for the premium audit tier.
+
+Run that through CMF language. For one organization, the row for cloud audit logging read "answerable": they could ask "is someone reading mailboxes who should not be," and the data existed to answer it, so a nation-state campaign was caught. For every affected organization without the premium tier, the CISO question "were we affected" was not hard, not expensive, not slow. It was structurally unanswerable, because the one event type capable of answering it was never being recorded, at any retention setting, for any amount of analyst effort. CISA's advisory on the campaign urged organizations to enable the enhanced logging, and the aftermath conceded the whole argument: Microsoft announced in July 2023 that it would move MailItemsAccessed and similar logs into the standard tier at no additional cost. An entire class of question changed from unanswerable to answerable, for millions of tenants, through a licensing decision. Collection is not the plumbing under the intelligence work. It is the boundary of what the intelligence work can be.
+
+## Modernizing the Columns: ATT&CK Data Sources and DeTT&CT
+
+The kill chain columns in the matrix above are the right altitude for narrative and for explaining coverage to leadership, but detection engineering conversations need finer grain, and the community has already built the vocabulary. MITRE ATT&CK models <Term concept="data-source">data sources</Term> and data components: named categories like Process Creation, Network Connection Creation, and Cloud Service Enumeration, each linked to the techniques it can help detect. Rewriting your CMF's "sees" column in data component terms turns a vague "EDR covers exploitation" into an auditable claim about which techniques your telemetry can even theoretically observe.
+
+DeTT&CT, an open source project from Rabobank's CDC, operationalizes exactly this: you score each data source for quality and coverage, and it renders the result as ATT&CK Navigator heatmaps that show where your visibility is real, thin, or absent. The CMF is the thinking and the conversation; ATT&CK data sources and DeTT&CT are the tooling that lets the thinking scale past a markdown table. Adopt them in that order, because a beautifully scored heatmap built on unexamined retention assumptions reproduces the acquisition story with better graphics.
+
+## Keeping It Alive
+
+A CMF is a living document or it is a liability wearing a badge of diligence. The environment it describes changes constantly, so the framework needs named review triggers rather than good intentions: a new security tool deployed or retired, a merger or acquisition, a cloud migration, any change to a retention policy, and every single requirement that hits the gate and comes back unanswerable. That last trigger is the self-correcting loop: each unanswerable question either updates the map or updates the collection, and either outcome leaves the program stronger than the question found it.
+
+<CollapsibleCode title="CMF Starter Template" language="markdown">
+
+```markdown
+COLLECTION MANAGEMENT FRAMEWORK
+Owner: [who maintains this document]
+Last reviewed: [date]  Next review trigger: [tool change / M&A / retention change / unanswerable IR]
+
+INTERNAL SOURCES
+| Source | Data type | Phases visible | Follow-on collection enabled | Retention | Access owner |
+|--------|-----------|----------------|------------------------------|-----------|--------------|
+|        |           |                |                              |           |              |
+
+Notes per source (fill honestly):
+- What this source is assumed to cover but does not:
+- Who can query it directly, and how long access takes for the intel team:
+
+EXTERNAL SOURCES
+| Source | Provider field of view | What it adds over internal | Unique question it answers | Cost |
+|--------|------------------------|----------------------------|-----------------------------|------|
+|        |                        |                            |                             |      |
+
+STANDING LIMITS (questions we know we cannot answer today)
+- [question] blocked by [gap], registered [date]
+```
+
+</CollapsibleCode>
+
+<CollapsibleCode title="Collection Gap Register Entry" language="markdown">
+
+```markdown
+COLLECTION GAP
+Gap ID + date registered:
+The gap (one sentence, specific):
+  e.g. "No data-plane audit events from the three development cloud tenants."
+
+THE REQUIREMENT THAT EXPOSED IT
+Question asked:
+Who asked, and what decision it supported:
+What we had to tell them:
+
+CLOSING IT
+What closes the gap (tool, license tier, retention change, access grant):
+Estimated cost (money, effort, storage):
+Owner:
+Status: [registered / proposed / funded / closed]
+```
+
+</CollapsibleCode>
+
+## Hands-On Exercise
+
+Take the last three questions your team was genuinely asked. Not idealized requirements, the actual questions: from an incident bridge, from a leadership meeting, from a customer security review. If you are building a program from scratch, derive three from your threat model instead. For each one, write down which of your sources would contain the answer, then check the retention of each source against the time window the question implies, and classify the question as answerable, partially answerable, or unanswerable.
+
+Then take the worst of the three and write the one-paragraph funded collection request: the question, the decision it supported, the specific gap that blocked it, and the cost to close it. Compare that paragraph to the last generic tooling request your organization declined, and notice which one a CFO can actually evaluate. That paragraph format, produced routinely, is the most persuasive budget document a CTI team can generate, and it falls out of the CMF for free.
+
+## Conclusion
+
+Analysis gets the conference talks, but collection decides what analysis is possible. The teams that look composed under pressure are not smarter than everyone else; they knew what they could answer before anyone asked, they said "no, and here is exactly why" on day one instead of day thirty, and they had already sent the bill for the gaps. A Collection Management Framework is a few days of honest work and a discipline of keeping it honest, and it converts the least visible part of the intelligence cycle into the part that quietly determines all the others.
+
+For how requirements are written in the first place, see CTI Foundations Part 1 on this blog. For what the answers should become once collection supports them, see From Indicators to Behavioral Analytics. And for why every producer's reporting, including yours, is bounded by what their sensors can see, the field-of-view section of the Analytic Judgment post covers the same truth from the analyst's side.
+
+## References & Further Reading
+
+1. Robert M. Lee, "Collection Management Frameworks: Beyond Asset Inventories for ICS" (Dragos). [https://www.dragos.com/wp-content/uploads/CMF_For_ICS.pdf](https://www.dragos.com/wp-content/uploads/CMF_For_ICS.pdf)
+	The reference treatment of CMFs for security teams; ICS-flavored but the method is universal.
+2. Joint Publication 2-0, Joint Intelligence (mirror). [https://www.bits.de/NRANEU/others/jp-doctrine/jp2_0%2813%29.pdf](https://www.bits.de/NRANEU/others/jp-doctrine/jp2_0%2813%29.pdf)
+	The doctrinal origin of collection management as a discipline.
+3. MITRE ATT&CK Data Sources. [https://attack.mitre.org/datasources/](https://attack.mitre.org/datasources/)
+	The shared vocabulary for what a telemetry source can see at technique level.
+4. DeTT&CT (Rabobank CDC). [https://github.com/rabobank-cdc/DeTTECT](https://github.com/rabobank-cdc/DeTTECT)
+	Open source tooling to score data source quality and render coverage heatmaps in Navigator.
+5. Bouwman et al., "A different cup of TI? The added value of commercial threat intelligence" (USENIX Security 2020). [https://www.usenix.org/conference/usenixsecurity20/presentation/bouwman](https://www.usenix.org/conference/usenixsecurity20/presentation/bouwman)
+	The measured overlap between commercial vendors; the empirical case for choosing feeds by field of view.
+6. CISA, "Enhanced Monitoring to Detect APT Activity Targeting Outlook Online" (AA23-193A). [https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-193a](https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-193a)
+	The Storm-0558 advisory, including the logging guidance that assumed a license tier many victims did not have.
+7. MSRC, "Microsoft mitigates China-based threat actor Storm-0558 targeting of customer email." [https://msrc.microsoft.com/blog/2023/07/microsoft-mitigates-china-based-threat-actor-storm-0558-targeting-of-customer-email/](https://msrc.microsoft.com/blog/2023/07/microsoft-mitigates-china-based-threat-actor-storm-0558-targeting-of-customer-email/)
+	Microsoft's account of the campaign and the token forgery mechanism.
+8. Microsoft, "Expanding cloud logging to give customers deeper security visibility" (July 2023). [https://www.microsoft.com/en-us/security/blog/2023/07/19/expanding-cloud-logging-to-give-customers-deeper-security-visibility/](https://www.microsoft.com/en-us/security/blog/2023/07/19/expanding-cloud-logging-to-give-customers-deeper-security-visibility/)
+	The aftermath: the logs that decided answerability moved to the standard tier.

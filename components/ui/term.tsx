@@ -108,6 +108,11 @@ const glossary: TermDefinition = {
 	"alert-fatigue": "The operational failure state where alert volume exceeds what analysts can triage, so genuinely critical alerts receive the same shallow treatment as noise. Usually caused by deploying unvetted indicators as a primary detection layer.",
 	"detection-engineering": "The discipline of turning knowledge about adversary behavior into tested, maintained detection logic: Sigma rules, SIEM correlations, EDR policies, and the pipelines that validate they still fire.",
 	"anomaly-detection": "An environmental detection approach that models normal activity statistically and alerts on deviation. It can catch novel activity nobody encoded, but its alerts arrive without context: the model knows something is unusual, not what it is or what to do.",
+	"collection-management-framework": "A Collection Management Framework (CMF) maps every data source to what it can observe, which phases of adversary activity it covers, what follow-on collection it enables, how long it retains data, and who owns access. It exists to answer one question: which intelligence requirements can this organization actually satisfy?",
+	"intelligence-requirement": "A single, simply worded question about the threat or the operational environment that fills a knowledge gap and supports a specific decision. Intelligence requirements drive the entire intelligence process; work without one is a hobby.",
+	"priority-intelligence-requirement": "An intelligence requirement designated critical to a mission or decision, usually time-bound and tied to a specific event such as an acquisition, a product launch, or an active incident. PIRs change as the organization's immediate concerns change.",
+	"collection-gap": "A question the organization cannot answer because the data that would answer it is not collected, not retained long enough, or not accessible. Documented gaps with the requirement that exposed them attached are the strongest funding argument a CTI team has.",
+	"data-source": "In MITRE ATT&CK terms, a category of information a sensor or log can provide (such as Process Creation or Network Connection Creation), broken into data components. Data sources give teams a shared vocabulary for what a given telemetry source can actually see at technique level.",
 }
 
 export interface TermProps {

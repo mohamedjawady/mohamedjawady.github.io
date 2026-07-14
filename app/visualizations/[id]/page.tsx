@@ -37,6 +37,7 @@ import { ACHMatrix } from "@/components/visualizations/ach-matrix"
 import { DetectionTypesQuadrant } from "@/components/visualizations/detection-types-quadrant"
 import { CollectionCoverageMatrix } from "@/components/visualizations/collection-coverage-matrix"
 import { CoAMatrix } from "@/components/visualizations/coa-matrix"
+import { ThreatModelExplorer } from "@/components/visualizations/threat-model-explorer"
 import { SaltArchitecture } from "@/components/visualizations/salt-architecture"
 import { SaltExerciseDiagram } from "@/components/visualizations/salt-exercise-diagram"
 import { GolliathArchitecture } from "@/components/visualizations/golliath-architecture"
@@ -105,6 +106,7 @@ const visualizationComponents = {
   'DetectionTypesQuadrant': DetectionTypesQuadrant,
   'CollectionCoverageMatrix': CollectionCoverageMatrix,
   'CoAMatrix': CoAMatrix,
+  'ThreatModelExplorer': ThreatModelExplorer,
   // SaltStack
   'SaltArchitecture': SaltArchitecture,
   'SaltExerciseDiagram': SaltExerciseDiagram,

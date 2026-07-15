@@ -145,15 +145,19 @@ export function ThreatModelExplorer() {
 					{/* Hub-and-spoke visual */}
 					<div className="w-full overflow-x-auto">
 						<svg viewBox="0 0 640 200" className="w-full min-w-[560px]" role="img" aria-label="Northwind Analytics at the center with the active pivot set radiating out">
-							<line x1="320" y1="100" x2="110" y2="45" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
-							<line x1="320" y1="100" x2="110" y2="155" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
-							<line x1="320" y1="100" x2="530" y2="45" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
-							<line x1="320" y1="100" x2="530" y2="155" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
+							{(mode === "assets"
+								? [[520, 52], [520, 148], [120, 100]]
+								: [[120, 52], [120, 148], [520, 52], [520, 148]]
+							).map(([lx, ly], i) => (
+								<line key={`edge-${i}`} x1="320" y1="100" x2={lx < 320 ? 202 : 438} y2={ly} stroke="currentColor" strokeWidth="1.5" opacity="0.22" />
+							))}
 							<circle cx="320" cy="100" r="46" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.5" />
 							<text x="320" y="96" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">Northwind</text>
 							<text x="320" y="111" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">the target</text>
 							{(mode === "assets" ? assets : adversaries).map((node, i) => {
-								const positions = [[110, 45], [110, 155], [530, 45], [530, 155]]
+								const positions = mode === "assets"
+									? [[120, 100], [520, 52], [520, 148]]
+									: [[120, 52], [120, 148], [520, 52], [520, 148]]
 								const [cx, cy] = positions[i]
 								const isActive = activeId === node.id
 								return (

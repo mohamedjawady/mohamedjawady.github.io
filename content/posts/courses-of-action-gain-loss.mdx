@@ -38,23 +38,69 @@ The Courses of Action matrix answers that question by laying the options out on 
     <text x="225" y="27" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">PASSIVE: always both</text>
     <rect x="305" y="12" width="405" height="22" rx="5" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1" />
     <text x="507" y="27" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">MITIGATING: choose one</text>
-    {["Discover","Detect","Deny","Disrupt","Degrade","Deceive","Destroy"].map((d,i)=>(
-      <text key={d} x={185+i*77} y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">{d}</text>
-    ))}
-    {["Recon","Weapon.","Delivery","Exploit","Install","C2","Actions"].map((p,r)=>(
-      <text key={p} x="20" y={78+r*32} fill="currentColor" fontSize="10" opacity="0.75">{p}</text>
-    ))}
-    {[0,1,2,3,4,5,6].map((r)=>(
-      [0,1,2,3,4,5,6].map((c)=>{
-        const lit = r===5
-        const passive = c<2
-        return <rect key={r+"-"+c} x={150+c*77} y={66+r*32} width="70" height="24" rx="4"
-          fill={lit ? (passive ? "#0ea5e9" : "#10b981") : "currentColor"}
-          fillOpacity={lit ? (passive ? 0.35 : 0.3) : 0.04}
-          stroke={lit ? (passive ? "#0ea5e9" : "#10b981") : "currentColor"}
-          strokeWidth={lit ? 1.5 : 0.5} strokeOpacity={lit ? 0.8 : 0.25} />
-      })
-    ))}
+    <text x="185" y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">Discover</text>
+    <text x="262" y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">Detect</text>
+    <text x="339" y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">Deny</text>
+    <text x="416" y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">Disrupt</text>
+    <text x="493" y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">Degrade</text>
+    <text x="570" y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">Deceive</text>
+    <text x="647" y="52" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">Destroy</text>
+    <text x="20" y="78" fill="currentColor" fontSize="10" opacity="0.75">Recon</text>
+    <text x="20" y="110" fill="currentColor" fontSize="10" opacity="0.75">Weapon.</text>
+    <text x="20" y="142" fill="currentColor" fontSize="10" opacity="0.75">Delivery</text>
+    <text x="20" y="174" fill="currentColor" fontSize="10" opacity="0.75">Exploit</text>
+    <text x="20" y="206" fill="currentColor" fontSize="10" opacity="0.75">Install</text>
+    <text x="20" y="238" fill="currentColor" fontSize="10" opacity="0.75">C2</text>
+    <text x="20" y="270" fill="currentColor" fontSize="10" opacity="0.75">Actions</text>
+    <rect x="150" y="66" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="227" y="66" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="304" y="66" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="381" y="66" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="458" y="66" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="535" y="66" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="612" y="66" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="150" y="98" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="227" y="98" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="304" y="98" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="381" y="98" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="458" y="98" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="535" y="98" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="612" y="98" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="150" y="130" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="227" y="130" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="304" y="130" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="381" y="130" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="458" y="130" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="535" y="130" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="612" y="130" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="150" y="162" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="227" y="162" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="304" y="162" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="381" y="162" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="458" y="162" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="535" y="162" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="612" y="162" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="150" y="194" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="227" y="194" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="304" y="194" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="381" y="194" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="458" y="194" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="535" y="194" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="612" y="194" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="150" y="226" width="70" height="24" rx="4" fill="#0ea5e9" fillOpacity="0.35" stroke="#0ea5e9" strokeWidth="1.5" strokeOpacity="0.8" />
+    <rect x="227" y="226" width="70" height="24" rx="4" fill="#0ea5e9" fillOpacity="0.35" stroke="#0ea5e9" strokeWidth="1.5" strokeOpacity="0.8" />
+    <rect x="304" y="226" width="70" height="24" rx="4" fill="#10b981" fillOpacity="0.3" stroke="#10b981" strokeWidth="1.5" strokeOpacity="0.8" />
+    <rect x="381" y="226" width="70" height="24" rx="4" fill="#10b981" fillOpacity="0.3" stroke="#10b981" strokeWidth="1.5" strokeOpacity="0.8" />
+    <rect x="458" y="226" width="70" height="24" rx="4" fill="#10b981" fillOpacity="0.3" stroke="#10b981" strokeWidth="1.5" strokeOpacity="0.8" />
+    <rect x="535" y="226" width="70" height="24" rx="4" fill="#10b981" fillOpacity="0.3" stroke="#10b981" strokeWidth="1.5" strokeOpacity="0.8" />
+    <rect x="612" y="226" width="70" height="24" rx="4" fill="#10b981" fillOpacity="0.3" stroke="#10b981" strokeWidth="1.5" strokeOpacity="0.8" />
+    <rect x="150" y="258" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="227" y="258" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="304" y="258" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="381" y="258" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="458" y="258" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="535" y="258" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
+    <rect x="612" y="258" width="70" height="24" rx="4" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="0.5" strokeOpacity="0.25" />
     <text x="360" y="292" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">one indicator (here, a C2 domain in the C2 phase) can populate a cell under several actions at once</text>
   </svg>
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The defender's mirror of the kill chain. Passive columns on the left, mitigating on the right.</p>
@@ -101,12 +147,16 @@ Passive and mitigating actions behave differently under combination, and that di
     <text x="267" y="146" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">SINGLE-SELECT GATE</text>
     <text x="267" y="160" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.75">pick exactly one below</text>
     <line x1="342" y1="147" x2="380" y2="147" stroke="currentColor" strokeWidth="2" opacity="0.6" markerEnd="url(#coaA)" />
-    {["Deny","Disrupt","Degrade","Deceive","Destroy"].map((d,i)=>(
-      <g key={d}>
-        <rect x="386" y={30+i*38} width="150" height="30" rx="7" fill="#10b981" fillOpacity={d==="Deceive"?0.25:0.08} stroke="#10b981" strokeWidth={d==="Deceive"?2:1} strokeOpacity={d==="Deceive"?0.9:0.5} />
-        <text x="461" y={50+i*38} textAnchor="middle" fill="currentColor" fontSize="11" fontWeight={d==="Deceive"?"bold":"normal"}>{d}</text>
-      </g>
-    ))}
+    <rect x="386" y="30" width="150" height="30" rx="7" fill="#10b981" fillOpacity="0.08" stroke="#10b981" strokeWidth="1" strokeOpacity="0.5" />
+    <text x="461" y="50" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="normal">Deny</text>
+    <rect x="386" y="68" width="150" height="30" rx="7" fill="#10b981" fillOpacity="0.08" stroke="#10b981" strokeWidth="1" strokeOpacity="0.5" />
+    <text x="461" y="88" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="normal">Disrupt</text>
+    <rect x="386" y="106" width="150" height="30" rx="7" fill="#10b981" fillOpacity="0.08" stroke="#10b981" strokeWidth="1" strokeOpacity="0.5" />
+    <text x="461" y="126" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="normal">Degrade</text>
+    <rect x="386" y="144" width="150" height="30" rx="7" fill="#10b981" fillOpacity="0.25" stroke="#10b981" strokeWidth="2" strokeOpacity="0.9" />
+    <text x="461" y="164" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Deceive</text>
+    <rect x="386" y="182" width="150" height="30" rx="7" fill="#10b981" fillOpacity="0.08" stroke="#10b981" strokeWidth="1" strokeOpacity="0.5" />
+    <text x="461" y="202" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="normal">Destroy</text>
     <text x="620" y={30+3*38+20} textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">often the</text>
     <text x="620" y={30+3*38+33} textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">best trade</text>
   </svg>

@@ -1,9 +1,9 @@
 ---
 title: "Events, Alerts, and Incidents: The Filter That Actually Runs Your SOC"
-description: "Events, alerts, and incidents are not three names for the same thing. They are three volumes, filtered from millions to a handful by definitions that decide how your SOC routes work. The NIST vocabulary, the signature-versus-anomaly split, and why alert fatigue is a filter design failure, not a staffing one."
+description: "Events, alerts, and incidents are not three names for the same thing. They are three volumes, filtered from millions to a handful by definitions that decide how your SOC routes work. The NIST vocabulary, the signature-versus-anomaly split, why alert fatigue is a filter design failure not a staffing one, and where a confirmed incident actually goes: into an incident management system, and from there into a threat intelligence platform that closes the loop back to detection."
 date: "2026-07-19"
 author: "Mohamed Habib Jaouadi"
-tags: ["blue-team", "soc", "alert-triage", "detection-engineering", "incident-response", "alert-fatigue", "siem"]
+tags: ["blue-team", "soc", "alert-triage", "detection-engineering", "incident-response", "alert-fatigue", "siem", "incident-management-system", "threat-intelligence-platform"]
 banner: "/banners/posts/events-alerts-incidents.jpg"
 bannerAlt: "A funnel of data narrowing from raw events down to a handful of confirmed incidents"
 visibility: "public"
@@ -11,13 +11,13 @@ visibility: "public"
 
 > **SOC Fundamentals Focus:** Before triage speed, before tooling, before automation, a SOC needs a shared, precise vocabulary for what it is looking at. This post is about that vocabulary, and the filter it describes.
 
-**TL;DR:** A <Term concept="security-event">security event</Term> is anything observable. A <Term concept="security-alert">security alert</Term> is an event flagged as possibly unwanted. A <Term concept="security-incident">security incident</Term> is an alert an analyst has confirmed as real. Millions of events collapse into thousands of alerts, which collapse into a handful of incidents, and every stage of that collapse is a filter someone designed, whether deliberately or by accident. The most consequential design choice inside that filter is whether an alert came from a signature (a match against known-bad) or an anomaly (a deviation from normal), because the two carry different reliability and demand different handling. Get the vocabulary and the routing wrong and you get what most SOCs report: alert fatigue, which is not a staffing shortage, it is a filter that lets too much through.
+**TL;DR:** A <Term concept="security-event">security event</Term> is anything observable. A <Term concept="security-alert">security alert</Term> is an event flagged as possibly unwanted. A <Term concept="security-incident">security incident</Term> is an alert an analyst has confirmed as real. Millions of events collapse into thousands of alerts, which collapse into a handful of incidents, and every stage of that collapse is a filter someone designed, whether deliberately or by accident. The most consequential design choice inside that filter is whether an alert came from a signature (a match against known-bad) or an anomaly (a deviation from normal), because the two carry different reliability and demand different handling. Get the vocabulary and the routing wrong and you get what most SOCs report: alert fatigue, which is not a staffing shortage, it is a filter that lets too much through. The funnel doesn't end at "incident," either: a confirmed incident gets worked as a case in an <Term concept="incident-management-system">incident management system</Term>, and what that case teaches should be pushed to a <Term concept="tip">threat intelligence platform</Term>, closing the loop back to the detection logic that started the whole filter.
 
 ## Introduction
 
 Ask three analysts on the same team to define "alert" and you'll often get three different answers: some slightly informal, some scoped to their favorite tool, none quite matching what the incident management system's dropdown menu calls it. This is not pedantry to worry about later. The words a SOC uses for events, alerts, and incidents are load-bearing. They decide which queue something lands in, who's paged, and how urgently it gets looked at. A team without a shared definition ends up with alerts that are really just events with a scarier font, and incidents opened for things nobody bothered to verify.
 
-This post lays out the standard vocabulary, borrowed from NIST SP 800-61, and then follows the volume of data as it moves through that vocabulary: from an overwhelming stream of raw events, through the filtering logic that promotes a tiny fraction of them to alerts, and finally through the human judgment that confirms an even tinier fraction as incidents. Along the way, it covers the single most useful distinction for reasoning about any individual alert (whether it's signature-based or anomaly-based) and closes with the volume problem every SOC eventually hits, and why the fix for it isn't more people.
+This post lays out the standard vocabulary, borrowed from NIST SP 800-61, and then follows the volume of data as it moves through that vocabulary: from an overwhelming stream of raw events, through the filtering logic that promotes a tiny fraction of them to alerts, and finally through the human judgment that confirms an even tinier fraction as incidents. Along the way, it covers the single most useful distinction for reasoning about any individual alert (whether it's signature-based or anomaly-based), the volume problem every SOC eventually hits and why the fix for it isn't more people, and where a confirmed incident actually goes once it's opened: an incident management system for the casework, and a threat intelligence platform for the durable record that improves the next alert's odds.
 
 ## Three Words, Precisely Defined
 
@@ -135,9 +135,90 @@ Third, enrich and correlate. Pull every other alert and log tied to the same hos
 
 Only after those three steps does the analyst make the actual determination: dismiss as a false positive, or escalate and open an incident. That determination is where the second filter in the funnel, alerts to incidents, actually happens, and it's the one stage in this entire pipeline that a machine still can't fully replace.
 
+## Where a Confirmed Incident Goes: The Incident Management System
+
+Opening an incident doesn't mean the work is done, it means the work moves to a different system. An <Term concept="incident-management-system">incident management system</Term> (IMS) is where that case actually gets worked, and it's worth distinguishing from a generic help-desk ticketing tool, because the features that matter for security casework are different: indicator storage that integrates with a threat intelligence platform, case templates that encode a consistent investigation, and tagging that aligns to a framework like the kill chain instead of a generic priority field. TheHive is the most widely used open-source example, and its data model is representative of what any decent IMS provides.
+
+A case is the top-level object, created from an alert with as many fields pre-populated from the source log as the integration allows. Attached to the case is a <Term concept="case-playbook">case template</Term>, essentially a playbook, that generates a fixed set of tasks the analyst has to work through: a phishing case template might include tasks for checking proxy logs for clicks, pulling the sender's history, and resetting credentials for anyone who interacted with the message. Tasks can be grouped to mirror an investigation framework (delivery, exploit, install, command and control), which keeps a less experienced analyst oriented even on a case type they haven't handled before. Alongside tasks, the case accumulates <Term concept="observable">observables</Term>: the IPs, hashes, domains, and usernames turned up during investigation, each of which can be flagged as a confirmed indicator of compromise once it's actually been sighted in the environment rather than just suspected.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A case box containing three tasks generated from a playbook template, two assigned to analyst one and one assigned to analyst two, plus a row of observables including two flagged as confirmed indicators of compromise.">
+    <rect x="30" y="16" width="580" height="170" rx="12" fill="#0ea5e9" fillOpacity="0.08" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="50" y="38" fill="currentColor" fontSize="13" fontWeight="bold">Case #1187: "Phishing wave, attachments"</text>
+    <text x="50" y="54" fill="currentColor" fontSize="9.5" opacity="0.65">template: Phishing Wave (attachments)</text>
+
+    <rect x="50" y="66" width="170" height="40" rx="7" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="135" y="86" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Check proxy for clicks</text>
+    <text x="135" y="100" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.65">Analyst 1 · delivery</text>
+
+    <rect x="235" y="66" width="170" height="40" rx="7" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="320" y="86" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Detonate attachment</text>
+    <text x="320" y="100" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.65">Analyst 2 · exploit/install</text>
+
+    <rect x="420" y="66" width="170" height="40" rx="7" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="505" y="86" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Reset victim credentials</text>
+    <text x="505" y="100" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.65">Analyst 1 · response</text>
+
+    <text x="50" y="130" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.8">Observables</text>
+    <rect x="50" y="140" width="150" height="30" rx="15" fill="#10b981" fillOpacity="0.16" stroke="#10b981" strokeWidth="1.2" />
+    <text x="125" y="160" textAnchor="middle" fill="currentColor" fontSize="10" fontFamily="monospace">domain, IOC ✓</text>
+    <rect x="215" y="140" width="150" height="30" rx="15" fill="#10b981" fillOpacity="0.16" stroke="#10b981" strokeWidth="1.2" />
+    <text x="290" y="160" textAnchor="middle" fill="currentColor" fontSize="10" fontFamily="monospace">sha256, IOC ✓</text>
+    <rect x="380" y="140" width="150" height="30" rx="15" fill="#94a3b8" fillOpacity="0.14" stroke="#94a3b8" strokeWidth="1.2" />
+    <text x="455" y="160" textAnchor="middle" fill="currentColor" fontSize="10" fontFamily="monospace">user, not IOC</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Tasks generated from a template, split across analysts by skill; observables collected along the way, some confirmed as indicators.</p>
+</div>
+
+The ability to assign individual tasks, rather than the whole case, to different people is a smaller detail than it sounds. It means a newer analyst can own the straightforward steps of a complex case while a senior analyst handles the one task that actually needs their experience, and the newer analyst learns from reading the senior analyst's worklog on that task instead of being blocked from the case entirely. Closing the case, once every required task is done, means marking it a true or false positive, applying whatever classification scheme the team uses, and writing a summary. That classification step is exactly what this blog's post on VERIS and NCISS covers in depth; the IMS is where that classification actually gets recorded.
+
+## Closing the Loop: The Threat Intelligence Platform
+
+Every confirmed indicator sitting in a closed case is wasted if it stays there. The observables marked as IOCs during investigation are the raw material for the next alert's signature match, but only if they get out of the individual case and into a shared, searchable store. That store is the <Term concept="tip">threat intelligence platform</Term> (TIP), and MISP is the open-source standard, covered in full depth in this blog's dedicated post on its data model.
+
+The connection back to the beginning of this post is direct. Earlier, this post drew a hard line between a signature-based alert (strong, because it matches something specifically known to be bad) and an anomaly-based alert (weaker on its own, because deviation from normal isn't the same claim as malicious). A well-sourced signature list doesn't come from a vendor feed alone, a meaningful share of it comes from exactly this loop: an analyst confirms an indicator during casework, pushes it to the TIP, and the next time that indicator appears anywhere in the environment, what would have been a slow anomaly investigation becomes an immediate high-fidelity alert instead.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A loop diagram: Events flow to Alerts flow to Incidents flow to the incident management system flow to the threat intelligence platform, which feeds back with a curved arrow into detection logic upstream of Events, closing the loop.">
+    <defs>
+      <marker id="loopArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+    <rect x="20" y="90" width="100" height="46" rx="9" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.4" />
+    <text x="70" y="118" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Events</text>
+    <line x1="120" y1="113" x2="150" y2="113" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#loopArrow)" />
+
+    <rect x="152" y="90" width="100" height="46" rx="9" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.4" />
+    <text x="202" y="118" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Alerts</text>
+    <line x1="252" y1="113" x2="282" y2="113" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#loopArrow)" />
+
+    <rect x="284" y="90" width="100" height="46" rx="9" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="334" y="118" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Incidents</text>
+    <line x1="384" y1="113" x2="414" y2="113" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#loopArrow)" />
+
+    <rect x="416" y="90" width="100" height="46" rx="9" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="466" y="112" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">IMS</text>
+    <text x="466" y="126" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">case closed</text>
+    <line x1="516" y1="113" x2="546" y2="113" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#loopArrow)" />
+
+    <rect x="548" y="90" width="72" height="46" rx="9" fill="#10b981" fillOpacity="0.16" stroke="#10b981" strokeWidth="1.4" />
+    <text x="584" y="118" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">TIP</text>
+
+    <path d="M 584 90 C 584 30, 70 30, 70 84" fill="none" stroke="#10b981" strokeWidth="1.6" opacity="0.6" strokeDasharray="6 4" markerEnd="url(#loopArrow)" />
+    <text x="330" y="24" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Confirmed indicators feed next detection logic</text>
+
+    <text x="70" y="160" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.6">tens of millions / day</text>
+    <text x="334" y="160" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.6">a handful / day</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The funnel isn't a dead end. What a closed incident teaches becomes the signature that catches the next one faster.</p>
+</div>
+
+This is what separates a SOC that's merely reactive from one that compounds its own effectiveness over time. A team that never closes this loop relearns the same lesson every time a variant of the same campaign shows up, because nothing from the last incident made it back upstream. A team that closes it turns every confirmed incident into a small, permanent improvement to the filter everything else in this post has been describing.
+
 ## Conclusion
 
-The words "event," "alert," and "incident" aren't interchangeable, and treating them as such is how SOCs end up with triage queues nobody trusts and metrics nobody can explain. Events are the raw material, effectively unlimited in volume and carrying no claim about intent. Alerts are a machine's claim that something is worth a look, and that claim's reliability depends heavily on whether it came from a signature or an anomaly rule. Incidents are a human's confirmation that the claim was right. Every stage between those three states is a filter, and a SOC drowning in alerts almost always has a filter problem upstream of triage, not a staffing problem downstream of it. Fix the filter first.
+The words "event," "alert," and "incident" aren't interchangeable, and treating them as such is how SOCs end up with triage queues nobody trusts and metrics nobody can explain. Events are the raw material, effectively unlimited in volume and carrying no claim about intent. Alerts are a machine's claim that something is worth a look, and that claim's reliability depends heavily on whether it came from a signature or an anomaly rule. Incidents are a human's confirmation that the claim was right. Every stage between those three states is a filter, and a SOC drowning in alerts almost always has a filter problem upstream of triage, not a staffing problem downstream of it. Fix the filter first. And once an incident is confirmed, don't let it end as a closed ticket: the incident management system is where it gets worked, and the threat intelligence platform is where what it taught you gets kept, so the next event that matches it doesn't have to travel the whole funnel again.
 
 ## References & Further Reading
 
@@ -149,3 +230,7 @@ The words "event," "alert," and "incident" aren't interchangeable, and treating 
 	The Target breach as a case study in alert volume defeating a real detection.
 4. MITRE Cyber Analytics Repository. [https://car.mitre.org/](https://car.mitre.org/)
 	A library of community analytics worth reviewing against the signature-versus-anomaly framing in this post.
+5. TheHive Project, GitHub repository. [https://github.com/TheHive-Project/TheHive](https://github.com/TheHive-Project/TheHive)
+	The open-source incident management system referenced in the case/task/observable data model.
+6. MISP Project. [https://www.misp-project.org/](https://www.misp-project.org/)
+	The threat intelligence platform referenced in the closed-loop section; see this blog's dedicated post for the full data model.

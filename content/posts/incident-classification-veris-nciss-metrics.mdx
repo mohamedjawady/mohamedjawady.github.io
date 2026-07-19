@@ -1,0 +1,130 @@
+---
+title: "How You Classify Incidents Decides Whether Your Metrics Mean Anything"
+description: "VERIS and NCISS are two real answers to the same question: what do you write down when you close a case? A worked comparison of both frameworks, a four-question test for telling a real metric from theater, and why the classification you skip today is the report you can't produce in a year."
+date: "2026-07-19"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "soc", "incident-response", "veris", "metrics", "incident-management", "reporting"]
+banner: "/banners/posts/incident-classification-metrics.jpg"
+bannerAlt: "Rows of structured data converging into a single measured output"
+visibility: "public"
+---
+
+> **SOC Fundamentals Focus:** A metric is only as honest as the classification data it's built from. This post is about the moment that data gets created, closing a case, and the two real frameworks for doing it well.
+
+**TL;DR:** Every closed <Term concept="security-incident">incident</Term> either gets classified consistently or it becomes a paragraph of prose nobody can query later. <Term concept="veris">VERIS</Term> classifies deeply along four axes (actor, action, asset, attribute) and is what Verizon's DBIR runs on; <Term concept="nciss">NCISS</Term> collapses an incident into one weighted 0-100 severity score and is what CISA runs on. Neither is free: VERIS costs analyst time and consistency discipline, NCISS costs nuance. Before tracking anything, run it through four questions: is it well-defined, is it actionable, is it repeatable, and is there a lever you can pull to change it. Pick a classification scheme deliberately, before a board asks for a number you can't produce.
+
+## Introduction
+
+Every incident management system eventually asks the same question at closure time: what was this? Most analysts answer it the same way, in a free-text field, in whatever words felt right in the moment. Six months later, someone asks how many incidents this quarter involved phishing, and the honest answer requires re-reading every closing note by hand, because "phishing" and "phishing email" and "user clicked malicious link" were never the same searchable value.
+
+That gap between closing a case and being able to report on it later is entirely a classification problem, and it's solved the same way every time: decide what gets recorded, in what structure, before the first case closes, not after leadership asks for a trend line you don't have. This post walks through the two classification frameworks worth actually knowing (VERIS and NCISS), and then the harder discipline underneath both: telling a metric that will hold up from one that just sounds like it will.
+
+## What Classification Actually Buys You
+
+Closing a case usually involves three things: marking it true or false positive, applying whatever categories the team tracks, and writing a summary. That third step, the free-text summary, is where most of the useful narrative lives, and it's also the part that resists aggregation completely. The categories are what turn a pile of closed tickets into an answer to a question like "which delivery vector accounts for most of our confirmed incidents this year."
+
+This compounds. A single well-classified incident is not that valuable on its own, the value is in comparing hundreds of them against each other over time: which attack types are rising, which asset classes get hit most, whether last quarter's control investment actually moved a number. None of that is retrievable from prose. It's only retrievable from fields that were filled in consistently, which means the classification scheme has to exist, and has to be followed, before the data you'll eventually want was ever created.
+
+## Two Real Frameworks, Two Philosophies
+
+Two classification schemes cover most of what a SOC actually needs, and they optimize for opposite things.
+
+### VERIS: Maximum Depth, Four Axes
+
+<Term concept="veris">VERIS</Term>, the Vocabulary for Event Recording and Incident Sharing, breaks every incident into four elements, often called the A4 model.
+
+| Element | Question it answers | Example values |
+|---|---|---|
+| Actor | Whose actions affected the asset? | External, internal, partner |
+| Action | What actions affected the asset? | Malware, hacking, social, physical, misuse, error |
+| Asset | Which assets were affected? | Server, user device, network, person |
+| Attribute | How was the asset affected? | Confidentiality, integrity, availability |
+
+Each element has depth underneath it. Action, for example, doesn't stop at "malware": it drills into vector (how the malware arrived) and variety (what kind it was), so two incidents both tagged "malware" can still be distinguished by whether they arrived via email attachment or a drive-by download. That depth is exactly what makes VERIS the format behind Verizon's annual Data Breach Investigations Report: thousands of contributing organizations recording incidents in the same structure is what makes an industry-wide "here's what's actually happening" report possible at all.
+
+The cost is consistency. A four-axis schema with sub-fields under each axis gives an analyst a lot of ways to classify the same incident slightly differently from how a colleague would, and a scheme that isn't applied the same way by everyone produces data that looks structured but isn't trustworthy. VERIS rewards a team that commits to training every analyst on the same conventions and auditing for drift; it punishes a team that adopts it and hopes for the best.
+
+### NCISS: One Number, Fast
+
+<Term concept="nciss">NCISS</Term>, the National Cyber Incident Scoring System, takes the opposite approach. Built by CISA on top of NIST SP 800-61's incident-handling categories, it scores an incident across a fixed set of weighted dimensions (functional impact, information impact, recoverability, location of observed activity, actor characterization, attack vector, potential impact, cross-sector dependency) and reduces the whole thing to a single number from 0 to 100, which maps to a priority level: baseline, low, medium, high, severe, or emergency.
+
+That collapse is the entire value proposition. A single number is fast to produce, easy to compare across incidents, and requires no interpretation to communicate; "this is a severe" means the same thing to everyone who understands the scale, no drilling into sub-fields required. It's also what a federal reporting mandate needs: a consistent, defensible severity classification across thousands of incidents reported by different agencies with different internal terminology.
+
+The cost is exactly what you'd expect from compressing a rich event into one number: you lose the ability to ask "how many of our incidents this year involved a compromised partner account" after the fact, because that detail was folded into the score and not retained as a queryable field on its own.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A horizontal spectrum from low structure to high structure. On the left, plain tags, fast and cheap but weak for metrics. In the middle, NCISS, a single weighted score, fast to produce and good for prioritization. On the right, VERIS, four detailed axes, richest data but requiring the most analyst discipline to keep consistent.">
+    <line x1="50" y1="150" x2="590" y2="150" stroke="currentColor" strokeWidth="1.6" opacity="0.4" />
+    <text x="50" y="130" fill="currentColor" fontSize="10.5" opacity="0.65">less structure, less effort</text>
+    <text x="590" y="130" textAnchor="end" fill="currentColor" fontSize="10.5" opacity="0.65">more structure, more effort</text>
+
+    <circle cx="110" cy="150" r="8" fill="#94a3b8" />
+    <rect x="40" y="172" width="140" height="72" rx="10" fill="#94a3b8" fillOpacity="0.12" stroke="#94a3b8" strokeWidth="1.3" />
+    <text x="110" y="194" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">Plain tags</text>
+    <text x="110" y="212" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">arbitrary labels,</text>
+    <text x="110" y="226" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">cheap, weak for metrics</text>
+
+    <circle cx="320" cy="150" r="8" fill="#f59e0b" />
+    <rect x="250" y="172" width="140" height="72" rx="10" fill="#f59e0b" fillOpacity="0.14" stroke="#f59e0b" strokeWidth="1.3" />
+    <text x="320" y="194" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">NCISS</text>
+    <text x="320" y="212" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">one weighted score,</text>
+    <text x="320" y="226" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">fast, good for triage</text>
+
+    <circle cx="530" cy="150" r="8" fill="#10b981" />
+    <rect x="460" y="172" width="140" height="72" rx="10" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.3" />
+    <text x="530" y="194" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">VERIS</text>
+    <text x="530" y="212" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">four detailed axes,</text>
+    <text x="530" y="226" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">richest data, most discipline</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Pick a point on this spectrum deliberately. The failure mode is picking none and defaulting to free text.</p>
+</div>
+
+### The Third Option: Plain Tags
+
+Most teams don't need the full weight of either framework on day one, and a smaller, deliberately scoped set of tags applied consistently beats an ambitious framework applied sporadically. A tag scheme of, say, delivery vector, affected asset type, and true/false positive, tracked on every single case without exception, produces more usable data after a year than a partial VERIS rollout that half the team forgot to fill in past the first field. Consistency beats comprehensiveness, and a framework you can actually sustain is worth more than one you admire.
+
+## The Metric Test: Four Questions Before You Track Anything
+
+Classification exists to feed metrics, and not every number that sounds like a metric survives scrutiny. Before adopting any metric, whether it comes out of VERIS fields, NCISS scores, or plain tags, run it through four questions: is the term well-defined, is it actionable, is it repeatable (ideally automatable), and is there a specific lever someone can pull to change it.
+
+| Candidate metric | Well-defined? | Actionable? | Verdict |
+|---|---|---|---|
+| Incidents by delivery vector | Yes, vector is a fixed set of values | Yes: a skew toward email justifies a sandbox or stricter attachment filtering | Good |
+| Unique hosts with confirmed malware | Yes, "confirmed" has a clear bar | Yes: a rising rate points at a specific gap (USB policy, web filtering, patching) worth investigating | Good |
+| Percent of systems with log collection | Yes, measurable directly from inventory | Yes: a low number is a direct case for more collection investment | Good |
+| Number of attacks blocked | No, "attack" is undefined (a firewall drop? a visited-and-blocked site? an event that never progressed far enough to tell?) | No: a number moving up or down 20% implies nothing actionable on its own | Bad |
+
+The bad example is instructive because it's the one leadership asks for most often. "How many attacks did we block" sounds like exactly the kind of number a board wants to hear, and it's also nearly impossible to define consistently, expensive to compute accurately, and useless for deciding what to do next even once you have it. A metric that can't point at a lever isn't a metric, it's a talking point, and it will eventually get challenged by someone who asks what "attack" meant, at which point the whole thing falls apart in the room.
+
+## Classification Is Where the Metric Gets Built, Not Reported
+
+The connection between classification and metrics isn't sequential, it's the same act. If delivery vector is a required VERIS or tag field at case closure, "incidents by delivery vector" isn't a report someone builds later, it's a query against data that already exists, filled in as a normal part of closing every case. This is the actual argument for picking a scheme before you need the report: the classification work has to happen at the moment of triage, when the context is still fresh in the analyst's head, or it has to happen later by someone re-reading old tickets and guessing, which is slower, less accurate, and a task nobody wants.
+
+## Match the Metric to the Audience
+
+Not every number belongs in front of every audience, and this is where good classification data still gets reported badly. A board does not want to hear how many malicious domains got blocked this month or what the average response time to a low-priority ticket was; they want risk reduction, in terms that connect to business impact. A SOC lead, on the other hand, needs exactly the granular numbers a board would find meaningless: which analytic is producing the most false positives, which shift is understaffed relative to alert volume, which use case hasn't fired a true positive in six months and should be retired. The underlying classified data supports both audiences. The reporting layer on top of it should not be the same slide deck for both.
+
+## Picking a Framework Pragmatically
+
+For most teams, the honest answer isn't "adopt VERIS" or "adopt NCISS" wholesale, it's picking a small number of fields from whichever framework fits the reporting obligation you actually have, and enforcing them without exception. A team with a federal reporting requirement has NCISS effectively chosen for them. A team building toward industry benchmarking or wanting DBIR-style comparability has a real reason to invest in VERIS depth. A team with neither obligation is usually better served by a short, mandatory tag set modeled loosely on VERIS's axes (who, how, what, impact) than by importing the full schema and watching adoption decay after the second month.
+
+Whatever gets picked, the test is the same one leadership should apply to any proposed metric: well-defined, actionable, repeatable, with a lever attached. A classification scheme that can't produce metrics passing that test isn't earning its overhead, no matter how comprehensive it looks on paper.
+
+## Conclusion
+
+The classification decision made at case closure is not paperwork, it's the entire supply chain for every metric a SOC will ever report. VERIS buys depth and industry comparability at the cost of consistency discipline. NCISS buys speed and a defensible single number at the cost of granularity. Plain tags, applied without exception, often beat both in practice simply because they get finished. Whichever a team picks, the metrics it eventually wants to report should be chosen with the same rigor: well-defined, actionable, repeatable, and tied to a lever, or they're not metrics, they're a number that happened to be easy to count.
+
+## References & Further Reading
+
+1. The VERIS Framework, official documentation. [https://verisframework.org/](https://verisframework.org/)
+	The A4 model (actor, action, asset, attribute) and full field-level schema this post's VERIS section is based on.
+2. VERIS GitHub repository. [https://github.com/vz-risk/veris](https://github.com/vz-risk/veris)
+	The technical schema definitions, versioning, and mappings to other frameworks.
+3. Verizon Data Breach Investigations Report (DBIR). [https://www.verizon.com/business/resources/reports/dbir/](https://www.verizon.com/business/resources/reports/dbir/)
+	The annual report built on VERIS-classified incident data, and the clearest demonstration of what consistent classification makes possible at scale.
+4. CISA, National Cyber Incident Scoring System (NCISS). [https://www.cisa.gov/news-events/news/cisa-national-cyber-incident-scoring-system-nciss](https://www.cisa.gov/news-events/news/cisa-national-cyber-incident-scoring-system-nciss)
+	Overview of the scoring model and its priority levels.
+5. CISA, National Cyber Incident Scoring System (full PDF). [https://www.cisa.gov/sites/default/files/2023-01/cisa_national_cyber_incident_scoring_system_s508c.pdf](https://www.cisa.gov/sites/default/files/2023-01/cisa_national_cyber_incident_scoring_system_s508c.pdf)
+	The category weights and scoring methodology behind the 0-100 NCISS score.
+6. NIST Special Publication 800-61 Revision 2, *Computer Security Incident Handling Guide*. [https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf)
+	The incident-handling categories NCISS builds its scoring model on top of.

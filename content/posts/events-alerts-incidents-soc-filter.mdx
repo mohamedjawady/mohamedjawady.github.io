@@ -1,0 +1,151 @@
+---
+title: "Events, Alerts, and Incidents: The Filter That Actually Runs Your SOC"
+description: "Events, alerts, and incidents are not three names for the same thing. They are three volumes, filtered from millions to a handful by definitions that decide how your SOC routes work. The NIST vocabulary, the signature-versus-anomaly split, and why alert fatigue is a filter design failure, not a staffing one."
+date: "2026-07-19"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "soc", "alert-triage", "detection-engineering", "incident-response", "alert-fatigue", "siem"]
+banner: "/banners/posts/events-alerts-incidents.jpg"
+bannerAlt: "A funnel of data narrowing from raw events down to a handful of confirmed incidents"
+visibility: "public"
+---
+
+> **SOC Fundamentals Focus:** Before triage speed, before tooling, before automation, a SOC needs a shared, precise vocabulary for what it is looking at. This post is about that vocabulary, and the filter it describes.
+
+**TL;DR:** A <Term concept="security-event">security event</Term> is anything observable. A <Term concept="security-alert">security alert</Term> is an event flagged as possibly unwanted. A <Term concept="security-incident">security incident</Term> is an alert an analyst has confirmed as real. Millions of events collapse into thousands of alerts, which collapse into a handful of incidents, and every stage of that collapse is a filter someone designed, whether deliberately or by accident. The most consequential design choice inside that filter is whether an alert came from a signature (a match against known-bad) or an anomaly (a deviation from normal), because the two carry different reliability and demand different handling. Get the vocabulary and the routing wrong and you get what most SOCs report: alert fatigue, which is not a staffing shortage, it is a filter that lets too much through.
+
+## Introduction
+
+Ask three analysts on the same team to define "alert" and you'll often get three different answers: some slightly informal, some scoped to their favorite tool, none quite matching what the incident management system's dropdown menu calls it. This is not pedantry to worry about later. The words a SOC uses for events, alerts, and incidents are load-bearing. They decide which queue something lands in, who's paged, and how urgently it gets looked at. A team without a shared definition ends up with alerts that are really just events with a scarier font, and incidents opened for things nobody bothered to verify.
+
+This post lays out the standard vocabulary, borrowed from NIST SP 800-61, and then follows the volume of data as it moves through that vocabulary: from an overwhelming stream of raw events, through the filtering logic that promotes a tiny fraction of them to alerts, and finally through the human judgment that confirms an even tinier fraction as incidents. Along the way, it covers the single most useful distinction for reasoning about any individual alert (whether it's signature-based or anomaly-based) and closes with the volume problem every SOC eventually hits, and why the fix for it isn't more people.
+
+## Three Words, Precisely Defined
+
+NIST SP 800-61 defines two of the three terms formally; the third, "alert," is not in the standard but is used consistently enough across the industry to treat as settled.
+
+| Term | Definition | Example |
+|---|---|---|
+| <Term concept="security-event">Event</Term> | Any observable occurrence in a system or network | A user logs in. A DNS query resolves. A process starts. |
+| <Term concept="security-alert">Alert</Term> | An event flagged as possibly unwanted or unauthorized | An IDS signature matches known C2 traffic on that login's source IP. |
+| <Term concept="security-incident">Incident</Term> | A confirmed violation, or imminent threat of violation, of security policy | An analyst verifies the login and traffic are tied to an active compromise. |
+
+The relationship is strictly nested. Every incident started as an alert; every alert started as an event. Nothing skips a stage, even when it feels instantaneous, because the filtering logic (a SIEM rule, a signature, a human's snap judgment) still has to run, even if it runs in milliseconds. Most of what a SOC collects will never leave the "event" category: a login is just a login until something about it, or something correlated with it, earns it a second look.
+
+## The Funnel: Where the Volume Actually Goes
+
+Put a number on this and the shape becomes obvious. A mid-size environment can easily generate tens of millions of events a day across endpoints, network sensors, and applications. Of those, a well-tuned detection layer promotes perhaps a few thousand to alerts. Of those alerts, an analyst confirms maybe a handful as genuine incidents. Each transition is a filter, and each filter is implemented by a different actor.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 340" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A funnel narrowing from a wide top band labeled Events, through a middle band labeled Alerts, to a narrow bottom band labeled Incidents. Two labeled arrows on the right describe the filters: detection logic such as signatures and analytics between events and alerts, and analyst triage and verification between alerts and incidents.">
+    <defs>
+      <marker id="funnelArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+    <polygon points="40,24 460,24 380,124 120,124" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.6" />
+    <text x="250" y="66" textAnchor="middle" fill="currentColor" fontSize="15" fontWeight="bold">Events</text>
+    <text x="250" y="88" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">tens of millions / day</text>
+
+    <polygon points="120,132 380,132 320,224 180,224" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.6" />
+    <text x="250" y="170" textAnchor="middle" fill="currentColor" fontSize="14" fontWeight="bold">Alerts</text>
+    <text x="250" y="190" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">low thousands / day</text>
+
+    <polygon points="180,232 320,232 292,300 208,300" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.6" />
+    <text x="250" y="262" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">Incidents</text>
+    <text x="250" y="280" textAnchor="middle" fill="currentColor" fontSize="10.5" opacity="0.7">a handful / day</text>
+
+    <line x1="470" y1="78" x2="530" y2="78" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#funnelArrow)" />
+    <text x="536" y="70" fill="currentColor" fontSize="10.5" fontWeight="bold">Detection logic</text>
+    <text x="536" y="84" fill="currentColor" fontSize="9.5" opacity="0.7">signatures, analytics, SIEM rules</text>
+
+    <line x1="390" y1="180" x2="530" y2="180" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#funnelArrow)" />
+    <text x="536" y="172" fill="currentColor" fontSize="10.5" fontWeight="bold">Analyst triage</text>
+    <text x="536" y="186" fill="currentColor" fontSize="9.5" opacity="0.7">context, correlation, verification</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Two filters, two very different failure modes: a leaky detection layer floods triage; a leaky triage process misses real incidents.</p>
+</div>
+
+The first filter, events to alerts, is implemented mostly by machines: IDS signatures, SIEM correlation rules, antivirus engines, anomaly models. The second filter, alerts to incidents, is implemented mostly by a person, because deciding "is this really an attack" still requires judgment a rule can't fully encode. Both filters can fail in the same direction: too permissive, and the next stage drowns; too strict, and real attacks pass through unflagged. Almost every SOC complaint about being overwhelmed traces back to the first filter being too permissive, which is worth dwelling on before getting to the second.
+
+## Not All Alerts Are Made the Same
+
+An alert firing tells you something was flagged. It does not tell you how much to trust that flag, and treating every alert as equally credible is one of the most common early mistakes in triage. The useful distinction is between two alert types, and it isn't officially standardized terminology so much as a mental model worth adopting deliberately.
+
+A **signature-based alert** fires because something matched a specific, known-bad pattern: a malicious domain on a blocklist, a byte sequence associated with a known exploit kit, a file hash seen in a prior campaign. If the underlying list is well-sourced, a signature match is a strong, direct claim of maliciousness. It says "this specific thing has been seen doing harm before."
+
+An <Term concept="anomaly-detection">anomaly-based alert</Term> fires because something deviated from what's statistically normal in the environment: a user logging in from a new device, an unusually large file upload, a login at an unusual hour. Anomalous is not the same claim as malicious, and conflating them is where a lot of alert fatigue starts. A new laptop, a legitimate late-night deploy, a big but authorized data export: all anomalous, none malicious.
+
+What saves anomaly-based detection from being useless is a one-directional relationship: not all anomalies are malicious, but almost all malicious activity is anomalous in some way. An attacker moving laterally, exfiltrating data, or establishing persistence is, definitionally, doing something outside the pattern of normal use, even when they're careful. That relationship is exactly the logic behind squares and rectangles: not every rectangle is a square, but every square is a rectangle. Anomalous activity is the rectangle. Malicious activity is the square nested inside it.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 340" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A scatter plot with anomaly score on the horizontal axis and maliciousness on the vertical axis. A dense cluster of points sits at the bottom left, labeled neither anomalous nor malicious. A cluster sits at bottom right, labeled anomalous only, false positive territory. A small cluster sits at top right, labeled anomalous and malicious, true positive. The top left region is empty and marked not observed, illustrating that malicious activity without any anomaly essentially does not occur.">
+    <line x1="70" y1="290" x2="70" y2="30" stroke="currentColor" strokeWidth="1.4" opacity="0.5" />
+    <line x1="70" y1="290" x2="590" y2="290" stroke="currentColor" strokeWidth="1.4" opacity="0.5" />
+    <text x="70" y="18" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold" transform="rotate(0 70 18)">Maliciousness</text>
+    <text x="330" y="318" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Anomaly score</text>
+
+    <line x1="70" y1="30" x2="590" y2="30" stroke="currentColor" strokeWidth="1" opacity="0.15" strokeDasharray="4 4" />
+    <line x1="330" y1="30" x2="330" y2="290" stroke="currentColor" strokeWidth="1" opacity="0.15" strokeDasharray="4 4" />
+
+    <text x="160" y="100" textAnchor="middle" fill="currentColor" fontSize="10" opacity="0.55">not observed</text>
+    <text x="160" y="116" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.5">(malicious activity that isn't anomalous, essentially never happens)</text>
+
+    <text x="470" y="70" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">True positive</text>
+    <text x="470" y="84" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.65">anomalous and malicious</text>
+    <circle cx="490" cy="55" r="4" fill="#ef4444" fillOpacity="0.8" /><circle cx="505" cy="62" r="4" fill="#ef4444" fillOpacity="0.8" /><circle cx="475" cy="65" r="4" fill="#ef4444" fillOpacity="0.8" /><circle cx="497" cy="48" r="3" fill="#ef4444" fillOpacity="0.8" />
+
+    <text x="470" y="220" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">False positive</text>
+    <text x="470" y="234" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.65">anomalous, not malicious</text>
+    <circle cx="440" cy="255" r="4" fill="#f59e0b" fillOpacity="0.75" /><circle cx="470" cy="270" r="4" fill="#f59e0b" fillOpacity="0.75" /><circle cx="500" cy="250" r="4" fill="#f59e0b" fillOpacity="0.75" /><circle cx="520" cy="265" r="4" fill="#f59e0b" fillOpacity="0.75" /><circle cx="455" cy="240" r="3" fill="#f59e0b" fillOpacity="0.75" /><circle cx="530" cy="245" r="3" fill="#f59e0b" fillOpacity="0.75" />
+
+    <text x="180" y="260" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Neither</text>
+    <text x="180" y="274" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.65">ordinary traffic, the vast majority</text>
+    <circle cx="130" cy="250" r="4" fill="#0ea5e9" fillOpacity="0.5" /><circle cx="160" cy="270" r="4" fill="#0ea5e9" fillOpacity="0.5" /><circle cx="190" cy="255" r="4" fill="#0ea5e9" fillOpacity="0.5" /><circle cx="220" cy="265" r="4" fill="#0ea5e9" fillOpacity="0.5" /><circle cx="145" cy="235" r="3" fill="#0ea5e9" fillOpacity="0.5" /><circle cx="205" cy="240" r="3" fill="#0ea5e9" fillOpacity="0.5" /><circle cx="175" cy="220" r="3" fill="#0ea5e9" fillOpacity="0.5" />
+
+    <path d="M 330 30 C 300 90, 340 200, 400 260" fill="none" stroke="currentColor" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.4" />
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every square is a rectangle: malicious activity clusters inside the anomalous region, but most of the anomalous region isn't malicious.</p>
+</div>
+
+This asymmetry is exactly why enrichment matters more for anomaly-based alerts than for signature-based ones. A signature match already carries most of its own justification; an anomaly needs additional context (who the user is, what they normally do, whether the activity correlates with anything else happening on that host) before it's worth an analyst's time. A useful, low-effort exercise: take a batch of your IDS rule names and sort them by whether they name a specific known-bad pattern or a general policy deviation. Rules with "POLICY" in the name (unusual port for a protocol, unexpected file type in transit, an uncommon user agent) are almost always the anomaly camp; rules naming a specific exploit kit or malware family are almost always signatures. The split maps cleanly onto which tools your environment leans on for each style, too: IDS/IPS, firewalls, and antivirus skew signature-centric, while user behavior analytics and data-loss-prevention tooling are inherently anomaly-centric, because there's no fixed "bad" pattern for insider risk to match against.
+
+## Routing: Where an Alert Goes Before a Human Sees It
+
+Once something is promoted from event to alert, it needs somewhere to go, and there's more than one defensible answer. Some teams route lower-confidence, high-volume alert sources (an anomaly rule still being tuned, say) to a preliminary queue outside the main SIEM, where they can be dismissed cheaply without adding noise to the primary triage view. The tradeoff is that alerts in that queue don't benefit from the SIEM's enrichment and correlation, so an analyst working the preliminary queue is triaging with less context than they'd have downstream.
+
+The alternative, and the one that scales better as a SOC matures, is to send everything to the SIEM first and triage there, or in an incident management system fed by the SIEM. This costs nothing in enrichment, since every alert gets the same correlation and context-building the SIEM applies to everything else, but it means a genuinely noisy or half-tuned rule pollutes the same queue analysts use for everything else. In practice, most mature SOCs land on a hybrid: <Term concept="high-fidelity-alert">high-fidelity alerts</Term> go straight into the incident queue with minimal friction, because the cost of a false positive there is low relative to the cost of a missed true positive, while lower-confidence anomaly rules get extra enrichment or a lighter preliminary pass before they're allowed to consume the same attention.
+
+## The Volume Problem Is Not a Staffing Problem
+
+Alert fatigue gets talked about like a personnel issue: not enough analysts, or analysts who've grown numb. That framing lets the actual cause off the hook. Cisco's 2018 Annual Cybersecurity Report found that on average, 44% of the daily alerts organizations received were never investigated at all. Of the alerts that were investigated, only 34% were judged legitimate. Of those legitimate alerts, only 51% resulted in any remediation. Multiply those percentages through and the picture is stark: a small fraction of daily alert volume ever leads to action, and that fraction was buried under everything else.
+
+This is a filter-design problem, not a headcount problem. Hiring more analysts to stare at the same over-permissive filter just means more people burning out at the same rate. The 2013 Target breach is the canonical illustration: the retailer's FireEye platform generated alerts on the malware used in the breach while it was actively exfiltrating card data, and those alerts went unactioned in a flood of other alerts the security team's process wasn't built to prioritize. Neiman Marcus had a strikingly similar story the same year. Neither company lacked alerting. Both lacked a filter that made the alert that mattered stand out from the alerts that didn't.
+
+This is also why the fix for <Term concept="alert-fatigue">alert fatigue</Term> lives upstream, in what gets deployed as detection logic in the first place, not downstream in how fast analysts can click through a queue. A rule that fires constantly and rarely means anything should be tuned or retired, not tolerated because "at least it's catching something." Every alert an analyst dismisses without real consideration trains them, correctly, to dismiss the next one faster too, and the next real incident pays for that training.
+
+## What an Analyst Actually Does When an Alert Fires
+
+Once routing and volume are under control, triaging an individual alert comes down to a repeatable set of questions, regardless of whether the alert is signature- or anomaly-based.
+
+First, consider the rule type. A direct match against known-bad infrastructure carries more inherent weight than a statistical deviation, and that should shape how much additional verification feels necessary before acting.
+
+Second, consider context. An alert for administrative tool use is a different story if it fires on an account in IT than if it fires on an account in HR that has never touched that tool before. The same raw event means something different depending on who generated it and what's normal for them.
+
+Third, enrich and correlate. Pull every other alert and log tied to the same host or user over a relevant window. A single anomalous login means little in isolation; the same login followed by unusual process creation, an unexpected outbound connection, and a spike in data transfer tells a coherent story that no individual alert would have told alone.
+
+Only after those three steps does the analyst make the actual determination: dismiss as a false positive, or escalate and open an incident. That determination is where the second filter in the funnel, alerts to incidents, actually happens, and it's the one stage in this entire pipeline that a machine still can't fully replace.
+
+## Conclusion
+
+The words "event," "alert," and "incident" aren't interchangeable, and treating them as such is how SOCs end up with triage queues nobody trusts and metrics nobody can explain. Events are the raw material, effectively unlimited in volume and carrying no claim about intent. Alerts are a machine's claim that something is worth a look, and that claim's reliability depends heavily on whether it came from a signature or an anomaly rule. Incidents are a human's confirmation that the claim was right. Every stage between those three states is a filter, and a SOC drowning in alerts almost always has a filter problem upstream of triage, not a staffing problem downstream of it. Fix the filter first.
+
+## References & Further Reading
+
+1. NIST Special Publication 800-61 Revision 2, *Computer Security Incident Handling Guide*. [https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf)
+	The source of the event and incident definitions this post builds on.
+2. Cisco 2018 Annual Cybersecurity Report. [https://www.cisco.com/c/en/us/products/security/security-reports.html](https://www.cisco.com/c/en/us/products/security/security-reports.html)
+	Source of the 44% / 34% / 51% alert-handling figures cited in the volume section.
+3. Michael Riley, Ben Elgin, Dune Lawrence, Carol Matlack, "Missed Alarms and 40 Million Stolen Credit Card Numbers: How Target Blew It" (Bloomberg Businessweek, 2014). [https://www.bloomberg.com/news/articles/2014-03-13/target-missed-alarms-in-epic-hack-of-credit-card-data](https://www.bloomberg.com/news/articles/2014-03-13/target-missed-alarms-in-epic-hack-of-credit-card-data)
+	The Target breach as a case study in alert volume defeating a real detection.
+4. MITRE Cyber Analytics Repository. [https://car.mitre.org/](https://car.mitre.org/)
+	A library of community analytics worth reviewing against the signature-versus-anomaly framing in this post.

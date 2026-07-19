@@ -130,6 +130,10 @@ const glossary: TermDefinition = {
 	"misp-galaxy": "A MISP classification layer above tags: a cluster of related values, such as named threat actors or malware families, that can itself hold attributes and notes. Galaxies are built for tracking actors, tools, and TTPs across events, where a plain tag only labels a single event.",
 	"tlp": "Traffic Light Protocol - a four-color classification (RED, AMBER, GREEN, WHITE/CLEAR) that tells the recipient of shared intelligence how far they are allowed to redistribute it. TLP travels with the data itself, commonly as a tag in a TIP, so the sharing restriction survives every hop.",
 	"defanging": "The practice of altering a malicious URL, domain, or IP address, for example by bracketing the dot, so that it cannot be accidentally clicked or auto-linked when pasted into notes, tickets, or chat. A basic hygiene habit for anyone handling indicators by hand.",
+	"security-event": "NIST SP 800-61's term for any observable occurrence in a system or network: a login, a DNS query, a file write. Most collected data is events, with no claim of maliciousness attached.",
+	"security-alert": "An event flagged as potentially unwanted or unauthorized, whether by a signature match or an anomaly rule. An alert is a claim worth an analyst's attention, not yet a confirmed compromise.",
+	"security-incident": "NIST SP 800-61's term for a confirmed violation, or imminent threat of violation, of security policy that affects the confidentiality, integrity, or availability of business data. An alert becomes an incident once an analyst verifies it as a true positive.",
+	"high-fidelity-alert": "An alert whose underlying logic is trusted enough that little or no additional triage is needed before acting on it, typically because it matches a well-sourced indicator of known-bad activity rather than a statistical deviation from normal.",
 }
 
 export interface TermProps {

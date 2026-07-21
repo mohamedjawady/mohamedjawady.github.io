@@ -113,7 +113,7 @@ export default function RootLayout({
                 <div className="max-w-6xl mx-auto text-center space-y-4">
                   <p className="text-muted-foreground">
                     Built with Love.
-                    <span className="text-emerald-500 font-mono"> 0xHabib </span>© 2025
+                    <span className="text-emerald-500 font-mono"> 0xHabib </span>© {new Date().getFullYear()}
                   </p>
                   <p className="text-xs text-muted-foreground/70">
                     Anonymous analytics are collected for performance monitoring and site improvement purposes.

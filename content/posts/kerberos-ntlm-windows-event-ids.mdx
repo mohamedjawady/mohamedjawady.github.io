@@ -1,11 +1,11 @@
 ---
 title: "How Windows Authentication Actually Works: Kerberos, NTLM, and the Event IDs That Catch It Going Wrong"
 description: "Kerberos's ticket exchange, why it beats NTLM, and how Kerberoasting abuses the protocol's own design without ever touching the target account. Where NTLM still lurks and why Microsoft's 2026 deprecation plan won't remove it. A full walkthrough of the Windows/AD event IDs that map to each step (4768, 4769, 4770, 4624, 4720, 4732, 4728, 4657, 4663, 7045, 4698, 4104, 6416, 1006, 1116, 8003), plus where they actually live: EVTX channels and the audit policy that has to be turned on before any of it gets written."
-date: "2026-07-19"
+date: "2026-07-21"
 author: "Mohamed Habib Jaouadi"
 tags: ["blue-team", "windows", "active-directory", "kerberos", "ntlm", "kerberoasting", "event-logs", "detection-engineering", "soc"]
 banner: "/banners/posts/kerberos-ntlm-windows-events.jpg"
-bannerAlt: "A chain of keys and tickets representing the Kerberos authentication exchange"
+bannerAlt: "A marble statue of Cerberus, the three-headed dog Kerberos is named after, chained and snarling"
 visibility: "public"
 ---
 
@@ -30,35 +30,39 @@ Kerberos replaces "prove your password to every server you talk to" with a three
 Tickets don't last forever. A **renewal** of an existing TGT rather than a full re-authentication generates **event 4770**.
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
-  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Three steps of the Kerberos exchange. Step one, client to KDC, AS-REQ and AS-REP, produces a ticket granting ticket and logs event 4768. Step two, client to KDC, TGS-REQ and TGS-REP, produces a service ticket and logs event 4769. Step three, client to target server, AP-REQ, grants access locally and logs event 4624 on the target server, with event 4770 noted separately for ticket renewal.">
-    <rect x="20" y="120" width="110" height="56" rx="9" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
-    <text x="75" y="144" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Client</text>
-    <text x="75" y="160" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">workstation</text>
+  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Three parallel rows from a single client box on the left. Row one, client to KDC, AS-REQ and AS-REP, produces a ticket granting ticket and logs event 4768. Row two, client to KDC, TGS-REQ and TGS-REP, produces a service ticket and logs event 4769, with renewal logged as event 4770. Row three, client to target server, AP-REQ, grants access locally and logs event 4624 on the target server.">
+    <defs>
+      <marker id="kerbFlowArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
 
-    <rect x="260" y="30" width="120" height="56" rx="9" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.6" />
-    <text x="320" y="54" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">KDC</text>
-    <text x="320" y="70" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">domain controller</text>
+    <rect x="20" y="20" width="110" height="240" rx="12" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="75" y="135" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">Client</text>
+    <text x="75" y="152" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">workstation</text>
 
-    <rect x="500" y="120" width="120" height="56" rx="9" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
-    <text x="560" y="144" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Target server</text>
-    <text x="560" y="160" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">file share, SQL, etc.</text>
+    <text x="245" y="35" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">1. AS-REQ / AS-REP</text>
+    <text x="245" y="49" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">TGT issued: event 4768</text>
+    <line x1="130" y1="55" x2="352" y2="55" stroke="#0ea5e9" strokeWidth="1.8" opacity="0.6" markerEnd="url(#kerbFlowArrow)" />
+    <rect x="360" y="30" width="150" height="50" rx="9" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.6" />
+    <text x="435" y="50" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">KDC</text>
+    <text x="435" y="66" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">Authentication Service</text>
 
-    <path d="M 130 135 L 258 62" fill="none" stroke="#0ea5e9" strokeWidth="1.5" opacity="0.55" />
-    <text x="150" y="90" fill="currentColor" fontSize="9.5" fontWeight="bold">1. AS-REQ / AS-REP</text>
-    <text x="150" y="103" fill="currentColor" fontSize="9" opacity="0.65">TGT issued: event 4768</text>
+    <text x="245" y="130" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">2. TGS-REQ / TGS-REP</text>
+    <text x="245" y="144" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">service ticket: 4769 (renewal 4770)</text>
+    <line x1="130" y1="150" x2="352" y2="150" stroke="#f59e0b" strokeWidth="1.8" opacity="0.6" markerEnd="url(#kerbFlowArrow)" />
+    <rect x="360" y="125" width="150" height="50" rx="9" fill="#f59e0b" fillOpacity="0.14" stroke="#f59e0b" strokeWidth="1.6" />
+    <text x="435" y="145" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">KDC</text>
+    <text x="435" y="161" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">Ticket Granting Service</text>
 
-    <path d="M 258 74 L 130 155" fill="none" stroke="#0ea5e9" strokeWidth="1.5" opacity="0.35" strokeDasharray="4 3" />
-
-    <path d="M 130 155 L 258 78" fill="none" stroke="#f59e0b" strokeWidth="1.5" opacity="0.55" />
-    <text x="150" y="200" fill="currentColor" fontSize="9.5" fontWeight="bold">2. TGS-REQ / TGS-REP</text>
-    <text x="150" y="213" fill="currentColor" fontSize="9" opacity="0.65">service ticket issued: event 4769</text>
-    <text x="150" y="226" fill="currentColor" fontSize="9" opacity="0.65">renewal: event 4770</text>
-
-    <path d="M 130 148 L 498 148" fill="none" stroke="#ef4444" strokeWidth="1.5" opacity="0.55" />
-    <text x="240" y="260" fill="currentColor" fontSize="9.5" fontWeight="bold">3. AP-REQ, ticket presented directly</text>
-    <text x="240" y="273" fill="currentColor" fontSize="9" opacity="0.65">access granted locally: event 4624 (on target)</text>
+    <text x="245" y="225" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">3. AP-REQ</text>
+    <text x="245" y="239" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">access granted locally: event 4624</text>
+    <line x1="130" y1="245" x2="352" y2="245" stroke="#ef4444" strokeWidth="1.8" opacity="0.6" markerEnd="url(#kerbFlowArrow)" />
+    <rect x="360" y="220" width="150" height="50" rx="9" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.6" />
+    <text x="435" y="240" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Target server</text>
+    <text x="435" y="256" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">file share, SQL, etc.</text>
   </svg>
-  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The domain controller only sees steps one and two. Step three, the actual access, happens entirely between client and target.</p>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The domain controller only ever sees rows one and two. Row three, the actual access, happens entirely between client and target, with no further trip to the KDC.</p>
 </div>
 
 ## Kerberos vs. NTLM: What Actually Changes
@@ -134,6 +138,47 @@ Every event ID in this post is worthless if the event never gets written or neve
 
 Windows stores event logs in the <Term concept="evtx">EVTX</Term> binary XML format, one file per channel, typically under `C:\Windows\System32\winevt\Logs`. The four classic channels are Application, Security, Setup, and System, but most of the events this post covers actually live in one of two places: the Security channel, or a component-specific channel under the much larger "Applications and Services Logs" tree.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="An endpoint box on the left containing three EVTX channel rows, Security dot evtx, System dot evtx, and Applications and Services Logs covering PowerShell, NTLM, and Defender, gated by audit policy. An arrow leads to a middle box labeled Windows Event Forwarding or a log shipping agent, which leads to a right box labeled centralized log store, the SIEM.">
+    <defs>
+      <marker id="pipelineArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+
+    <rect x="20" y="20" width="270" height="185" rx="12" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="5 5" opacity="0.4" />
+    <text x="35" y="40" fill="currentColor" fontSize="11.5" fontWeight="bold">Endpoint</text>
+
+    <rect x="35" y="50" width="240" height="34" rx="7" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="47" y="71" fill="currentColor" fontSize="9.5" fontFamily="monospace">Security.evtx</text>
+    <text x="270" y="71" textAnchor="end" fill="currentColor" fontSize="8" opacity="0.65">4768-4770, 4624, 4657...</text>
+
+    <rect x="35" y="92" width="240" height="34" rx="7" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="47" y="113" fill="currentColor" fontSize="9.5" fontFamily="monospace">System.evtx</text>
+    <text x="270" y="113" textAnchor="end" fill="currentColor" fontSize="8" opacity="0.65">7045</text>
+
+    <rect x="35" y="134" width="240" height="34" rx="7" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.2" />
+    <text x="47" y="150" fill="currentColor" fontSize="9" fontFamily="monospace">Apps and Services Logs</text>
+    <text x="47" y="162" fill="currentColor" fontSize="8" opacity="0.65">PowerShell (4104), NTLM (8003), Defender (1006/1116)</text>
+
+    <text x="155" y="197" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.6" fontStyle="italic">gated by Advanced Audit Policy + SACLs</text>
+
+    <line x1="290" y1="112" x2="330" y2="112" stroke="currentColor" strokeWidth="1.6" opacity="0.55" markerEnd="url(#pipelineArrow)" />
+
+    <rect x="332" y="87" width="140" height="50" rx="9" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.5" />
+    <text x="402" y="107" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">WEF/WEC or</text>
+    <text x="402" y="122" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">log agent</text>
+
+    <line x1="474" y1="112" x2="514" y2="112" stroke="currentColor" strokeWidth="1.6" opacity="0.55" markerEnd="url(#pipelineArrow)" />
+
+    <rect x="516" y="82" width="104" height="60" rx="10" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.6" />
+    <text x="568" y="107" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Centralized</text>
+    <text x="568" y="122" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">log store</text>
+    <text x="568" y="136" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">(SIEM)</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Nothing in this post matters until it leaves the endpoint. A local EVTX file is one disk wipe, or one attacker running <code>wevtutil cl</code>, away from being gone for good.</p>
+</div>
+
 **Which channel, and what has to be turned on to populate it:**
 
 | Event ID | Channel | What has to be enabled |
@@ -152,6 +197,28 @@ Windows stores event logs in the <Term concept="evtx">EVTX</Term> binary XML for
 The Object Access category is the one that trips teams up most often, because 4657 and 4663 will simply never fire, silently, if a SACL was never placed on the file or registry key in question, even with the audit subcategory enabled domain-wide. Auditing a sensitive credential file or a registry run key requires both pieces: the policy that says "log object access" and the SACL on that specific object that says "log access to *this* object." Checking the policy alone and assuming coverage is one of the most common gaps a log-source audit finds.
 
 None of this matters at SOC scale sitting on the endpoint. Windows Event Forwarding (WEF/WEC) or a log shipping agent has to move these events off the box and into centralized storage before an analyst can search across more than one machine at a time, which is the same data-centralization argument this blog has made about NSM and CSM sources generally: visibility that only exists locally, one endpoint at a time, isn't visibility a SOC can actually use.
+
+## Sysmon: Filling the Gaps Native Logging Leaves
+
+Even with every Advanced Audit Policy subcategory enabled, native Windows logging has real blind spots. Process creation (event 4688) doesn't include the full command line unless a separate policy is turned on, carries no file hash, and Windows logs nothing at all about outbound network connections or DNS queries. <Term concept="sysmon">Sysmon</Term>, a free Sysinternals driver and service, is how most SOCs close that gap, and it's worth understanding on its own terms because it doesn't live in the Security channel at all: it writes to Microsoft-Windows-Sysmon/Operational, and what it logs is controlled by an XML configuration file rather than Group Policy audit settings.
+
+The Sysmon event IDs most relevant to everything covered in this post: **event 1** (process creation) captures the full command line and file hashes, catching Kerberoasting tooling like Rubeus even when it's a compiled binary and never touches PowerShell (so 4104 never fires). **Event 3** (network connection) is the only native source that sees a raw TCP connection to port 88 (Kerberos) or 445 (SMB, the transport for the NTLM relay chain described earlier), since the Security log has no equivalent. **Event 10** (ProcessAccess) is the standard detection for credential dumping via LSASS access, frequently a companion technique to NTLM hash theft. **Events 17 and 18** (named pipe created / connected) are exactly what would surface a PetitPotam-style coercion attempt riding over the `\pipe\lsarpc` or `\pipe\efsrpc` named pipes described earlier in this post, activity the Security log has no visibility into at all. Most teams don't write a Sysmon configuration from scratch; SwiftOnSecurity's community-maintained baseline config is the common starting point, tuned down from there to cut noise specific to the environment.
+
+## The Linux Side: auditd and Syslog Facilities
+
+Most SOCs aren't Windows-only, and the Linux equivalent of everything this post has covered exists, it just uses a completely different vocabulary. <Term concept="auditd">auditd</Term>, the Linux Audit Framework, is conceptually the closest match to Windows' Security log plus SACL model: it hooks the kernel directly, intercepting syscalls and file access rather than parsing anything after the fact. Rules are defined with `auditctl`, either at the command line or persisted under `/etc/audit/rules.d/`, and come in two flavors that map cleanly onto concepts already covered here. A **file watch** (`-w /etc/shadow -p wa -k identity`) is the rough equivalent of placing a SACL on a specific object to make event 4663 fire. A **syscall rule** (`-a always,exit -F arch=b64 -S execve -k exec`) is the rough equivalent of Sysmon's event 1, logging every process execution matching the rule. Everything lands in `/var/log/audit/audit.log` as a set of correlated record types (SYSCALL, EXECVE, PATH, CWD, tied together by a shared event ID and timestamp), queried with `ausearch` for individual events and summarized with `aureport`.
+
+One gap worth naming explicitly: a stock Linux install ships with auditd doing very little until an administrator writes rules for it, there's no equivalent of Windows' baseline logon auditing being on by default in most hardening guides. The closest thing Linux has to "who logged on and how, by default" isn't auditd at all, it's standard syslog, and specifically the **auth**/**authpriv** <Term concept="syslog-facility">facility</Term>, the channel SSH, `sudo`, and PAM write to whenever someone authenticates or elevates privilege. Facility (what subsystem generated the message) plus severity is what a log router like rsyslog or syslog-ng uses to decide where a message ends up, and `auth,authpriv.* /var/log/secure` (or `/var/log/auth.log` on Debian-family systems) is the classic rule capturing Linux's rough answer to what 4624 and 4768 answer on a domain controller.
+
+| Concept | Windows | Linux |
+|---|---|---|
+| Kernel/native security log | Security.evtx, gated by Advanced Audit Policy | auditd, gated by explicit auditctl rules |
+| Rich endpoint telemetry (process, network, pipes) | Sysmon (Microsoft-Windows-Sysmon/Operational) | auditd syscall rules, often paired with eBPF-based tooling |
+| Default logon/auth visibility | Event 4624, on in most baselines | auth/authpriv syslog facility, SSH and PAM |
+| Query tooling | Event Viewer, `wevtutil`, PowerShell `Get-WinEvent` | `ausearch`, `aureport` |
+| Object-level watch mechanism | SACL on the specific object | `auditctl -w` file watch rule |
+
+The mechanics differ enough that a SOC covering both platforms genuinely needs to learn two vocabularies, but the underlying question stays identical on either side: who did what, to what, and when, with enough default coverage turned on that the answer exists before it's needed.
 
 ## The Full Event ID Reference
 
@@ -201,3 +268,13 @@ Kerberos gives a SOC a clean story, in principle: 4768 says who authenticated, 4
 7. CERT Coordination Center, VU#405600, "Microsoft Windows Active Directory Certificate Services can allow for AD compromise via PetitPotam NTLM relay attacks." [https://www.kb.cert.org/vuls/id/405600](https://www.kb.cert.org/vuls/id/405600)
 8. Check Point Research, "CVE-2025-24054, NTLM Exploit in the Wild." [https://research.checkpoint.com/2025/cve-2025-24054-ntlm-exploit-in-the-wild/](https://research.checkpoint.com/2025/cve-2025-24054-ntlm-exploit-in-the-wild/)
 9. Microsoft Learn, "6416(S) A new external device was recognized by the System." [https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-6416](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-6416)
+10. Microsoft Learn, "Sysmon events" reference. [https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/sysmon-events](https://learn.microsoft.com/en-us/windows/security/operating-system-security/sysmon/sysmon-events)
+	The full, current Sysmon event ID list behind the Sysmon section of this post.
+11. man7.org, `audit.rules(7)` and `ausearch(8)` manual pages. [https://www.man7.org/linux/man-pages/man7/audit.rules.7.html](https://www.man7.org/linux/man-pages/man7/audit.rules.7.html) / [https://man7.org/linux/man-pages/man8/ausearch.8.html](https://man7.org/linux/man-pages/man8/ausearch.8.html)
+	The authoritative reference for auditd rule syntax and query tooling.
+12. IETF, RFC 5424, "The Syslog Protocol." [https://datatracker.ietf.org/doc/html/rfc5424](https://datatracker.ietf.org/doc/html/rfc5424)
+	The specification defining syslog facilities and severities referenced in the Linux section.
+
+---
+
+Banner photo: "Cerberus the three-headed dog" (cropped), Palace on the Water, Warsaw, sculpted by André Le Brun (1793). Photo by Thomas Quine, licensed under [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Cerberus_the_three-headed_dog_(25239496470).jpg).

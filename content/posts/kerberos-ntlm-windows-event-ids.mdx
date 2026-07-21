@@ -1,6 +1,6 @@
 ---
 title: "How Windows Authentication Actually Works: Kerberos, NTLM, and the Event IDs That Catch It Going Wrong"
-description: "Kerberos's ticket exchange, why it beats NTLM, and how Kerberoasting abuses the protocol's own design without ever touching the target account. Where NTLM still lurks and why Microsoft's 2026 deprecation plan won't remove it. A full walkthrough of the Windows/AD event IDs that map to each step (4768, 4769, 4770, 4624, 4720, 4732, 4728, 4657, 4663, 7045, 4698, 4104, 6416, 1006, 1116, 8003), plus where they actually live: EVTX channels and the audit policy that has to be turned on before any of it gets written."
+description: "Kerberos's ticket exchange, why it beats NTLM, and how Kerberoasting abuses the protocol's own design without ever touching the target account. How NTLM hash relay actually works at the protocol level, where NTLM still lurks, and why Microsoft's 2026 deprecation plan won't remove it. What LSASS, SAM, NTDS.dit, and krbtgt actually are and why each is a crown jewel. A full walkthrough of the Windows/AD event IDs that map to each step (4768, 4769, 4770, 4624, 4720, 4732, 4728, 4657, 4663, 7045, 4698, 4104, 6416, 1006, 1116, 8003), Sysmon and auditd as the telemetry native logging misses, and where all of it actually lives: EVTX channels, audit.log, and the audit policy that has to be turned on before any of it gets written."
 date: "2026-07-21"
 author: "Mohamed Habib Jaouadi"
 tags: ["blue-team", "windows", "active-directory", "kerberos", "ntlm", "kerberoasting", "event-logs", "detection-engineering", "soc"]
@@ -85,6 +85,42 @@ The security gap isn't really "Kerberos good, NTLM bad" as abstract properties, 
 
 <Term concept="kerberoasting">Kerberoasting</Term> isn't a Kerberos vulnerability in the traditional sense, it's a direct consequence of how the protocol is supposed to work. Any authenticated domain user, with zero elevated privilege, is allowed to request a service ticket (a TGS, event 4769) for any account with a registered Service Principal Name, because that's precisely what the ticket exchange is for: any client should be able to ask for a ticket to a service it wants to use. The catch is what that ticket is encrypted with: a key derived from the target service account's own password, not the requester's. An attacker can request tickets for every SPN-registered account in the domain, walk away with a pile of encrypted blobs, and crack them completely offline, with no further interaction with the target accounts and no risk of triggering a lockout.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 360" style={{ width: "100%", maxWidth: "480px" }} role="img" aria-label="A four step vertical flow. Step one, an authenticated attacker with no elevated privilege requests a service ticket for every SPN in the domain via repeated event 4769s. Step two, the KDC issues each ticket encrypted with the target service account's own password hash, not the attacker's. Step three, the attacker takes every ticket offline to a cracking rig with zero further contact with Active Directory. Step four, weak or legacy passwords fall, yielding the plaintext password of the service account.">
+    <defs>
+      <marker id="roastArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+
+    <rect x="130" y="20" width="380" height="55" rx="10" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.5" />
+    <text x="320" y="42" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Attacker</text>
+    <text x="320" y="58" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">any authenticated domain user, no elevated privilege</text>
+
+    <line x1="320" y1="75" x2="320" y2="98" stroke="currentColor" strokeWidth="1.6" opacity="0.5" markerEnd="url(#roastArrow)" />
+    <text x="330" y="90" fill="currentColor" fontSize="9" opacity="0.75">TGS-REQ for every SPN in the domain (event 4769 × N)</text>
+
+    <rect x="130" y="100" width="380" height="55" rx="10" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.5" />
+    <text x="320" y="122" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">KDC</text>
+    <text x="320" y="138" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">issues each ticket encrypted with the SERVICE ACCOUNT's password hash</text>
+
+    <line x1="320" y1="155" x2="320" y2="178" stroke="currentColor" strokeWidth="1.6" opacity="0.5" markerEnd="url(#roastArrow)" />
+    <text x="330" y="170" fill="currentColor" fontSize="9" opacity="0.75">encryption type 0x17 (RC4-HMAC) = unsalted, fast to crack</text>
+
+    <rect x="130" y="180" width="380" height="55" rx="10" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.5" />
+    <text x="320" y="202" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Offline cracking rig</text>
+    <text x="320" y="218" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">hashcat / John the Ripper, zero further contact with AD</text>
+
+    <line x1="320" y1="235" x2="320" y2="258" stroke="currentColor" strokeWidth="1.6" opacity="0.5" markerEnd="url(#roastArrow)" />
+    <text x="330" y="250" fill="currentColor" fontSize="9" opacity="0.75">weak or legacy password falls</text>
+
+    <rect x="130" y="260" width="380" height="55" rx="10" fill="#ef4444" fillOpacity="0.18" stroke="#ef4444" strokeWidth="1.7" />
+    <text x="320" y="282" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Service account's plaintext password</text>
+    <text x="320" y="298" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.75">valid until the password is rotated</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>No lockout, no interaction with the target account, and nothing beyond the initial ticket requests ever touches the domain controller again.</p>
+</div>
+
 The encryption type is what makes this fast or slow. Service tickets encrypted with RC4-HMAC show up in event 4769 with a Ticket Encryption Type field value of **0x17**, and RC4 keys are derived directly from the account's NTLM password hash with no salting, which makes offline cracking dramatically faster than AES (encryption types 0x11 and 0x12). A weak or old service account password behind RC4 can fall in hours; the same password behind AES with modern hardware is a much harder proposition.
 
 **Detection** comes down to two patterns in event 4769: RC4-HMAC (0x17) ticket requests in an environment that's supposed to be running AES, and bursts of ticket requests spanning many different SPNs from a single requesting account in a short window, which is what an automated Kerberoasting scan looks like and normal usage never does. Not every RC4 ticket is an attack; legacy applications and old service account configurations still generate them legitimately, so the signal is strongest when it's paired with account sensitivity and burst behavior rather than treated as a standalone alert. Microsoft's own 2024 guidance on mitigating Kerberoasting centers on the same two levers: move service accounts to AES-only encryption (and rotate the password afterward, since the AES key itself still derives from whatever password was set under RC4), and prefer Group Managed Service Accounts, whose passwords are long, random, and rotated automatically, making offline cracking impractical regardless of encryption type.
@@ -95,9 +131,47 @@ NTLM's persistence as a fallback protocol is exactly what keeps a specific attac
 
 **Coercion** techniques force a Windows machine, often a domain controller, to authenticate to a server the attacker controls. PetitPotam (CVE-2021-36942), disclosed in 2021 and still functionally relevant, abuses the Encrypting File System Remote Protocol (MS-EFSRPC) to trigger exactly this: an unauthenticated request over the LSARPC or EFSRPC named pipe causes the target to initiate NTLM authentication toward an address the attacker supplies.
 
-**Relay** takes that captured NTLM authentication attempt and forwards it live to a second target instead of cracking anything, authenticating as the coerced identity against whatever the relay destination accepts NTLM for.
+**Relay** takes that captured NTLM authentication attempt and forwards it live to a second target instead of cracking anything, authenticating as the coerced identity against whatever the relay destination accepts NTLM for. The mechanics are worth seeing directly, because the attacker never needs the password or the hash at all, only the ability to sit in the middle and pass two messages through unmodified.
 
-**AD CS web enrollment** is frequently that destination. Relaying a coerced domain controller's NTLM authentication to Active Directory Certificate Services' web enrollment endpoint (the attack path known as ESC8) can mint a valid certificate for that DC's identity. A certificate for a domain controller is equivalent to compromising the domain: it can be used for Kerberos PKINIT authentication, ticket forgery, and DCSync, all without ever needing a password.
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Three parallel rows between a victim box on the left, an attacker relay box in the middle, and a target box on the right. Row one, victim begins NTLM negotiation with the attacker, which the attacker forwards unmodified to the target. Row two, the target issues a real challenge, which the attacker relays back to the victim unmodified. Row three, the victim computes a response using its real password hash and sends it to the attacker, who forwards it unmodified to the target, completing authentication as the victim.">
+    <defs>
+      <marker id="relayArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+
+    <rect x="10" y="20" width="110" height="240" rx="12" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="65" y="135" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Victim</text>
+    <text x="65" y="152" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">e.g. coerced DC</text>
+
+    <rect x="265" y="20" width="110" height="240" rx="12" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.4" />
+    <text x="320" y="135" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Attacker</text>
+    <text x="320" y="152" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">relay listener</text>
+
+    <rect x="520" y="20" width="110" height="240" rx="12" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="575" y="135" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Target</text>
+    <text x="575" y="152" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">e.g. AD CS enrollment</text>
+
+    <text x="192" y="42" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">1. negotiate</text>
+    <line x1="120" y1="55" x2="263" y2="55" stroke="#0ea5e9" strokeWidth="1.6" opacity="0.6" markerEnd="url(#relayArrow)" />
+    <text x="447" y="42" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.75">forwarded as-is</text>
+    <line x1="377" y1="55" x2="518" y2="55" stroke="#0ea5e9" strokeWidth="1.6" opacity="0.6" markerEnd="url(#relayArrow)" />
+
+    <text x="192" y="138" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.75">passed straight through</text>
+    <line x1="263" y1="150" x2="120" y2="150" stroke="#94a3b8" strokeWidth="1.6" opacity="0.6" markerEnd="url(#relayArrow)" />
+    <text x="447" y="138" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">2. real challenge</text>
+    <line x1="518" y1="150" x2="377" y2="150" stroke="#94a3b8" strokeWidth="1.6" opacity="0.6" markerEnd="url(#relayArrow)" />
+
+    <text x="192" y="233" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">3. response (real hash)</text>
+    <line x1="120" y1="245" x2="263" y2="245" stroke="#10b981" strokeWidth="1.6" opacity="0.6" markerEnd="url(#relayArrow)" />
+    <text x="447" y="233" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.75">forwarded, target grants access</text>
+    <line x1="377" y1="245" x2="518" y2="245" stroke="#10b981" strokeWidth="1.6" opacity="0.6" markerEnd="url(#relayArrow)" />
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The attacker never learns the password or the hash. It only ever passes the challenge and the response through unmodified, and ends up holding a session authenticated as the victim.</p>
+</div>
+
+**AD CS web enrollment** is frequently that destination. Relaying a coerced domain controller's NTLM authentication to Active Directory Certificate Services' web enrollment endpoint (the attack path known as ESC8) can mint a valid certificate for that DC's identity. A certificate for a domain controller is equivalent to compromising the domain: it can be used for Kerberos PKINIT authentication, ticket forgery, and <Term concept="dcsync">DCSync</Term>, all without ever needing a password.
 
 This chain isn't historical. Independent 2026 research tracking exploitation in the wild found the coercion-to-relay-to-AD-CS chain still functional against the majority of enterprise environments still running Server 2019 and 2022 with AD CS deployed, which is most of them. Separately, Check Point Research documented active exploitation of **CVE-2025-24054** starting within eight days of patch release: a maliciously crafted `.library-ms` file that leaks NTLM hashes merely by a user right-clicking or navigating to the folder containing it, no execution required, with observed campaigns targeting government institutions in Poland and Romania.
 
@@ -131,6 +205,20 @@ This chain isn't historical. Independent 2026 research tracking exploitation in 
 </div>
 
 Microsoft's response is a three-phase deprecation plan. Phase one, already shipped in Windows 11 24H2 and Windows Server 2025, adds enhanced NTLM auditing. Phase two, targeted for the second half of 2026, introduces IAKerb and a local KDC specifically to remove the most common reasons applications fall back to NTLM in the first place. Phase three, targeted for October 2026, blocks NTLMv1 SSO by default. Read that last point carefully: **NTLMv2, the version actually used in relay attacks, remains permitted indefinitely.** The roadmap reduces NTLM's footprint; it does not remove the relay attack surface this section describes.
+
+## The <Term concept="crown-jewels">Crown Jewels</Term>: LSASS, SAM, NTDS.dit, and krbtgt
+
+Every technique in this post is ultimately reaching for one of four things. Knowing what they are, and what compromising each one actually buys an attacker, is what turns "Kerberoasting happened" or "an NTLM relay succeeded" into an accurate sense of how bad the day is about to get.
+
+**<Term concept="lsass">LSASS</Term>** (`lsass.exe`) is the process on every live Windows machine that enforces security policy and holds the authentication material for every currently logged-on session in memory: NTLM hashes, Kerberos tickets, and in some legacy configurations, plaintext or reversibly-encrypted credentials. It is the single highest-value process on any running Windows box, which is the entire reason tools like Mimikatz exist. This is also why Sysmon event 10 (ProcessAccess), covered earlier in this post, is such a load-bearing detection: an unusual process requesting a handle to `lsass.exe` with memory-read access rights is one of the most reliable single signals available. LSA Protection (RunAsPPL), available since Windows 10 and Server 2016, marks the process protected against ordinary usermode access, though credential-theft tooling has repeatedly found ways to operate before protection is enabled or around it entirely.
+
+**SAM and SYSTEM** are the registry hives (`HKLM\SAM` and `HKLM\SYSTEM`) holding password hashes for *local* accounts on any individual Windows machine, encrypted with a key derived from the SYSTEM hive, meaning both are needed together to recover anything usable. This is the machine-local equivalent of NTDS.dit below, and it's why local Administrator password reuse across a fleet is such a persistent lateral movement problem: one SAM dump, one cracked or replayed hash, and pass-the-hash walks onto every other machine sharing that password.
+
+**<Term concept="ntds-dit">NTDS.dit</Term>** is the domain-wide equivalent, sitting on every domain controller and holding every object in the domain, including the password hash for every single domain account. It is, without qualification, the highest-value file in an Active Directory environment. It can be reached two ways: directly, by pulling a volume shadow copy of the DC's system volume and extracting the file with a tool like `esentutl` or `ntdsutil` (requires local admin or console access to a DC), or through **DCSync**, which never touches the file at all: it abuses the Directory Replication Service protocol domain controllers legitimately use to replicate with each other, asking a DC to send password data as though the requester were itself a domain controller. Any account holding Replicating Directory Changes rights, which in practice is often a longer list than intended, can run it. This is precisely what a certificate obtained through the ADCS relay chain above is typically used for.
+
+**<Term concept="krbtgt">krbtgt</Term>** isn't a file or a process, it's a specific, disabled-by-default Active Directory account whose password hash encrypts and signs every Kerberos ticket the domain issues, including every TGT covered in the very first section of this post (event 4768). Whoever holds that hash can forge a fully valid TGT entirely offline: any username, any group membership up to and including Domain Admins, any expiration, without the real account's password, and without generating a single domain controller authentication event, the Golden Ticket attack. DCSync retrieves krbtgt's hash exactly the same way it retrieves anyone else's, which is why a confirmed DCSync or NTDS.dit extraction requires rotating the krbtgt password **twice** in succession, not once: Kerberos deliberately keeps a two-generation password history so in-flight tickets survive a routine rotation, and skipping the second rotation leaves a Golden Ticket forged from the old hash fully functional.
+
+That last point is worth sitting with. Everything in this post, every event ID, every ticket exchange, every detection, describes a domain controller doing its job and writing down what it saw. A Golden Ticket forged from krbtgt bypasses the KDC entirely. It generates none of the events this post has spent this much time explaining, because from the domain controller's perspective, nothing happened.
 
 ## Where These Events Actually Live: EVTX, Channels, and Audit Policy
 
@@ -218,7 +306,55 @@ One gap worth naming explicitly: a stock Linux install ships with auditd doing v
 | Query tooling | Event Viewer, `wevtutil`, PowerShell `Get-WinEvent` | `ausearch`, `aureport` |
 | Object-level watch mechanism | SACL on the specific object | `auditctl -w` file watch rule |
 
-The mechanics differ enough that a SOC covering both platforms genuinely needs to learn two vocabularies, but the underlying question stays identical on either side: who did what, to what, and when, with enough default coverage turned on that the answer exists before it's needed.
+The mechanics differ enough that a SOC covering both platforms genuinely needs to learn two vocabularies, but the underlying question stays identical on either side: who did what, to what, and when, with enough default coverage turned on that the answer exists before it's needed. Laid out as an actual pipeline, with the real services and processes involved rather than just the concepts, the two platforms look like this:
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 330" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Two parallel pipelines. Windows: LSASS generates authentication decisions and credential material, feeding the Event Log service which writes Security dot evtx and the Sysmon service which writes its own channel, forwarded by Windows Event Forwarding or a log agent. Linux: the kernel's syscall audit hooks feed the auditd daemon writing audit dot log and rsyslogd routing facility tagged messages, forwarded by an rsyslog forwarder or Filebeat. Both pipelines converge into a single centralized SIEM box at the bottom.">
+    <defs>
+      <marker id="svcArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+
+    <text x="150" y="18" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">Windows</text>
+    <rect x="30" y="26" width="240" height="46" rx="8" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.4" />
+    <text x="150" y="46" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">LSASS</text>
+    <text x="150" y="61" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">auth decisions, credential material</text>
+    <line x1="150" y1="72" x2="150" y2="92" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#svcArrow)" />
+
+    <rect x="30" y="94" width="240" height="46" rx="8" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="150" y="114" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Event Log svc + Sysmon</text>
+    <text x="150" y="129" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">Security.evtx / Sysmon-Operational</text>
+    <line x1="150" y1="140" x2="150" y2="160" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#svcArrow)" />
+
+    <rect x="30" y="162" width="240" height="46" rx="8" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.4" />
+    <text x="150" y="182" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">WEF/WEC or log agent</text>
+    <text x="150" y="197" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">e.g. Winlogbeat</text>
+
+    <text x="490" y="18" textAnchor="middle" fill="currentColor" fontSize="12" fontWeight="bold">Linux</text>
+    <rect x="370" y="26" width="240" height="46" rx="8" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.4" />
+    <text x="490" y="46" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Kernel</text>
+    <text x="490" y="61" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">syscall audit hooks</text>
+    <line x1="490" y1="72" x2="490" y2="92" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#svcArrow)" />
+
+    <rect x="370" y="94" width="240" height="46" rx="8" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="490" y="114" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">auditd + rsyslogd</text>
+    <text x="490" y="129" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">audit.log / facility routing</text>
+    <line x1="490" y1="140" x2="490" y2="160" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#svcArrow)" />
+
+    <rect x="370" y="162" width="240" height="46" rx="8" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.4" />
+    <text x="490" y="182" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">rsyslog fwd / Filebeat</text>
+    <text x="490" y="197" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">omfwd or a shipping agent</text>
+
+    <line x1="150" y1="208" x2="290" y2="255" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#svcArrow)" />
+    <line x1="490" y1="208" x2="350" y2="255" stroke="currentColor" strokeWidth="1.4" opacity="0.5" markerEnd="url(#svcArrow)" />
+
+    <rect x="245" y="258" width="150" height="55" rx="10" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.6" />
+    <text x="320" y="280" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Centralized SIEM</text>
+    <text x="320" y="296" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">one search across both platforms</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Different daemons, different file formats, same shape: generate, write locally, ship centrally.</p>
+</div>
 
 ## The Full Event ID Reference
 

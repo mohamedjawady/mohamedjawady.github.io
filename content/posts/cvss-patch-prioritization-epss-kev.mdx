@@ -1,0 +1,144 @@
+---
+title: "CVSS Tells You How Bad a Vulnerability Could Be. It Doesn't Tell You What to Patch First."
+description: "CVSS was designed to score theoretical severity, not the odds a vulnerability actually gets exploited. Only about 5-6% of published CVEs ever are, and CVSS score alone barely predicts which ones. What EPSS and CISA's KEV catalog add, and a practical framework for combining severity, likelihood, confirmed exploitation, and your own exposure into an actual patch queue."
+date: "2026-07-20"
+author: "Mohamed Habib Jaouadi"
+tags: ["vulnerability-management", "cvss", "epss", "patch-management", "blue-team", "risk", "soc"]
+banner: "/banners/posts/cvss-patch-prioritization.jpg"
+bannerAlt: "A queue of items being sorted and filtered down to a prioritized few"
+visibility: "public"
+---
+
+> **Vulnerability Management Focus:** A severity score answers "how bad could this be." Prioritization requires answering "how likely is this to happen to me, specifically, soon." Those are different questions, and CVSS was only ever built to answer the first one.
+
+**TL;DR:** <Term concept="cvss">CVSS</Term> scores theoretical severity in a vacuum: what would happen if this vulnerability were exploited, assuming nothing about whether it will be. Around 5-6% of published CVEs are ever exploited in the wild, and CVSS Base score has weak power to tell you which ones land in that group; plenty of 9.8s never get touched while plenty of 6.xs get weaponized fast. <Term concept="epss">EPSS</Term> predicts exploitation probability from real telemetry, and CISA's <Term concept="kev-catalog">KEV catalog</Term> confirms exploitation that has already started. Real prioritization multiplies severity (CVSS) by likelihood (EPSS) by confirmed exploitation (KEV, which overrides everything) by your own exposure, and a program that only filters by CVSS score is solving a different problem than the one it thinks it's solving.
+
+## Introduction
+
+"Patch everything scored 9 or above" is the instinct almost every vulnerability management program starts with, and it's an understandable one: a single number, sorted descending, gives you a queue. The problem shows up at scale. A mid-size environment can easily carry thousands of open CVEs rated 7.0 or higher at any given time, and treating all of them as equally urgent means treating none of them as urgent, because there's no way to actually clear that queue before the next scan adds more to the top of it.
+
+This isn't a tooling problem or a staffing problem, the same shape of mistake this blog has covered before with alert volume. It's a measurement problem: CVSS was never built to answer the question most teams are asking of it. This post covers what CVSS actually measures, why that measurement correlates weakly with real-world exploitation, and the two additional signals, EPSS and CISA's KEV catalog, that answer the question CVSS can't, before landing on a practical way to combine all of it with your own environment's context.
+
+## What CVSS Actually Measures
+
+<Term concept="cvss">CVSS</Term>, the Common Vulnerability Scoring System, is built from three metric groups: Base, Temporal, and Environmental. The Base score captures intrinsic, constant properties of the vulnerability itself: how it's reached (network, adjacent, local, physical), how complex the attack is, what privileges are needed, and what happens to confidentiality, integrity, and availability if it succeeds. The Temporal group is meant to adjust that score for real-world factors like exploit code maturity and available remediation. The Environmental group is meant to let an individual organization reweight everything based on their own asset criticality.
+
+In practice, almost nobody uses the second and third groups. NVD and most vendor advisories publish a Base score and stop there, and that's the number that ends up in the scanner dashboard, the ticket, and the SLA policy. This isn't a bug so much as the spec working as designed and then getting used incompletely: the Base score answers "how bad would this be, in the abstract, assuming an attacker with the right position and skill goes after it," and by design it says nothing about whether an attacker actually will, or whether the vulnerable component is even reachable in your specific environment.
+
+## The Correlation Problem
+
+Here's the number that makes this concrete: research from Cyentia, RAND, and Virginia Tech (later corroborated by VulnCheck's more recent data) puts the share of published CVEs ever observed being exploited in the wild at roughly 5-6%. The overwhelming majority of vulnerabilities, including a huge share of the ones scored Critical, are never weaponized at all.
+
+If CVSS score correlated tightly with that 5-6%, filtering by it would still work reasonably well: sort by score, patch the top, and you'd mostly be chasing real risk. It doesn't correlate that tightly. High Base scores show up throughout both groups, exploited and never-exploited, because the score is measuring theoretical impact and reachability, not attacker interest, and attacker interest turns out to be driven by things CVSS doesn't model at all: how easy the vulnerability is to weaponize reliably, how valuable the affected software's install base is to attack, and how much attention it's getting in the exploit-development community.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A strip plot with CVSS score from zero to ten on the horizontal axis and two rows: exploited in the wild, and never exploited. Dots are scattered across the full score range in both rows, showing that high CVSS scores appear in both the exploited and never-exploited groups without a clean separating line.">
+    <line x1="70" y1="70" x2="590" y2="70" stroke="currentColor" strokeWidth="1" opacity="0.15" />
+    <line x1="70" y1="190" x2="590" y2="190" stroke="currentColor" strokeWidth="1" opacity="0.15" />
+    <line x1="70" y1="220" x2="590" y2="220" stroke="currentColor" strokeWidth="1.4" opacity="0.5" />
+    <text x="70" y="240" fill="currentColor" fontSize="10" opacity="0.6">0</text>
+    <text x="590" y="240" textAnchor="end" fill="currentColor" fontSize="10" opacity="0.6">10</text>
+    <text x="330" y="240" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">CVSS Base score</text>
+
+    <text x="50" y="74" textAnchor="end" fill="currentColor" fontSize="9.5" opacity="0.7">exploited</text>
+    <text x="50" y="86" textAnchor="end" fill="currentColor" fontSize="8.5" opacity="0.5">(~6%)</text>
+    <circle cx="120" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" /><circle cx="180" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" /><circle cx="260" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" /><circle cx="330" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" /><circle cx="410" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" /><circle cx="470" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" /><circle cx="530" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" /><circle cx="560" cy="70" r="4" fill="#ef4444" fillOpacity="0.75" />
+
+    <text x="50" y="188" textAnchor="end" fill="currentColor" fontSize="9.5" opacity="0.7">never exploited</text>
+    <text x="50" y="200" textAnchor="end" fill="currentColor" fontSize="8.5" opacity="0.5">(~94%)</text>
+    <circle cx="100" cy="140" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="140" cy="160" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="180" cy="150" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="220" cy="170" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="260" cy="145" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="300" cy="165" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="340" cy="155" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="380" cy="175" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="420" cy="140" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="460" cy="160" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="500" cy="150" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="540" cy="170" r="3.5" fill="#94a3b8" fillOpacity="0.55" /><circle cx="570" cy="145" r="3.5" fill="#94a3b8" fillOpacity="0.55" />
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Both rows span the full score range. A high CVSS score does not reliably predict which side of the 6% line a CVE falls on.</p>
+</div>
+
+The practical consequence: a policy of "patch everything above 7" means committing enormous remediation effort toward a pool where the overwhelming majority of members will never be attacked, while providing no particular assurance that the CVEs actually being exploited (which are scattered across the score range, not clustered at the top of it) get treated with matching urgency.
+
+## Two Signals That Actually Predict Exploitation
+
+Two things fill the gap CVSS leaves, and they answer different questions.
+
+<Term concept="epss">EPSS</Term>, the Exploit Prediction Scoring System, is a FIRST-maintained machine learning model that outputs a daily-updated probability, from 0 to 1, that a given CVE will be exploited in the wild within the next 30 days. It's trained on real exploitation telemetry rather than theoretical properties, and its inputs include the CVSS metrics themselves alongside things CVSS never considers: whether public exploit code exists, how much the vulnerability is being discussed and referenced online, the vendor and product involved, and the vulnerability's age. Because it's a probability rather than a severity rating, EPSS answers "how likely is this one, specifically, to be weaponized soon," which is a categorically different question than "how bad would it be if it were."
+
+<Term concept="kev-catalog">CISA's KEV catalog</Term> answers a related but distinct question, and it doesn't predict anything: it's a documented list of CVEs CISA has confirmed are being actively exploited right now. Where EPSS is a forecast, KEV membership is a fact already in evidence, which is why it functions less like a score to weigh against others and more like an override. CISA's BOD 26-04 (which supersedes the earlier BOD 22-01) sets binding remediation deadlines for federal civilian agencies on anything added to the catalog, and plenty of non-federal organizations adopt the same list as a floor for their own SLAs, reasoning that a vulnerability confirmed under active attack anywhere shouldn't wait for a normal patch cycle anywhere else.
+
+## What CVSS Still Gets Right
+
+None of this makes CVSS useless, it just means the score answers one term in a larger equation, not the whole equation. A reasonable way to think about actual patch risk:
+
+**Risk ≈ Severity × Likelihood × Exposure**
+
+CVSS gives you severity: the ceiling on how bad it gets if the vulnerability is exploited successfully. EPSS gives you likelihood: the odds it will be, in the near term, based on what attackers are actually doing. Neither one tells you exposure, which is entirely about your own environment, and no external score, however well-built, can supply that part for you.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 280" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="Four labeled inputs, CVSS as severity ceiling, EPSS as likelihood, the KEV catalog as confirmed exploitation which overrides the others, and asset exposure as your own environment's context, all feeding into a single patch priority queue.">
+    <defs>
+      <marker id="cvssArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+    <rect x="30" y="20" width="150" height="56" rx="9" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.4" />
+    <text x="105" y="44" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">CVSS</text>
+    <text x="105" y="60" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">severity ceiling</text>
+
+    <rect x="30" y="92" width="150" height="56" rx="9" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.4" />
+    <text x="105" y="116" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">EPSS</text>
+    <text x="105" y="132" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">predicted likelihood</text>
+
+    <rect x="30" y="164" width="150" height="56" rx="9" fill="#ef4444" fillOpacity="0.18" stroke="#ef4444" strokeWidth="1.6" />
+    <text x="105" y="188" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">KEV catalog</text>
+    <text x="105" y="204" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">confirmed, overrides all</text>
+
+    <rect x="30" y="236" width="150" height="34" rx="9" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="105" y="257" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Asset exposure</text>
+
+    <line x1="180" y1="48" x2="330" y2="135" stroke="currentColor" strokeWidth="1.4" opacity="0.4" markerEnd="url(#cvssArrow)" />
+    <line x1="180" y1="120" x2="330" y2="140" stroke="currentColor" strokeWidth="1.4" opacity="0.4" markerEnd="url(#cvssArrow)" />
+    <line x1="180" y1="192" x2="330" y2="150" stroke="currentColor" strokeWidth="1.4" opacity="0.4" markerEnd="url(#cvssArrow)" />
+    <line x1="180" y1="253" x2="330" y2="160" stroke="currentColor" strokeWidth="1.4" opacity="0.4" markerEnd="url(#cvssArrow)" />
+
+    <rect x="350" y="105" width="260" height="70" rx="12" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.8" />
+    <text x="480" y="135" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">Patch priority queue</text>
+    <text x="480" y="155" textAnchor="middle" fill="currentColor" fontSize="9.5" opacity="0.7">ranked by risk, not by score alone</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>KEV membership should short-circuit the ranking. Everything else genuinely gets weighed.</p>
+</div>
+
+## The Context Layer No Score Can Give You
+
+Exposure is the term every external score has to leave blank, and it's frequently the term that matters most. A 9.8 in a component that isn't internet-facing, sits behind a compensating control, or isn't even loaded in your specific deployment carries a different real risk than the same 9.8 sitting on an unpatched, internet-reachable crown-jewel system. This is the same asset-first thinking this blog's post on threat modeling argues for: you can't reason about which threats matter until you know what you actually have and where it sits, and the same logic applies one level down, to which specific vulnerabilities on those assets matter.
+
+Building this layer means maintaining, at minimum, an accurate map of what's internet-facing, which systems hold or touch the organization's most sensitive data, and which compensating controls are actually in place (not just documented) for each. That map is unglamorous work compared to standing up an EPSS feed, but it's the one input in the equation that nobody else can supply, because it's specific to your environment in a way no external score can be.
+
+## A Practical Prioritization Framework
+
+Put the pieces together into an actual decision order:
+
+1. **Is it in the KEV catalog?** If yes, it goes to the front of the queue regardless of CVSS score. Confirmed exploitation happening now beats a predicted score every time; this is the one case where the ranking gets overridden rather than weighed.
+2. **If not, check EPSS.** A high EPSS score on an internet-facing or crown-jewel asset is urgent even if the CVSS score is moderate. A high EPSS score on an isolated, low-value asset is still worth tracking, but with less urgency.
+3. **High CVSS but low EPSS and low exposure** can usually wait for the normal patch cycle. This is the category that traditional "patch everything above 7" policies waste the most effort on: severe in theory, unlikely in practice, and not exposed even if it did happen.
+4. **Compensating controls change the math at any step.** A WAF rule blocking the specific request pattern, network segmentation that makes the vulnerable service unreachable, or a disabled feature flag can lower urgency even for a KEV-listed, high-EPSS finding, provided the control is verified rather than assumed.
+
+The point of running it in this order isn't that CVSS becomes irrelevant, it's that CVSS answers the first, least differentiating term in the equation, and a program that stops there is optimizing for a number that only weakly tracks the outcome it actually cares about.
+
+## CVSS v4.0's Attempt to Fix This
+
+Worth noting in fairness to the standard: CVSS v4.0, released by FIRST in late 2023, is a direct response to exactly this criticism. It introduces a Threat metric group (centered on exploit maturity) as a first-class part of the scoring rubric rather than an optional add-on, and it deliberately stops collapsing Base, Threat, and Environmental factors into one blended number, publishing them as separate, explicitly labeled scores instead. That's a real acknowledgment from the standard's own maintainers that a single context-free number was being over-relied on. Adoption is still catching up: most scanners, dashboards, and NVD entries a team encounters day to day are still reporting Base scores under v3.1, which means the practical fix for most organizations, today, is still combining CVSS with EPSS and KEV externally rather than waiting for the scoring standard itself to absorb the fix.
+
+## Conclusion
+
+CVSS answers "how bad could this be," and it answers that question well; it was never built to answer "how likely is this to actually happen to me, soon." Treating the Base score as a complete prioritization signal means optimizing for a number that, on its own, barely distinguishes the roughly 6% of CVEs that get exploited from the roughly 94% that never do. EPSS supplies the likelihood term. The KEV catalog supplies confirmed fact where prediction isn't even necessary. Your own asset exposure supplies the term no external score ever could. A patch queue built from all four is solving the actual problem. A patch queue built from CVSS alone is solving a simpler, related problem that happens to share a queue with it.
+
+## References & Further Reading
+
+1. FIRST.org, CVSS v4.0 Specification. [https://www.first.org/cvss/v4.0/](https://www.first.org/cvss/v4.0/)
+	The current scoring standard, including the Threat metric group added specifically to address exploit-likelihood criticism.
+2. FIRST.org, Exploit Prediction Scoring System (EPSS). [https://www.first.org/epss/](https://www.first.org/epss/)
+	The official EPSS program page, data feeds, and model documentation.
+3. Jacobs, Romanosky, Edwards, Roytman, Adjeril, "Exploit Prediction Scoring System (EPSS)". [https://arxiv.org/abs/1908.04856](https://arxiv.org/abs/1908.04856)
+	The original research paper behind EPSS, from the team that built it.
+4. VulnCheck, "State of Exploitation: A Peek into the Last Decade of Vulnerability Exploitation". [https://www.vulncheck.com/blog/state-of-exploitation-a-decade](https://www.vulncheck.com/blog/state-of-exploitation-a-decade)
+	Recent data corroborating the roughly 5-6% exploited-in-the-wild figure cited in this post.
+5. CISA, Known Exploited Vulnerabilities Catalog. [https://www.cisa.gov/known-exploited-vulnerabilities-catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+	The authoritative, continuously updated list of confirmed-exploited CVEs.
+6. CISA, BOD 26-04: Prioritizing Security Updates Based on Risk. [https://www.cisa.gov/news-events/directives/bod-26-04-prioritizing-security-updates-based-risk](https://www.cisa.gov/news-events/directives/bod-26-04-prioritizing-security-updates-based-risk)
+	The current federal directive governing KEV remediation deadlines, superseding the earlier BOD 22-01.

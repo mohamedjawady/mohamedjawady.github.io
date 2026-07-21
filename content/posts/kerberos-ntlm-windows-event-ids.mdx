@@ -1,0 +1,203 @@
+---
+title: "How Windows Authentication Actually Works: Kerberos, NTLM, and the Event IDs That Catch It Going Wrong"
+description: "Kerberos's ticket exchange, why it beats NTLM, and how Kerberoasting abuses the protocol's own design without ever touching the target account. Where NTLM still lurks and why Microsoft's 2026 deprecation plan won't remove it. A full walkthrough of the Windows/AD event IDs that map to each step (4768, 4769, 4770, 4624, 4720, 4732, 4728, 4657, 4663, 7045, 4698, 4104, 6416, 1006, 1116, 8003), plus where they actually live: EVTX channels and the audit policy that has to be turned on before any of it gets written."
+date: "2026-07-19"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "windows", "active-directory", "kerberos", "ntlm", "kerberoasting", "event-logs", "detection-engineering", "soc"]
+banner: "/banners/posts/kerberos-ntlm-windows-events.jpg"
+bannerAlt: "A chain of keys and tickets representing the Kerberos authentication exchange"
+visibility: "public"
+---
+
+> **Windows/AD Focus:** An event ID is a lookup-table entry until you understand the protocol that produced it. This post builds the protocol first, then the event IDs fall into place as a story instead of a list.
+
+**TL;DR:** <Term concept="kerberos">Kerberos</Term> replaces repeated password checks with time-limited tickets: prove who you are once to a <Term concept="kdc">KDC</Term> (event 4768), get a ticket for each service you touch afterward (event 4769), and access is granted or denied at the target without the domain controller being asked again. <Term concept="kerberoasting">Kerberoasting</Term> abuses that design directly: any domain user can request a ticket for any service account and crack it offline, no interaction with the target required. <Term concept="ntlm">NTLM</Term> is older, weaker, and still very much alive as a fallback protocol, which is exactly what makes <Term concept="ntlm-relay">NTLM relay</Term> chains like coercion-to-AD-CS still work against most enterprise networks in 2026 despite Microsoft's ongoing deprecation push. None of the event IDs below mean anything without the right audit policy turned on and a way to get them off the endpoint, which is the part most teams skip.
+
+## Introduction
+
+Active Directory authentication produces more useful signal, per byte logged, than almost any other data source in a Windows environment, and it's also one of the most commonly misread. An analyst who's memorized "4769 means Kerberoasting" without understanding what a service ticket actually is will chase every RC4 ticket request as an incident and still miss the pattern that actually matters. This post builds the two protocols from the ground up, Kerberos first because it's the default, then NTLM as the fallback that refuses to fully go away, and maps each concept to the specific event ID a SOC analyst will see it as. It closes with where these events physically live and what has to be configured before any of them get written at all.
+
+## How Kerberos Actually Works
+
+Kerberos replaces "prove your password to every server you talk to" with a three-step ticket exchange, and each step has a name and a corresponding event ID on the domain controller.
+
+**Step one: Authentication Service Exchange (AS-REQ / AS-REP).** The client proves its identity once to the <Term concept="kdc">Key Distribution Center</Term>, the service running on every domain controller that issues and validates tickets. If the credentials check out, the KDC returns a Ticket Granting Ticket (TGT), a sealed proof of identity the client will reuse for the rest of its session instead of sending a password again. This exchange generates **event 4768**, logged on the domain controller every time a TGT is issued.
+
+**Step two: Ticket Granting Service Exchange (TGS-REQ / TGS-REP).** When the client wants to access a specific service, say a file server or a SQL instance, it presents its TGT back to the KDC and asks for a ticket scoped to that one service, identified by its Service Principal Name (SPN). The KDC issues a service ticket encrypted with a key derived from the target service account's password, not the requesting user's. This generates **event 4769** on the domain controller, and it's the single most important Kerberos event for a SOC to understand, because it's both the normal, constant background noise of everyday AD usage and the event Kerberoasting rides on.
+
+**Step three: Application Server Exchange (AP-REQ / AP-REP).** The client presents the service ticket directly to the target server, which decrypts it with its own password-derived key and grants or denies access locally, without contacting the domain controller again. This is why a successful logon at the target machine shows up there as **event 4624** (logon type will typically be 3, network logon, for service access) while the domain controller only ever saw the ticket request.
+
+Tickets don't last forever. A **renewal** of an existing TGT rather than a full re-authentication generates **event 4770**.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Three steps of the Kerberos exchange. Step one, client to KDC, AS-REQ and AS-REP, produces a ticket granting ticket and logs event 4768. Step two, client to KDC, TGS-REQ and TGS-REP, produces a service ticket and logs event 4769. Step three, client to target server, AP-REQ, grants access locally and logs event 4624 on the target server, with event 4770 noted separately for ticket renewal.">
+    <rect x="20" y="120" width="110" height="56" rx="9" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="75" y="144" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Client</text>
+    <text x="75" y="160" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">workstation</text>
+
+    <rect x="260" y="30" width="120" height="56" rx="9" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.6" />
+    <text x="320" y="54" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">KDC</text>
+    <text x="320" y="70" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">domain controller</text>
+
+    <rect x="500" y="120" width="120" height="56" rx="9" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="560" y="144" textAnchor="middle" fill="currentColor" fontSize="11.5" fontWeight="bold">Target server</text>
+    <text x="560" y="160" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">file share, SQL, etc.</text>
+
+    <path d="M 130 135 L 258 62" fill="none" stroke="#0ea5e9" strokeWidth="1.5" opacity="0.55" />
+    <text x="150" y="90" fill="currentColor" fontSize="9.5" fontWeight="bold">1. AS-REQ / AS-REP</text>
+    <text x="150" y="103" fill="currentColor" fontSize="9" opacity="0.65">TGT issued: event 4768</text>
+
+    <path d="M 258 74 L 130 155" fill="none" stroke="#0ea5e9" strokeWidth="1.5" opacity="0.35" strokeDasharray="4 3" />
+
+    <path d="M 130 155 L 258 78" fill="none" stroke="#f59e0b" strokeWidth="1.5" opacity="0.55" />
+    <text x="150" y="200" fill="currentColor" fontSize="9.5" fontWeight="bold">2. TGS-REQ / TGS-REP</text>
+    <text x="150" y="213" fill="currentColor" fontSize="9" opacity="0.65">service ticket issued: event 4769</text>
+    <text x="150" y="226" fill="currentColor" fontSize="9" opacity="0.65">renewal: event 4770</text>
+
+    <path d="M 130 148 L 498 148" fill="none" stroke="#ef4444" strokeWidth="1.5" opacity="0.55" />
+    <text x="240" y="260" fill="currentColor" fontSize="9.5" fontWeight="bold">3. AP-REQ, ticket presented directly</text>
+    <text x="240" y="273" fill="currentColor" fontSize="9" opacity="0.65">access granted locally: event 4624 (on target)</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The domain controller only sees steps one and two. Step three, the actual access, happens entirely between client and target.</p>
+</div>
+
+## Kerberos vs. NTLM: What Actually Changes
+
+<Term concept="ntlm">NTLM</Term> predates Kerberos and is still Windows' fallback protocol, used whenever Kerberos can't be: no line of sight to a domain controller, access by raw IP address instead of hostname, authentication into a workgroup machine outside any domain, or an application that simply never learned to speak Kerberos. NTLM is challenge-response: the server sends a challenge, the client responds with a value computed from the challenge and the account's password hash, and (in a domain) a domain controller verifies that response over Netlogon. Critically, the NTLM hash itself is what gets used to compute that response, which means possessing the hash is functionally equivalent to possessing the password for authentication purposes, the basis of pass-the-hash attacks.
+
+| | Kerberos | NTLM |
+|---|---|---|
+| Model | Time-limited tickets, issued once and reused | Challenge-response, repeated per connection |
+| Mutual authentication | Yes, client can verify the server too | No, only the server verifies the client |
+| DC involved per connection | Only for the initial ticket requests | Every authentication typically round-trips to a DC |
+| Credential material transmitted | Never the password or its hash directly | Response is computed from the hash; the hash itself remains password-equivalent |
+| Delegation | Built-in and constrained/protected variants available | Effectively unusable for delegation |
+| Offline crackability | Depends on encryption type; RC4-encrypted tickets are fast to crack, AES is far more resistant | Captured hashes and relayed sessions are directly usable, no cracking needed for relay |
+| 2026 status | Default and actively hardened (RC4 deprecation underway) | Actively being deprecated, but NTLMv2 remains permitted indefinitely |
+
+The security gap isn't really "Kerberos good, NTLM bad" as abstract properties, it's that NTLM's design makes stolen or relayed authentication material immediately and directly usable, while Kerberos at least forces an attacker through ticket theft, ticket forgery, or offline cracking, each of which is a narrower and more detectable path.
+
+## Kerberoasting: Abusing the Protocol's Own Design
+
+<Term concept="kerberoasting">Kerberoasting</Term> isn't a Kerberos vulnerability in the traditional sense, it's a direct consequence of how the protocol is supposed to work. Any authenticated domain user, with zero elevated privilege, is allowed to request a service ticket (a TGS, event 4769) for any account with a registered Service Principal Name, because that's precisely what the ticket exchange is for: any client should be able to ask for a ticket to a service it wants to use. The catch is what that ticket is encrypted with: a key derived from the target service account's own password, not the requester's. An attacker can request tickets for every SPN-registered account in the domain, walk away with a pile of encrypted blobs, and crack them completely offline, with no further interaction with the target accounts and no risk of triggering a lockout.
+
+The encryption type is what makes this fast or slow. Service tickets encrypted with RC4-HMAC show up in event 4769 with a Ticket Encryption Type field value of **0x17**, and RC4 keys are derived directly from the account's NTLM password hash with no salting, which makes offline cracking dramatically faster than AES (encryption types 0x11 and 0x12). A weak or old service account password behind RC4 can fall in hours; the same password behind AES with modern hardware is a much harder proposition.
+
+**Detection** comes down to two patterns in event 4769: RC4-HMAC (0x17) ticket requests in an environment that's supposed to be running AES, and bursts of ticket requests spanning many different SPNs from a single requesting account in a short window, which is what an automated Kerberoasting scan looks like and normal usage never does. Not every RC4 ticket is an attack; legacy applications and old service account configurations still generate them legitimately, so the signal is strongest when it's paired with account sensitivity and burst behavior rather than treated as a standalone alert. Microsoft's own 2024 guidance on mitigating Kerberoasting centers on the same two levers: move service accounts to AES-only encryption (and rotate the password afterward, since the AES key itself still derives from whatever password was set under RC4), and prefer Group Managed Service Accounts, whose passwords are long, random, and rotated automatically, making offline cracking impractical regardless of encryption type.
+
+## NTLM Vulnerabilities to Watch For
+
+NTLM's persistence as a fallback protocol is exactly what keeps a specific attack chain alive: **coercion, relay, and certificate abuse.**
+
+**Coercion** techniques force a Windows machine, often a domain controller, to authenticate to a server the attacker controls. PetitPotam (CVE-2021-36942), disclosed in 2021 and still functionally relevant, abuses the Encrypting File System Remote Protocol (MS-EFSRPC) to trigger exactly this: an unauthenticated request over the LSARPC or EFSRPC named pipe causes the target to initiate NTLM authentication toward an address the attacker supplies.
+
+**Relay** takes that captured NTLM authentication attempt and forwards it live to a second target instead of cracking anything, authenticating as the coerced identity against whatever the relay destination accepts NTLM for.
+
+**AD CS web enrollment** is frequently that destination. Relaying a coerced domain controller's NTLM authentication to Active Directory Certificate Services' web enrollment endpoint (the attack path known as ESC8) can mint a valid certificate for that DC's identity. A certificate for a domain controller is equivalent to compromising the domain: it can be used for Kerberos PKINIT authentication, ticket forgery, and DCSync, all without ever needing a password.
+
+This chain isn't historical. Independent 2026 research tracking exploitation in the wild found the coercion-to-relay-to-AD-CS chain still functional against the majority of enterprise environments still running Server 2019 and 2022 with AD CS deployed, which is most of them. Separately, Check Point Research documented active exploitation of **CVE-2025-24054** starting within eight days of patch release: a maliciously crafted `.library-ms` file that leaks NTLM hashes merely by a user right-clicking or navigating to the folder containing it, no execution required, with observed campaigns targeting government institutions in Poland and Romania.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 220" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four step chain. Step one, attacker coerces a domain controller using a technique like PetitPotam. Step two, the domain controller authenticates via NTLM to an attacker controlled listener. Step three, the attacker relays that authentication to the AD CS web enrollment endpoint. Step four, the attacker receives a certificate for the domain controller's identity, resulting in domain compromise.">
+    <defs>
+      <marker id="ntlmArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+    <rect x="10" y="80" width="130" height="56" rx="9" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="75" y="104" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">1. Coerce</text>
+    <text x="75" y="120" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">PetitPotam / MS-EFSRPC</text>
+    <line x1="140" y1="108" x2="175" y2="108" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#ntlmArrow)" />
+
+    <rect x="177" y="80" width="130" height="56" rx="9" fill="#f59e0b" fillOpacity="0.16" stroke="#f59e0b" strokeWidth="1.4" />
+    <text x="242" y="104" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">2. NTLM auth</text>
+    <text x="242" y="120" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">DC authenticates out</text>
+    <line x1="307" y1="108" x2="342" y2="108" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#ntlmArrow)" />
+
+    <rect x="344" y="80" width="130" height="56" rx="9" fill="#8b5cf6" fillOpacity="0.16" stroke="#8b5cf6" strokeWidth="1.4" />
+    <text x="409" y="104" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">3. Relay</text>
+    <text x="409" y="120" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">to AD CS web enrollment</text>
+    <line x1="474" y1="108" x2="509" y2="108" stroke="currentColor" strokeWidth="1.5" opacity="0.5" markerEnd="url(#ntlmArrow)" />
+
+    <rect x="511" y="80" width="120" height="56" rx="9" fill="#10b981" fillOpacity="0.18" stroke="#10b981" strokeWidth="1.6" />
+    <text x="571" y="104" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">4. Certificate</text>
+    <text x="571" y="120" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">= domain compromise</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>No password ever touched. The DC authenticated itself into giving the attacker a certificate for its own identity.</p>
+</div>
+
+Microsoft's response is a three-phase deprecation plan. Phase one, already shipped in Windows 11 24H2 and Windows Server 2025, adds enhanced NTLM auditing. Phase two, targeted for the second half of 2026, introduces IAKerb and a local KDC specifically to remove the most common reasons applications fall back to NTLM in the first place. Phase three, targeted for October 2026, blocks NTLMv1 SSO by default. Read that last point carefully: **NTLMv2, the version actually used in relay attacks, remains permitted indefinitely.** The roadmap reduces NTLM's footprint; it does not remove the relay attack surface this section describes.
+
+## Where These Events Actually Live: EVTX, Channels, and Audit Policy
+
+Every event ID in this post is worthless if the event never gets written or never leaves the box it was written on.
+
+Windows stores event logs in the <Term concept="evtx">EVTX</Term> binary XML format, one file per channel, typically under `C:\Windows\System32\winevt\Logs`. The four classic channels are Application, Security, Setup, and System, but most of the events this post covers actually live in one of two places: the Security channel, or a component-specific channel under the much larger "Applications and Services Logs" tree.
+
+**Which channel, and what has to be turned on to populate it:**
+
+| Event ID | Channel | What has to be enabled |
+|---|---|---|
+| 4768, 4769, 4770 | Security | Advanced Audit Policy: Account Logon > Audit Kerberos Authentication Service / Audit Kerberos Service Ticket Operations |
+| 4624 | Security | Advanced Audit Policy: Logon/Logoff > Audit Logon (on by default in most baselines) |
+| 4720, 4732, 4728 | Security | Advanced Audit Policy: Account Management > Audit User Account Management / Audit Security Group Management |
+| 4657, 4663 | Security | Advanced Audit Policy: Object Access > Audit Registry (4657) / Audit File System or Registry (4663), **plus** a SACL configured on the specific object, both are required or nothing is logged |
+| 7045 | System | Logged natively by the Service Control Manager, no audit policy needed |
+| 4698 | Security | Advanced Audit Policy: Object Access > Audit Other Object Access Events |
+| 4104 | Microsoft-Windows-PowerShell/Operational | Group Policy: Turn on PowerShell Script Block Logging |
+| 6416 | Security | Advanced Audit Policy: Object Access > Audit PNP Activity |
+| 1006, 1116 | Microsoft-Windows-Windows Defender/Operational | On by default wherever Defender real-time protection is active |
+| 8003 | Microsoft-Windows-NTLM/Operational | Network security: Restrict NTLM > Audit Incoming NTLM Traffic / Outgoing NTLM traffic to remote servers |
+
+The Object Access category is the one that trips teams up most often, because 4657 and 4663 will simply never fire, silently, if a SACL was never placed on the file or registry key in question, even with the audit subcategory enabled domain-wide. Auditing a sensitive credential file or a registry run key requires both pieces: the policy that says "log object access" and the SACL on that specific object that says "log access to *this* object." Checking the policy alone and assuming coverage is one of the most common gaps a log-source audit finds.
+
+None of this matters at SOC scale sitting on the endpoint. Windows Event Forwarding (WEF/WEC) or a log shipping agent has to move these events off the box and into centralized storage before an analyst can search across more than one machine at a time, which is the same data-centralization argument this blog has made about NSM and CSM sources generally: visibility that only exists locally, one endpoint at a time, isn't visibility a SOC can actually use.
+
+## The Full Event ID Reference
+
+Grouped by what they actually tell you, rather than numeric order.
+
+**Kerberos and logon (the authentication story itself)**
+- **4768**: TGT requested (initial logon to the domain)
+- **4769**: Service ticket requested (access to a specific SPN; watch encryption type for Kerberoasting)
+- **4770**: Service ticket renewed
+- **4624**: Successful logon (check the Logon Type: 3 is network, 10 is RDP, 2 is interactive)
+
+**Account and group changes (privilege and persistence via identity)**
+- **4720**: User account created
+- **4732**: Member added to a security-enabled local group (watch local Administrators)
+- **4728**: Member added to a security-enabled global group
+
+**Object and registry access (data and configuration touched)**
+- **4657**: Registry value created, modified, or deleted (requires a SACL on the key)
+- **4663**: An object handle was used to exercise specific access rights (requires a SACL on the object)
+
+**Persistence and execution (how an attacker stays and runs code)**
+- **7045**: New service installed (classic PsExec-style lateral movement and persistence signal)
+- **4698**: Scheduled task created
+- **4104**: PowerShell script block logged (the single highest-value source for catching obfuscated PowerShell)
+
+**Device and endpoint signals**
+- **6416**: New external device recognized (USB media; alert when the Subject isn't SYSTEM)
+- **1006 / 1116**: Defender detected malware or unwanted software (1006 on the legacy engine, 1116 on the modern Windows Defender/Operational channel)
+
+**NTLM auditing (finding out what still depends on the protocol before Microsoft turns it off)**
+- **8003**: Incoming NTLM authentication logged on a member server, generated once NTLM auditing is enabled; the practical first step of any NTLM reduction project is collecting two weeks of these and building an inventory of what's still asking for NTLM before restricting it
+
+## Conclusion
+
+Kerberos gives a SOC a clean story, in principle: 4768 says who authenticated, 4769 says what they asked to access next, and 4624 confirms whether the target actually let them in, all tied together by the same client and the same window of time. NTLM doesn't tell that story nearly as cleanly, which is precisely why an attacker forcing a target back onto NTLM, through coercion, through an application that never learned Kerberos, through a stale GPO nobody re-audited, is choosing the protocol that's harder to reason about, not just the one that's easier to relay. None of the event IDs in this post substitute for that reasoning. They're the vocabulary; the protocol is the grammar that makes the vocabulary mean something.
+
+## References & Further Reading
+
+1. Microsoft Learn, "4768(S, F) A Kerberos authentication ticket (TGT) was requested." [https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4768](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4768)
+2. Microsoft Learn, "4769(S, F) A Kerberos service ticket was requested." [https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4769](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4769)
+3. Microsoft Learn, "Detect and Remediate RC4 Usage in Kerberos." [https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-remediate-rc4-kerberos](https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
+	The encryption-type detection logic and AES migration guidance behind the Kerberoasting section.
+4. Microsoft Security Blog, "Microsoft's guidance to help mitigate Kerberoasting" (2024). [https://www.microsoft.com/en-us/security/blog/2024/10/11/microsofts-guidance-to-help-mitigate-kerberoasting/](https://www.microsoft.com/en-us/security/blog/2024/10/11/microsofts-guidance-to-help-mitigate-kerberoasting/)
+5. Microsoft Learn, "NTLM overview in Windows Server." [https://learn.microsoft.com/en-us/windows-server/security/kerberos/ntlm-overview](https://learn.microsoft.com/en-us/windows-server/security/kerberos/ntlm-overview)
+6. Windows IT Pro Blog, "Advancing Windows security: Disabling NTLM by default." [https://techcommunity.microsoft.com/blog/windows-itpro-blog/advancing-windows-security-disabling-ntlm-by-default/4489526](https://techcommunity.microsoft.com/blog/windows-itpro-blog/advancing-windows-security-disabling-ntlm-by-default/4489526)
+	Microsoft's own three-phase NTLM deprecation roadmap referenced in this post.
+7. CERT Coordination Center, VU#405600, "Microsoft Windows Active Directory Certificate Services can allow for AD compromise via PetitPotam NTLM relay attacks." [https://www.kb.cert.org/vuls/id/405600](https://www.kb.cert.org/vuls/id/405600)
+8. Check Point Research, "CVE-2025-24054, NTLM Exploit in the Wild." [https://research.checkpoint.com/2025/cve-2025-24054-ntlm-exploit-in-the-wild/](https://research.checkpoint.com/2025/cve-2025-24054-ntlm-exploit-in-the-wild/)
+9. Microsoft Learn, "6416(S) A new external device was recognized by the System." [https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-6416](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-6416)

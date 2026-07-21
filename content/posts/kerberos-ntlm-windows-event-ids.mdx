@@ -1,6 +1,6 @@
 ---
-title: "How Windows Authentication Actually Works: Kerberos, NTLM, and the Event IDs That Catch It Going Wrong"
-description: "Kerberos's ticket exchange, why it beats NTLM, and how Kerberoasting abuses the protocol's own design without ever touching the target account. How NTLM hash relay actually works at the protocol level, where NTLM still lurks, and why Microsoft's 2026 deprecation plan won't remove it. What LSASS, SAM, NTDS.dit, and krbtgt actually are and why each is a crown jewel. A full walkthrough of the Windows/AD event IDs that map to each step (4768, 4769, 4770, 4624, 4720, 4732, 4728, 4657, 4663, 7045, 4698, 4104, 6416, 1006, 1116, 8003), Sysmon and auditd as the telemetry native logging misses, and where all of it actually lives: EVTX channels, audit.log, and the audit policy that has to be turned on before any of it gets written."
+title: "Kerberos, NTLM, and the Event IDs That Actually Matter"
+description: "Kerberos's ticket exchange, why it beats NTLM, and how Kerberoasting and NTLM relay abuse each protocol's own design. What LSASS, NTDS.dit, and krbtgt actually guard, the event IDs that map to each step, and where Sysmon, auditd, and EVTX keep the evidence."
 date: "2026-07-21"
 author: "Mohamed Habib Jaouadi"
 tags: ["blue-team", "windows", "active-directory", "kerberos", "ntlm", "kerberoasting", "event-logs", "detection-engineering", "soc"]

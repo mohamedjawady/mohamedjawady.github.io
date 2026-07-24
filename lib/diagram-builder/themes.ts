@@ -3,6 +3,7 @@ export interface DiagramTheme {
   name: string
   description: string
   css: string
+  canvasBg: string
   editable?: boolean
 }
 
@@ -43,11 +44,11 @@ const CORPORATE_CSS = `
 `.trim()
 
 export const DIAGRAM_THEMES: DiagramTheme[] = [
-  { id: "light", name: "Light (Default)", description: "Default whiteboard palette", css: "" },
-  { id: "dark", name: "Dark", description: "Dark canvas for slide decks", css: DARK_CSS },
-  { id: "print", name: "Print / Grayscale", description: "High-contrast black and white for reports", css: PRINT_CSS },
-  { id: "corporate", name: "Corporate Blue", description: "Muted blue palette", css: CORPORATE_CSS },
-  { id: "custom", name: "Custom CSS", description: "Write your own CSS targeting the diagram's classes", css: "", editable: true },
+  { id: "light", name: "Light (Default)", description: "Default whiteboard palette", css: "", canvasBg: "#ffffff" },
+  { id: "dark", name: "Dark", description: "Dark canvas for slide decks", css: DARK_CSS, canvasBg: "#0f172a" },
+  { id: "print", name: "Print / Grayscale", description: "High-contrast black and white for reports", css: PRINT_CSS, canvasBg: "#ffffff" },
+  { id: "corporate", name: "Corporate Blue", description: "Muted blue palette", css: CORPORATE_CSS, canvasBg: "#f8fafc" },
+  { id: "custom", name: "Custom CSS", description: "Write your own CSS targeting the diagram's classes", css: "", canvasBg: "#ffffff", editable: true },
 ]
 
 export const CUSTOM_CSS_CLASS_REFERENCE = [

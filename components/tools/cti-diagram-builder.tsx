@@ -291,8 +291,8 @@ export function CtiDiagramBuilder() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
         <div
           ref={viewportRef}
-          className="relative rounded-lg border border-border/60 overflow-hidden bg-muted/10 touch-none"
-          style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}` }}
+          className="relative rounded-lg border border-border/60 overflow-hidden touch-none"
+          style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`, backgroundColor: getTheme(themeId).canvasBg }}
           onWheel={handleWheel}
           onPointerDown={handleViewportPointerDown}
           onPointerMove={handleViewportPointerMove}

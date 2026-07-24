@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react"
 import { exportRaster, exportSvg } from "@/lib/svg-export"
-import { diamondModelBlock, getPreset, killChainBlock } from "@/lib/diagram-builder/presets"
+import { diamondModelBlock, getPreset, killChainBlock, unifiedKillChainBlock } from "@/lib/diagram-builder/presets"
 import { CANVAS_HEIGHT, CANVAS_WIDTH, createEdge, createNode, DiagramMode, DiagramState, NodeKind } from "@/lib/diagram-builder/types"
 import { CUSTOM_CSS_CLASS_REFERENCE, getTheme } from "@/lib/diagram-builder/themes"
 
@@ -82,14 +82,18 @@ export function CtiDiagramBuilder() {
     setSelected({ type: "node", id: node.id })
   }
 
-  const handleInsertBlock = (block: "diamond-model" | "kill-chain") => {
+  const handleInsertBlock = (block: "diamond-model" | "kill-chain" | "unified-kill-chain") => {
     setState((s) => {
       const maxY = s.nodes.reduce((max, n) => Math.max(max, n.y + n.height / 2), 0)
-      const insertY = s.nodes.length === 0 ? (block === "diamond-model" ? 400 : 140) : Math.min(maxY + 140, CANVAS_HEIGHT - 120)
+      const defaultY = block === "diamond-model" ? 400 : 140
+      const maxInsertY = block === "unified-kill-chain" ? CANVAS_HEIGHT - 300 : CANVAS_HEIGHT - 120
+      const insertY = s.nodes.length === 0 ? defaultY : Math.min(maxY + 140, maxInsertY)
       const generated =
         block === "diamond-model"
           ? diamondModelBlock(CANVAS_WIDTH / 2, insertY, 170)
-          : killChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 70)
+          : block === "unified-kill-chain"
+            ? unifiedKillChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 60, 130)
+            : killChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 70)
       return { ...s, nodes: [...s.nodes, ...generated.nodes], edges: [...s.edges, ...generated.edges] }
     })
   }

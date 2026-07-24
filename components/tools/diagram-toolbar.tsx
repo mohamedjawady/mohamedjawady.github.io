@@ -11,6 +11,7 @@ import {
   FileImage,
   FileJson,
   Gem,
+  GitMerge,
   Plus,
   RotateCcw,
   Swords,
@@ -32,7 +33,7 @@ interface DiagramToolbarProps {
   themeId: string
   onModeChange: (mode: DiagramMode) => void
   onAddNode: (kind: NodeKind) => void
-  onInsertBlock: (block: "diamond-model" | "kill-chain") => void
+  onInsertBlock: (block: "diamond-model" | "kill-chain" | "unified-kill-chain") => void
   onToggleConnect: () => void
   onDeleteSelected: () => void
   onReset: () => void
@@ -73,6 +74,7 @@ export function DiagramToolbar({
           <SelectItem value="kill-chain">Kill Chain</SelectItem>
           <SelectItem value="diamond-model">Diamond Model</SelectItem>
           <SelectItem value="hybrid">Hybrid (Both)</SelectItem>
+          <SelectItem value="unified-kill-chain">Unified Kill Chain</SelectItem>
           <SelectItem value="blank">Blank Canvas</SelectItem>
         </SelectContent>
       </Select>
@@ -102,6 +104,10 @@ export function DiagramToolbar({
           <DropdownMenuItem onClick={() => onInsertBlock("kill-chain")}>
             <Swords className="w-4 h-4 mr-2" />
             Kill Chain (7 phases)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsertBlock("unified-kill-chain")}>
+            <GitMerge className="w-4 h-4 mr-2" />
+            Unified Kill Chain (18 phases)
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

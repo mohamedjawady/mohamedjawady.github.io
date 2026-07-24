@@ -7,18 +7,18 @@ import { getCanonicalUrl } from "@/lib/url"
 export const metadata: Metadata = {
   title: "CTI Diagram Builder | 0xHabib",
   description:
-    "Build Cyber Kill Chain, Diamond Model, or hybrid intrusion analysis diagrams and export them as SVG, PNG, or JPEG.",
+    "Build Cyber Kill Chain, Diamond Model, Unified Kill Chain, or hybrid intrusion analysis diagrams and export them as SVG, PNG, or JPEG.",
   openGraph: {
     title: "CTI Diagram Builder | 0xHabib",
     description:
-      "Build Cyber Kill Chain, Diamond Model, or hybrid intrusion analysis diagrams and export them as SVG, PNG, or JPEG.",
+      "Build Cyber Kill Chain, Diamond Model, Unified Kill Chain, or hybrid intrusion analysis diagrams and export them as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/diagram-builder"),
   },
   twitter: {
     card: "summary_large_image",
     title: "CTI Diagram Builder | 0xHabib",
     description:
-      "Build Cyber Kill Chain, Diamond Model, or hybrid intrusion analysis diagrams and export them as SVG, PNG, or JPEG.",
+      "Build Cyber Kill Chain, Diamond Model, Unified Kill Chain, or hybrid intrusion analysis diagrams and export them as SVG, PNG, or JPEG.",
   },
 }
 
@@ -36,8 +36,9 @@ export default function DiagramBuilderPage() {
       <div className="mb-8">
         <h1 className="text-4xl font-bold font-mono mb-4">CTI Diagram Builder</h1>
         <p className="text-muted-foreground text-lg">
-          Build Kill Chain, Diamond Model, or hybrid intrusion analysis diagrams. Drag nodes, connect them, edit
-          labels, and export to SVG, PNG, or JPEG. Everything runs locally in your browser, nothing is uploaded.
+          Build Kill Chain, Diamond Model, Unified Kill Chain, or hybrid intrusion analysis diagrams. Drag nodes,
+          connect them, edit labels, and export to SVG, PNG, or JPEG. Everything runs locally in your browser,
+          nothing is uploaded.
         </p>
       </div>
 

@@ -12,9 +12,9 @@ export const tools: ToolEntry[] = [
     id: "diagram-builder",
     title: "CTI Diagram Builder",
     description:
-      "Build Cyber Kill Chain, Diamond Model, or hybrid intrusion analysis diagrams on an interactive canvas, then export as SVG, PNG, or JPEG.",
+      "Build Cyber Kill Chain, Diamond Model, Unified Kill Chain, or hybrid intrusion analysis diagrams on an interactive canvas, then export as SVG, PNG, or JPEG.",
     href: "/tools/diagram-builder",
-    tags: ["kill chain", "diamond model", "intrusion analysis", "export"],
+    tags: ["kill chain", "diamond model", "unified kill chain", "intrusion analysis", "export"],
     status: "available",
   },
   {

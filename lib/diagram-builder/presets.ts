@@ -1,4 +1,4 @@
-import { CANVAS_WIDTH, createEdge, createNode, DiagramEdge, DiagramNode, DiagramState } from "./types"
+import { CANVAS_WIDTH, createEdge, createNode, DiagramEdge, DiagramNode, DiagramState, NodeKind } from "./types"
 
 const KILL_CHAIN_PHASES = [
   "Reconnaissance",
@@ -10,23 +10,63 @@ const KILL_CHAIN_PHASES = [
   "Actions on Objectives",
 ]
 
-function killChainNodes(y: number, width = CANVAS_WIDTH) {
-  const count = KILL_CHAIN_PHASES.length
-  const nodeW = 148
+const UNIFIED_KILL_CHAIN_GROUPS: { kind: NodeKind; phases: string[] }[] = [
+  {
+    kind: "ukc-in",
+    phases: [
+      "Reconnaissance",
+      "Weaponization",
+      "Delivery",
+      "Social Engineering",
+      "Exploitation",
+      "Persistence",
+      "Defense Evasion",
+      "Command & Control",
+    ],
+  },
+  {
+    kind: "ukc-through",
+    phases: ["Pivoting", "Discovery", "Privilege Escalation", "Execution", "Credential Access", "Lateral Movement"],
+  },
+  {
+    kind: "ukc-out",
+    phases: ["Collection", "Exfiltration", "Impact", "Objectives"],
+  },
+]
+
+function phaseRowNodes(labels: string[], kind: NodeKind, y: number, width: number, nodeW: number) {
+  const count = labels.length
   const gap = (width - nodeW * count) / (count + 1)
-  return KILL_CHAIN_PHASES.map((phase, i) => {
+  return labels.map((label, i) => {
     const x = gap + nodeW / 2 + i * (nodeW + gap)
-    const node = createNode("kill-chain", x, y, phase)
+    const node = createNode(kind, x, y, label)
     node.width = nodeW
     node.height = 78
     return node
   })
 }
 
+function killChainNodes(y: number, width = CANVAS_WIDTH) {
+  return phaseRowNodes(KILL_CHAIN_PHASES, "kill-chain", y, width, 148)
+}
+
 export function killChainBlock(cx: number, cy: number, width = CANVAS_WIDTH * 0.78): { nodes: DiagramNode[]; edges: DiagramEdge[] } {
   const left = cx - width / 2
   const nodes = killChainNodes(cy, width).map((n) => ({ ...n, x: n.x + left }))
   const edges = nodes.slice(0, -1).map((n, i) => createEdge(n.id, nodes[i + 1].id, { color: "#059669" }))
+  return { nodes, edges }
+}
+
+export function unifiedKillChainBlock(cx: number, cy: number, width = CANVAS_WIDTH - 60, rowGap = 150): { nodes: DiagramNode[]; edges: DiagramEdge[] } {
+  const left = cx - width / 2
+  const nodes: DiagramNode[] = []
+  UNIFIED_KILL_CHAIN_GROUPS.forEach((group, rowIndex) => {
+    const y = cy + rowIndex * rowGap
+    const nodeW = Math.min(148, (width - (group.phases.length + 1) * 12) / group.phases.length)
+    const rowNodes = phaseRowNodes(group.phases, group.kind, y, width, nodeW).map((n) => ({ ...n, x: n.x + left }))
+    nodes.push(...rowNodes)
+  })
+  const edges = nodes.slice(0, -1).map((n, i) => createEdge(n.id, nodes[i + 1].id, { color: "#4f46e5" }))
   return { nodes, edges }
 }
 
@@ -74,6 +114,11 @@ export function hybridPreset(): DiagramState {
   }
 }
 
+export function unifiedKillChainPreset(): DiagramState {
+  const { nodes, edges } = unifiedKillChainBlock(CANVAS_WIDTH / 2, 120, CANVAS_WIDTH - 60, 220)
+  return { title: "Unified Kill Chain (Pols, 2017)", nodes, edges }
+}
+
 export function blankPreset(): DiagramState {
   return { title: "Untitled Diagram", nodes: [], edges: [] }
 }
@@ -86,6 +131,8 @@ export function getPreset(mode: string): DiagramState {
       return diamondModelPreset()
     case "hybrid":
       return hybridPreset()
+    case "unified-kill-chain":
+      return unifiedKillChainPreset()
     default:
       return blankPreset()
   }

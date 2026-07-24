@@ -15,6 +15,9 @@ const DARK_CSS = `
 .ctidiag-node--infrastructure { fill: #172554; stroke: #60a5fa; }
 .ctidiag-node--victim { fill: #3b0764; stroke: #c084fc; }
 .ctidiag-node--custom { fill: #1e293b; stroke: #94a3b8; }
+.ctidiag-node--ukc-in { fill: #0c4a6e; stroke: #38bdf8; }
+.ctidiag-node--ukc-through { fill: #78350f; stroke: #fbbf24; }
+.ctidiag-node--ukc-out { fill: #450a0a; stroke: #f87171; }
 .ctidiag-node-text { fill: #f8fafc; }
 .ctidiag-edge { stroke: #94a3b8; }
 .ctidiag-edge-label { fill: #e2e8f0; }
@@ -39,6 +42,9 @@ const CORPORATE_CSS = `
 .ctidiag-node--infrastructure { fill: #dbeafe; stroke: #1d4ed8; }
 .ctidiag-node--victim { fill: #ede9fe; stroke: #6d28d9; }
 .ctidiag-node--custom { fill: #f1f5f9; stroke: #334155; }
+.ctidiag-node--ukc-in { fill: #e0f2fe; stroke: #0369a1; }
+.ctidiag-node--ukc-through { fill: #fef3c7; stroke: #b45309; }
+.ctidiag-node--ukc-out { fill: #fee2e2; stroke: #b91c1c; }
 .ctidiag-node-text { fill: #0f172a; }
 .ctidiag-edge { stroke: #64748b; }
 `.trim()
@@ -53,7 +59,7 @@ export const DIAGRAM_THEMES: DiagramTheme[] = [
 
 export const CUSTOM_CSS_CLASS_REFERENCE = [
   ".ctidiag-canvas-bg",
-  ".ctidiag-node, .ctidiag-node--kill-chain / --adversary / --capability / --infrastructure / --victim / --custom",
+  ".ctidiag-node, .ctidiag-node--kill-chain / --adversary / --capability / --infrastructure / --victim / --custom / --ukc-in / --ukc-through / --ukc-out",
   ".ctidiag-node-text",
   ".ctidiag-edge, .ctidiag-edge--dashed",
   ".ctidiag-edge-label, .ctidiag-edge-label-bg",

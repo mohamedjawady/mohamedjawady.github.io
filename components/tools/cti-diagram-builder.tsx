@@ -324,7 +324,7 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
         <div
           ref={viewportRef}
           className="relative rounded-lg border border-border/60 overflow-hidden touch-none"
-          style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`, backgroundColor: getTheme(themeId).canvasBg }}
+          style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`, backgroundColor: getTheme(themeId).viewportBg }}
           onWheel={handleWheel}
           onPointerDown={handleViewportPointerDown}
           onPointerMove={handleViewportPointerMove}

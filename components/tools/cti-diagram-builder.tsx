@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Maximize, ZoomIn, ZoomOut } from "lucide-react"
+import { Maximize, MoveDiagonal2, ZoomIn, ZoomOut } from "lucide-react"
 import { exportRaster, exportSvg } from "@/lib/svg-export"
 import {
   attackTreeBlock,
@@ -20,12 +20,13 @@ import {
   oodaBlock,
   unifiedKillChainBlock,
 } from "@/lib/diagram-builder/presets"
-import { CANVAS_HEIGHT, CANVAS_WIDTH, createEdge, createNode, DiagramMode, DiagramState, NodeKind } from "@/lib/diagram-builder/types"
+import { CANVAS_HEIGHT, CANVAS_WIDTH, clampCanvasSize, createEdge, createNode, DiagramMode, DiagramState, NodeKind } from "@/lib/diagram-builder/types"
 import { CUSTOM_CSS_CLASS_REFERENCE, getTheme } from "@/lib/diagram-builder/themes"
 import { autoLayoutTree } from "@/lib/diagram-builder/layout"
 
 const MIN_ZOOM = 0.4
 const MAX_ZOOM = 3
+const DISPLAY_SCALE = 0.65
 
 function slugify(text: string) {
   return (
@@ -59,6 +60,9 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
   const svgRef = useRef<SVGSVGElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const panState = useRef<{ pointerId: number; startX: number; startY: number; startPan: { x: number; y: number } } | null>(null)
+  const resizeDragRef = useRef<{ pointerId: number; startX: number; startY: number; startWidth: number; startHeight: number } | null>(null)
+  const resizeRafRef = useRef<number | null>(null)
+  const pendingSizeRef = useRef<{ width: number; height: number } | null>(null)
 
   const selectedNode = useMemo(
     () => (selected?.type === "node" ? state.nodes.find((n) => n.id === selected.id) ?? null : null),
@@ -70,6 +74,8 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
   )
 
   const themeCss = themeId === "custom" ? customCss : getTheme(themeId).css
+  const canvasWidth = state.canvasWidth ?? CANVAS_WIDTH
+  const canvasHeight = state.canvasHeight ?? CANVAS_HEIGHT
 
   const resetView = useCallback(() => {
     setZoom(1)
@@ -92,7 +98,7 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
 
   const handleAddNode = (kind: NodeKind) => {
     const jitter = () => Math.random() * 80 - 40
-    const node = createNode(kind, CANVAS_WIDTH / 2 + jitter(), CANVAS_HEIGHT / 2 + jitter())
+    const node = createNode(kind, canvasWidth / 2 + jitter(), canvasHeight / 2 + jitter())
     setState((s) => ({ ...s, nodes: [...s.nodes, node] }))
     setSelected({ type: "node", id: node.id })
   }
@@ -101,8 +107,8 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
 
   const INSERT_BLOCKS: Record<InsertBlockKind, { defaultY: number; halfHeight: number; generate: (cx: number, cy: number) => ReturnType<typeof killChainBlock> }> = {
     "diamond-model": { defaultY: 400, halfHeight: 210, generate: (cx, cy) => diamondModelBlock(cx, cy, 170) },
-    "kill-chain": { defaultY: 140, halfHeight: 40, generate: (cx, cy) => killChainBlock(cx, cy, CANVAS_WIDTH - 70) },
-    "unified-kill-chain": { defaultY: 140, halfHeight: 300, generate: (cx, cy) => unifiedKillChainBlock(cx, cy, CANVAS_WIDTH - 60, 130) },
+    "kill-chain": { defaultY: 140, halfHeight: 40, generate: (cx, cy) => killChainBlock(cx, cy, canvasWidth - 70) },
+    "unified-kill-chain": { defaultY: 140, halfHeight: 300, generate: (cx, cy) => unifiedKillChainBlock(cx, cy, canvasWidth - 60, 130) },
     "attack-tree": { defaultY: 140, halfHeight: 380, generate: (cx, cy) => attackTreeBlock(cx, cy) },
     ooda: { defaultY: 260, halfHeight: 260, generate: (cx, cy) => oodaBlock(cx, cy, 200) },
     f3ead: { defaultY: 300, halfHeight: 300, generate: (cx, cy) => f3eadBlock(cx, cy, 240) },
@@ -113,11 +119,56 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
     setState((s) => {
       const { defaultY, halfHeight, generate } = INSERT_BLOCKS[block]
       const maxY = s.nodes.reduce((max, n) => Math.max(max, n.y + n.height / 2), 0)
-      const maxInsertY = CANVAS_HEIGHT - halfHeight - 20
+      const maxInsertY = canvasHeight - halfHeight - 20
       const insertY = s.nodes.length === 0 ? defaultY : Math.min(maxY + 140, maxInsertY)
-      const generated = generate(CANVAS_WIDTH / 2, insertY)
+      const generated = generate(canvasWidth / 2, insertY)
       return { ...s, nodes: [...s.nodes, ...generated.nodes], edges: [...s.edges, ...generated.edges] }
     })
+  }
+
+  const applyCanvasSize = useCallback((width: number, height: number) => {
+    setState((s) => ({ ...s, canvasWidth: clampCanvasSize(width), canvasHeight: clampCanvasSize(height) }))
+  }, [])
+
+  const handleResizeCanvas = (width: number, height: number) => {
+    applyCanvasSize(width, height)
+    resetView()
+  }
+
+  const handleResizeHandlePointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation()
+    resizeDragRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, startWidth: canvasWidth, startHeight: canvasHeight }
+    ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+  }
+
+  const handleResizeHandlePointerMove = (e: React.PointerEvent) => {
+    const drag = resizeDragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    const dx = (e.clientX - drag.startX) / DISPLAY_SCALE
+    const dy = (e.clientY - drag.startY) / DISPLAY_SCALE
+    pendingSizeRef.current = { width: clampCanvasSize(drag.startWidth + dx), height: clampCanvasSize(drag.startHeight + dy) }
+    if (resizeRafRef.current == null) {
+      resizeRafRef.current = requestAnimationFrame(() => {
+        resizeRafRef.current = null
+        if (pendingSizeRef.current) {
+          applyCanvasSize(pendingSizeRef.current.width, pendingSizeRef.current.height)
+        }
+      })
+    }
+  }
+
+  const handleResizeHandlePointerUp = (e: React.PointerEvent) => {
+    if (resizeDragRef.current?.pointerId === e.pointerId) {
+      resizeDragRef.current = null
+    }
+    if (resizeRafRef.current != null) {
+      cancelAnimationFrame(resizeRafRef.current)
+      resizeRafRef.current = null
+    }
+    if (pendingSizeRef.current) {
+      applyCanvasSize(pendingSizeRef.current.width, pendingSizeRef.current.height)
+      pendingSizeRef.current = null
+    }
   }
 
   const handleAutoLayout = () => {
@@ -200,7 +251,7 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
     if (format === "svg") {
       exportSvg(svg, filename)
     } else {
-      await exportRaster(svg, format, filename, CANVAS_WIDTH, CANVAS_HEIGHT)
+      await exportRaster(svg, format, filename, canvasWidth, canvasHeight)
     }
   }
 
@@ -224,11 +275,17 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
     })
   }, [])
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const factor = e.deltaY > 0 ? 0.9 : 1.1
-    zoomAtPoint(factor, e.clientX, e.clientY)
-  }
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      const factor = e.deltaY > 0 ? 0.9 : 1.1
+      zoomAtPoint(factor, e.clientX, e.clientY)
+    }
+    el.addEventListener("wheel", handler, { passive: false })
+    return () => el.removeEventListener("wheel", handler)
+  }, [zoomAtPoint])
 
   const handleViewportPointerDown = (e: React.PointerEvent) => {
     if (connectMode) return
@@ -292,6 +349,8 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
         connectMode={connectMode}
         hasSelection={selected !== null}
         themeId={themeId}
+        canvasWidth={canvasWidth}
+        canvasHeight={canvasHeight}
         onModeChange={handleModeChange}
         onAddNode={handleAddNode}
         onInsertBlock={handleInsertBlock}
@@ -301,6 +360,7 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
         onAutoLayout={handleAutoLayout}
         onExport={handleExport}
         onThemeChange={setThemeId}
+        onResizeCanvas={handleResizeCanvas}
       />
 
       {themeId === "custom" && (
@@ -322,53 +382,69 @@ export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiD
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
         <div
-          ref={viewportRef}
-          className="relative rounded-lg border border-border/60 overflow-hidden touch-none"
-          style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`, backgroundColor: getTheme(themeId).viewportBg }}
-          onWheel={handleWheel}
-          onPointerDown={handleViewportPointerDown}
-          onPointerMove={handleViewportPointerMove}
-          onPointerUp={handleViewportPointerUp}
+          className="relative rounded-lg border border-border/60 overflow-auto flex justify-[safe_center]"
+          style={{ backgroundColor: getTheme(themeId).viewportBg, maxHeight: "75vh" }}
         >
           <div
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: "0 0",
-              width: "100%",
-              height: "100%",
-            }}
+            ref={viewportRef}
+            className="relative overflow-hidden touch-none flex-shrink-0"
+            style={{ width: canvasWidth * DISPLAY_SCALE, height: canvasHeight * DISPLAY_SCALE, backgroundColor: getTheme(themeId).viewportBg }}
+            onPointerDown={handleViewportPointerDown}
+            onPointerMove={handleViewportPointerMove}
+            onPointerUp={handleViewportPointerUp}
           >
-            <DiagramCanvas
-              ref={svgRef}
-              state={state}
-              selected={selected}
-              connectMode={connectMode}
-              connectFrom={connectFrom}
-              themeCss={themeCss}
-              onSelect={setSelected}
-              onNodeMove={handleNodeMove}
-              onNodeConnectClick={handleNodeConnectClick}
-              onBackgroundClick={handleBackgroundClick}
-            />
-          </div>
+            <div
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: "0 0",
+                width: "100%",
+                height: "100%",
+              }}
+            >
+              <DiagramCanvas
+                ref={svgRef}
+                state={state}
+                canvasWidth={canvasWidth}
+                canvasHeight={canvasHeight}
+                selected={selected}
+                connectMode={connectMode}
+                connectFrom={connectFrom}
+                themeCss={themeCss}
+                onSelect={setSelected}
+                onNodeMove={handleNodeMove}
+                onNodeConnectClick={handleNodeConnectClick}
+                onBackgroundClick={handleBackgroundClick}
+              />
+            </div>
 
-          <div
-            className="absolute bottom-3 right-3 flex items-center gap-1 rounded-md border border-border/60 bg-background/90 backdrop-blur px-1.5 py-1 shadow-sm"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
+            <div
+              className="absolute bottom-3 right-3 flex items-center gap-1 rounded-md border border-border/60 bg-background/90 backdrop-blur px-1.5 py-1 shadow-sm"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => zoomAtPoint(0.85)} title="Zoom out">
+                <ZoomOut className="w-4 h-4" />
+              </Button>
+              <span data-testid="zoom-level" className="text-xs font-mono w-10 text-center text-muted-foreground">
+                {Math.round(zoom * 100)}%
+              </span>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => zoomAtPoint(1 / 0.85)} title="Zoom in">
+                <ZoomIn className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={resetView} title="Center / reset view">
+                <Maximize className="w-4 h-4" />
+              </Button>
+            </div>
 
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => zoomAtPoint(0.85)} title="Zoom out">
-              <ZoomOut className="w-4 h-4" />
-            </Button>
-            <span data-testid="zoom-level" className="text-xs font-mono w-10 text-center text-muted-foreground">
-              {Math.round(zoom * 100)}%
-            </span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => zoomAtPoint(1 / 0.85)} title="Zoom in">
-              <ZoomIn className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={resetView} title="Center / reset view">
-              <Maximize className="w-4 h-4" />
-            </Button>
+            <div
+              className="absolute bottom-0 right-0 w-5 h-5 flex items-end justify-end pb-0.5 pr-0.5 text-muted-foreground/60 hover:text-foreground cursor-nwse-resize touch-none"
+              style={{ pointerEvents: "auto" }}
+              onPointerDown={handleResizeHandlePointerDown}
+              onPointerMove={handleResizeHandlePointerMove}
+              onPointerUp={handleResizeHandlePointerUp}
+              title="Drag to resize the canvas"
+            >
+              <MoveDiagonal2 className="w-3.5 h-3.5" />
+            </div>
           </div>
         </div>
         <DiagramSidePanel

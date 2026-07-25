@@ -1,12 +1,14 @@
 "use client"
 
 import { forwardRef, useCallback, useRef } from "react"
-import { CANVAS_HEIGHT, CANVAS_WIDTH, DiagramEdge, DiagramNode, DiagramState } from "@/lib/diagram-builder/types"
+import { DiagramEdge, DiagramNode, DiagramState } from "@/lib/diagram-builder/types"
 
 export type Selection = { type: "node" | "edge"; id: string } | null
 
 interface DiagramCanvasProps {
   state: DiagramState
+  canvasWidth: number
+  canvasHeight: number
   selected: Selection
   connectMode: boolean
   connectFrom: string | null
@@ -74,10 +76,12 @@ function nodeShapePoints(node: DiagramNode) {
 }
 
 export const DiagramCanvas = forwardRef<SVGSVGElement, DiagramCanvasProps>(function DiagramCanvas(
-  { state, selected, connectMode, connectFrom, themeCss, onSelect, onNodeMove, onNodeConnectClick, onBackgroundClick },
+  { state, canvasWidth, canvasHeight, selected, connectMode, connectFrom, themeCss, onSelect, onNodeMove, onNodeConnectClick, onBackgroundClick },
   ref
 ) {
-  const dragState = useRef<{ id: string; offsetX: number; offsetY: number; pointerId: number } | null>(null)
+  const dragState = useRef<{ id: string; offsetX: number; offsetY: number; pointerId: number; rect: DOMRect } | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const pendingMoveRef = useRef<{ id: string; x: number; y: number } | null>(null)
   const localRef = useRef<SVGSVGElement | null>(null)
 
   const setRefs = useCallback(
@@ -89,14 +93,25 @@ export const DiagramCanvas = forwardRef<SVGSVGElement, DiagramCanvasProps>(funct
     [ref]
   )
 
-  const toSvgPoint = useCallback((clientX: number, clientY: number) => {
-    const svg = localRef.current
-    if (!svg) return { x: 0, y: 0 }
-    const rect = svg.getBoundingClientRect()
-    const scaleX = CANVAS_WIDTH / rect.width
-    const scaleY = CANVAS_HEIGHT / rect.height
-    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY }
-  }, [])
+  const svgPointFromRect = useCallback(
+    (clientX: number, clientY: number, rect: DOMRect) => {
+      const scaleX = canvasWidth / rect.width
+      const scaleY = canvasHeight / rect.height
+      return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY }
+    },
+    [canvasWidth, canvasHeight]
+  )
+
+  const flushPendingMove = useCallback(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    if (pendingMoveRef.current) {
+      onNodeMove(pendingMoveRef.current.id, pendingMoveRef.current.x, pendingMoveRef.current.y)
+      pendingMoveRef.current = null
+    }
+  }, [onNodeMove])
 
   const handleNodePointerDown = (e: React.PointerEvent, node: DiagramNode) => {
     e.stopPropagation()
@@ -105,24 +120,36 @@ export const DiagramCanvas = forwardRef<SVGSVGElement, DiagramCanvasProps>(funct
       return
     }
     onSelect({ type: "node", id: node.id })
-    const p = toSvgPoint(e.clientX, e.clientY)
-    dragState.current = { id: node.id, offsetX: p.x - node.x, offsetY: p.y - node.y, pointerId: e.pointerId }
+    const svg = localRef.current
+    const rect = svg ? svg.getBoundingClientRect() : new DOMRect()
+    const p = svgPointFromRect(e.clientX, e.clientY, rect)
+    dragState.current = { id: node.id, offsetX: p.x - node.x, offsetY: p.y - node.y, pointerId: e.pointerId, rect }
     ;(e.target as Element).setPointerCapture(e.pointerId)
   }
 
   const handleNodePointerMove = (e: React.PointerEvent) => {
     const drag = dragState.current
     if (!drag || drag.pointerId !== e.pointerId) return
-    const p = toSvgPoint(e.clientX, e.clientY)
-    const nx = Math.max(0, Math.min(CANVAS_WIDTH, p.x - drag.offsetX))
-    const ny = Math.max(0, Math.min(CANVAS_HEIGHT, p.y - drag.offsetY))
-    onNodeMove(drag.id, nx, ny)
+    const p = svgPointFromRect(e.clientX, e.clientY, drag.rect)
+    const nx = Math.max(0, Math.min(canvasWidth, p.x - drag.offsetX))
+    const ny = Math.max(0, Math.min(canvasHeight, p.y - drag.offsetY))
+    pendingMoveRef.current = { id: drag.id, x: nx, y: ny }
+    if (rafRef.current == null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        if (pendingMoveRef.current) {
+          onNodeMove(pendingMoveRef.current.id, pendingMoveRef.current.x, pendingMoveRef.current.y)
+          pendingMoveRef.current = null
+        }
+      })
+    }
   }
 
   const handleNodePointerUp = (e: React.PointerEvent) => {
     if (dragState.current?.pointerId === e.pointerId) {
       dragState.current = null
     }
+    flushPendingMove()
   }
 
   const uniqueColors = Array.from(new Set(state.edges.map((edge) => edge.color)))
@@ -130,9 +157,9 @@ export const DiagramCanvas = forwardRef<SVGSVGElement, DiagramCanvasProps>(funct
   return (
     <svg
       ref={setRefs}
-      viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+      viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
       className="w-full h-auto touch-none select-none"
-      style={{ aspectRatio: `${CANVAS_WIDTH} / ${CANVAS_HEIGHT}`, background: "#ffffff" }}
+      style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}`, background: "#ffffff" }}
       onPointerDown={() => {
         onBackgroundClick()
       }}
@@ -159,8 +186,8 @@ export const DiagramCanvas = forwardRef<SVGSVGElement, DiagramCanvasProps>(funct
         className="ctidiag-canvas-bg"
         x={0}
         y={0}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
+        width={canvasWidth}
+        height={canvasHeight}
         fill="#ffffff"
         stroke="#e2e8f0"
         strokeWidth={2}

@@ -60,6 +60,25 @@ export interface DiagramState {
   title: string
   nodes: DiagramNode[]
   edges: DiagramEdge[]
+  /** Exportable canvas/page size. Falls back to CANVAS_WIDTH/CANVAS_HEIGHT when unset. */
+  canvasWidth?: number
+  canvasHeight?: number
+}
+
+export const MIN_CANVAS_SIZE = 400
+export const MAX_CANVAS_SIZE = 3000
+
+export const CANVAS_SIZE_PRESETS: { label: string; width: number; height: number }[] = [
+  { label: "Standard", width: 1200, height: 800 },
+  { label: "Wide", width: 1600, height: 900 },
+  { label: "Tall", width: 900, height: 1300 },
+  { label: "Large", width: 1800, height: 1200 },
+  { label: "Square", width: 1000, height: 1000 },
+]
+
+export function clampCanvasSize(value: number): number {
+  if (Number.isNaN(value)) return MIN_CANVAS_SIZE
+  return Math.min(MAX_CANVAS_SIZE, Math.max(MIN_CANVAS_SIZE, Math.round(value)))
 }
 
 export const NODE_STYLES: Record<NodeKind, { fill: string; stroke: string; text: string; shape: NodeShape; label: string }> = {

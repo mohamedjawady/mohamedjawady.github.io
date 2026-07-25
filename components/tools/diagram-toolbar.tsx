@@ -1,9 +1,13 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { DiagramMode, NodeKind } from "@/lib/diagram-builder/types"
+import { CANVAS_SIZE_PRESETS, DiagramMode, MAX_CANVAS_SIZE, MIN_CANVAS_SIZE, NodeKind } from "@/lib/diagram-builder/types"
 import { DIAGRAM_THEMES } from "@/lib/diagram-builder/themes"
 import {
   Cable,
@@ -13,6 +17,7 @@ import {
   FileJson,
   Gem,
   GitMerge,
+  Maximize2,
   Network,
   Plus,
   RefreshCw,
@@ -37,6 +42,8 @@ interface DiagramToolbarProps {
   connectMode: boolean
   hasSelection: boolean
   themeId: string
+  canvasWidth: number
+  canvasHeight: number
   onModeChange: (mode: DiagramMode) => void
   onAddNode: (kind: NodeKind) => void
   onInsertBlock: (block: "diamond-model" | "kill-chain" | "unified-kill-chain" | "attack-tree" | "ooda" | "f3ead" | "bow-tie") => void
@@ -46,6 +53,91 @@ interface DiagramToolbarProps {
   onAutoLayout: () => void
   onExport: (format: "svg" | "png" | "jpeg") => void
   onThemeChange: (id: string) => void
+  onResizeCanvas: (width: number, height: number) => void
+}
+
+function CanvasSizeControl({
+  canvasWidth,
+  canvasHeight,
+  onResizeCanvas,
+}: {
+  canvasWidth: number
+  canvasHeight: number
+  onResizeCanvas: (width: number, height: number) => void
+}) {
+  const [widthText, setWidthText] = useState(String(canvasWidth))
+  const [heightText, setHeightText] = useState(String(canvasHeight))
+
+  useEffect(() => {
+    setWidthText(String(canvasWidth))
+    setHeightText(String(canvasHeight))
+  }, [canvasWidth, canvasHeight])
+
+  const commit = () => {
+    const width = Number(widthText)
+    const height = Number(heightText)
+    onResizeCanvas(Number.isFinite(width) ? width : canvasWidth, Number.isFinite(height) ? height : canvasHeight)
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" title="Resize canvas">
+          <Maximize2 className="w-4 h-4 mr-1.5" />
+          Size
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 space-y-3">
+        <p className="text-xs font-mono uppercase tracking-wide text-muted-foreground">Canvas Size</p>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 space-y-1">
+            <Label htmlFor="canvas-width" className="text-xs">Width</Label>
+            <Input
+              id="canvas-width"
+              type="number"
+              min={MIN_CANVAS_SIZE}
+              max={MAX_CANVAS_SIZE}
+              value={widthText}
+              onChange={(e) => setWidthText(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => e.key === "Enter" && commit()}
+              className="h-8"
+            />
+          </div>
+          <div className="flex-1 space-y-1">
+            <Label htmlFor="canvas-height" className="text-xs">Height</Label>
+            <Input
+              id="canvas-height"
+              type="number"
+              min={MIN_CANVAS_SIZE}
+              max={MAX_CANVAS_SIZE}
+              value={heightText}
+              onChange={(e) => setHeightText(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => e.key === "Enter" && commit()}
+              className="h-8"
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {CANVAS_SIZE_PRESETS.map((preset) => (
+            <Button
+              key={preset.label}
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onResizeCanvas(preset.width, preset.height)}
+            >
+              {preset.label}
+            </Button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Resizes the exportable page, existing nodes keep their position.
+        </p>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 const ADD_NODE_OPTIONS: { kind: NodeKind; label: string }[] = [
@@ -65,6 +157,8 @@ export function DiagramToolbar({
   connectMode,
   hasSelection,
   themeId,
+  canvasWidth,
+  canvasHeight,
   onModeChange,
   onAddNode,
   onInsertBlock,
@@ -74,6 +168,7 @@ export function DiagramToolbar({
   onAutoLayout,
   onExport,
   onThemeChange,
+  onResizeCanvas,
 }: DiagramToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/30 p-3">
@@ -166,6 +261,8 @@ export function DiagramToolbar({
         <RotateCcw className="w-4 h-4 mr-1.5" />
         Reset
       </Button>
+
+      <CanvasSizeControl canvasWidth={canvasWidth} canvasHeight={canvasHeight} onResizeCanvas={onResizeCanvas} />
 
       <div className="ml-auto flex items-center gap-2">
         <Select value={themeId} onValueChange={onThemeChange}>

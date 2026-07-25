@@ -12,10 +12,12 @@ import {
   FileJson,
   Gem,
   GitMerge,
+  Network,
   Plus,
   RotateCcw,
   Swords,
   Trash2,
+  TreeDeciduous,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -33,10 +35,11 @@ interface DiagramToolbarProps {
   themeId: string
   onModeChange: (mode: DiagramMode) => void
   onAddNode: (kind: NodeKind) => void
-  onInsertBlock: (block: "diamond-model" | "kill-chain" | "unified-kill-chain") => void
+  onInsertBlock: (block: "diamond-model" | "kill-chain" | "unified-kill-chain" | "attack-tree") => void
   onToggleConnect: () => void
   onDeleteSelected: () => void
   onReset: () => void
+  onAutoLayout: () => void
   onExport: (format: "svg" | "png" | "jpeg") => void
   onThemeChange: (id: string) => void
 }
@@ -47,6 +50,8 @@ const ADD_NODE_OPTIONS: { kind: NodeKind; label: string }[] = [
   { kind: "capability", label: "Capability" },
   { kind: "infrastructure", label: "Infrastructure" },
   { kind: "victim", label: "Victim" },
+  { kind: "attack-root", label: "Attack Goal (root)" },
+  { kind: "attack-node", label: "Attack Step" },
   { kind: "custom", label: "Custom Node" },
 ]
 
@@ -61,6 +66,7 @@ export function DiagramToolbar({
   onToggleConnect,
   onDeleteSelected,
   onReset,
+  onAutoLayout,
   onExport,
   onThemeChange,
 }: DiagramToolbarProps) {
@@ -75,6 +81,7 @@ export function DiagramToolbar({
           <SelectItem value="diamond-model">Diamond Model</SelectItem>
           <SelectItem value="hybrid">Hybrid (Both)</SelectItem>
           <SelectItem value="unified-kill-chain">Unified Kill Chain</SelectItem>
+          <SelectItem value="attack-tree">Attack Tree</SelectItem>
           <SelectItem value="blank">Blank Canvas</SelectItem>
         </SelectContent>
       </Select>
@@ -109,12 +116,21 @@ export function DiagramToolbar({
             <GitMerge className="w-4 h-4 mr-2" />
             Unified Kill Chain (18 phases)
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsertBlock("attack-tree")}>
+            <TreeDeciduous className="w-4 h-4 mr-2" />
+            Attack Tree (example)
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <Button variant={connectMode ? "default" : "outline"} size="sm" onClick={onToggleConnect}>
         <Cable className="w-4 h-4 mr-1.5" />
         {connectMode ? "Connecting…" : "Connect"}
+      </Button>
+
+      <Button variant="outline" size="sm" onClick={onAutoLayout} title="Lay out selected structure as a tree by following connectors from root to leaves">
+        <Network className="w-4 h-4 mr-1.5" />
+        Auto Layout
       </Button>
 
       <Button variant="outline" size="sm" onClick={onDeleteSelected} disabled={!hasSelection}>

@@ -313,6 +313,29 @@ export const DiagramCanvas = forwardRef<SVGSVGElement, DiagramCanvasProps>(funct
                 </tspan>
               ))}
             </text>
+            {node.gate && (
+              <g pointerEvents="none">
+                <rect
+                  className={node.gate === "AND" ? "ctidiag-gate-and" : "ctidiag-gate-or"}
+                  x={node.x - node.width / 2 - 4}
+                  y={node.y - node.height / 2 - 12}
+                  width={32}
+                  height={16}
+                  rx={4}
+                  fill={node.gate === "AND" ? "#4f46e5" : "#0891b2"}
+                />
+                <text
+                  x={node.x - node.width / 2 - 4 + 16}
+                  y={node.y - node.height / 2 - 0.5}
+                  textAnchor="middle"
+                  fontSize={9}
+                  fontWeight={700}
+                  fill="#ffffff"
+                >
+                  {node.gate}
+                </text>
+              </g>
+            )}
           </g>
         )
       })}

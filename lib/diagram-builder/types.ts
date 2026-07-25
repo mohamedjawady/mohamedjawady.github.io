@@ -1,4 +1,4 @@
-export type DiagramMode = "kill-chain" | "diamond-model" | "hybrid" | "unified-kill-chain" | "blank"
+export type DiagramMode = "kill-chain" | "diamond-model" | "hybrid" | "unified-kill-chain" | "attack-tree" | "blank"
 
 export type NodeKind =
   | "kill-chain"
@@ -10,8 +10,12 @@ export type NodeKind =
   | "ukc-in"
   | "ukc-through"
   | "ukc-out"
+  | "attack-root"
+  | "attack-node"
 
 export type NodeShape = "rect" | "diamond" | "ellipse"
+
+export type GateType = "AND" | "OR"
 
 export interface DiagramNode {
   id: string
@@ -19,6 +23,7 @@ export interface DiagramNode {
   shape: NodeShape
   label: string
   notes?: string
+  gate?: GateType
   x: number
   y: number
   width: number
@@ -53,6 +58,8 @@ export const NODE_STYLES: Record<NodeKind, { fill: string; stroke: string; text:
   "ukc-in": { fill: "#e0f2fe", stroke: "#0284c7", text: "#075985", shape: "rect", label: "In (Initial Foothold)" },
   "ukc-through": { fill: "#fef3c7", stroke: "#d97706", text: "#78350f", shape: "rect", label: "Through (Network Propagation)" },
   "ukc-out": { fill: "#fee2e2", stroke: "#dc2626", text: "#7f1d1d", shape: "rect", label: "Out (Action on Objectives)" },
+  "attack-root": { fill: "#fef2f2", stroke: "#991b1b", text: "#7f1d1d", shape: "rect", label: "Attack Goal" },
+  "attack-node": { fill: "#eef2ff", stroke: "#4f46e5", text: "#312e81", shape: "rect", label: "Attack Step" },
 }
 
 export const CANVAS_WIDTH = 1200

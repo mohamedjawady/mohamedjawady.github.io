@@ -4,7 +4,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { DiagramEdge, DiagramNode } from "@/lib/diagram-builder/types"
+import { Button } from "@/components/ui/button"
+import { DiagramEdge, DiagramNode, GateType } from "@/lib/diagram-builder/types"
+
+const GATE_OPTIONS: { value: GateType | null; label: string }[] = [
+  { value: null, label: "None" },
+  { value: "AND", label: "AND" },
+  { value: "OR", label: "OR" },
+]
 
 interface DiagramSidePanelProps {
   node: DiagramNode | null
@@ -43,6 +50,26 @@ export function DiagramSidePanel({ node, edge, onUpdateNode, onUpdateEdge }: Dia
             value={node.notes ?? ""}
             onChange={(e) => onUpdateNode(node.id, { notes: e.target.value })}
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Gate (for attack trees)</Label>
+          <div className="flex gap-1.5">
+            {GATE_OPTIONS.map((opt) => (
+              <Button
+                key={opt.label}
+                type="button"
+                size="sm"
+                variant={(node.gate ?? null) === opt.value ? "default" : "outline"}
+                className="flex-1 h-8"
+                onClick={() => onUpdateNode(node.id, { gate: opt.value ?? undefined })}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Sets whether this node&apos;s children must all succeed (AND) or any one is enough (OR).
+          </p>
         </div>
       </div>
     )

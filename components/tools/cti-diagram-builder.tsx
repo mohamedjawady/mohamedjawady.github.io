@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react"
 import { exportRaster, exportSvg } from "@/lib/svg-export"
-import { diamondModelBlock, getPreset, killChainBlock, unifiedKillChainBlock } from "@/lib/diagram-builder/presets"
+import { attackTreeBlock, diamondModelBlock, getPreset, killChainBlock, unifiedKillChainBlock } from "@/lib/diagram-builder/presets"
 import { CANVAS_HEIGHT, CANVAS_WIDTH, createEdge, createNode, DiagramMode, DiagramState, NodeKind } from "@/lib/diagram-builder/types"
 import { CUSTOM_CSS_CLASS_REFERENCE, getTheme } from "@/lib/diagram-builder/themes"
+import { autoLayoutTree } from "@/lib/diagram-builder/layout"
 
 const MIN_ZOOM = 0.4
 const MAX_ZOOM = 3
@@ -82,20 +83,26 @@ export function CtiDiagramBuilder() {
     setSelected({ type: "node", id: node.id })
   }
 
-  const handleInsertBlock = (block: "diamond-model" | "kill-chain" | "unified-kill-chain") => {
+  const handleInsertBlock = (block: "diamond-model" | "kill-chain" | "unified-kill-chain" | "attack-tree") => {
     setState((s) => {
       const maxY = s.nodes.reduce((max, n) => Math.max(max, n.y + n.height / 2), 0)
       const defaultY = block === "diamond-model" ? 400 : 140
-      const maxInsertY = block === "unified-kill-chain" ? CANVAS_HEIGHT - 300 : CANVAS_HEIGHT - 120
+      const maxInsertY = block === "unified-kill-chain" || block === "attack-tree" ? CANVAS_HEIGHT - 300 : CANVAS_HEIGHT - 120
       const insertY = s.nodes.length === 0 ? defaultY : Math.min(maxY + 140, maxInsertY)
       const generated =
         block === "diamond-model"
           ? diamondModelBlock(CANVAS_WIDTH / 2, insertY, 170)
           : block === "unified-kill-chain"
             ? unifiedKillChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 60, 130)
-            : killChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 70)
+            : block === "attack-tree"
+              ? attackTreeBlock(CANVAS_WIDTH / 2, insertY)
+              : killChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 70)
       return { ...s, nodes: [...s.nodes, ...generated.nodes], edges: [...s.edges, ...generated.edges] }
     })
+  }
+
+  const handleAutoLayout = () => {
+    setState((s) => ({ ...s, nodes: autoLayoutTree(s.nodes, s.edges) }))
   }
 
   const handleNodeMove = useCallback((id: string, x: number, y: number) => {
@@ -271,6 +278,7 @@ export function CtiDiagramBuilder() {
         onToggleConnect={handleToggleConnect}
         onDeleteSelected={handleDeleteSelected}
         onReset={handleReset}
+        onAutoLayout={handleAutoLayout}
         onExport={handleExport}
         onThemeChange={setThemeId}
       />

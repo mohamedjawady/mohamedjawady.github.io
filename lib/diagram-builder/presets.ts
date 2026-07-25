@@ -119,6 +119,40 @@ export function unifiedKillChainPreset(): DiagramState {
   return { title: "Unified Kill Chain (Pols, 2017)", nodes, edges }
 }
 
+export function attackTreeBlock(cx: number, cy: number): { nodes: DiagramNode[]; edges: DiagramEdge[] } {
+  const root = createNode("attack-root", cx, cy, "Compromise Domain Admin Credentials")
+  root.gate = "OR"
+
+  const ntds = createNode("attack-node", cx - 300, cy + 170, "Steal NTDS.dit")
+  ntds.gate = "AND"
+  const kerberoast = createNode("attack-node", cx, cy + 170, "Kerberoasting")
+  kerberoast.gate = "AND"
+  const phish = createNode("attack-node", cx + 300, cy + 170, "Phish Domain Admin Directly")
+
+  const dcAccess = createNode("attack-node", cx - 380, cy + 340, "Obtain Domain Controller Access")
+  const extractHive = createNode("attack-node", cx - 220, cy + 340, "Extract NTDS.dit + SYSTEM Hive")
+  const enumSpns = createNode("attack-node", cx - 80, cy + 340, "Enumerate SPNs")
+  const crackTgs = createNode("attack-node", cx + 80, cy + 340, "Crack TGS Ticket Offline")
+
+  const nodes = [root, ntds, kerberoast, phish, dcAccess, extractHive, enumSpns, crackTgs]
+  const edges = [
+    createEdge(root.id, ntds.id, { color: "#4f46e5" }),
+    createEdge(root.id, kerberoast.id, { color: "#4f46e5" }),
+    createEdge(root.id, phish.id, { color: "#4f46e5" }),
+    createEdge(ntds.id, dcAccess.id, { color: "#4f46e5" }),
+    createEdge(ntds.id, extractHive.id, { color: "#4f46e5" }),
+    createEdge(kerberoast.id, enumSpns.id, { color: "#4f46e5" }),
+    createEdge(kerberoast.id, crackTgs.id, { color: "#4f46e5" }),
+  ]
+
+  return { nodes, edges }
+}
+
+export function attackTreePreset(): DiagramState {
+  const { nodes, edges } = attackTreeBlock(CANVAS_WIDTH / 2, 110)
+  return { title: "Attack Tree: Domain Admin Compromise", nodes, edges }
+}
+
 export function blankPreset(): DiagramState {
   return { title: "Untitled Diagram", nodes: [], edges: [] }
 }
@@ -133,6 +167,8 @@ export function getPreset(mode: string): DiagramState {
       return hybridPreset()
     case "unified-kill-chain":
       return unifiedKillChainPreset()
+    case "attack-tree":
+      return attackTreePreset()
     default:
       return blankPreset()
   }

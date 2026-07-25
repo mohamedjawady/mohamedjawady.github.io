@@ -33,6 +33,7 @@ import {
 
 interface DiagramToolbarProps {
   mode: DiagramMode
+  showModeSelect?: boolean
   connectMode: boolean
   hasSelection: boolean
   themeId: string
@@ -60,6 +61,7 @@ const ADD_NODE_OPTIONS: { kind: NodeKind; label: string }[] = [
 
 export function DiagramToolbar({
   mode,
+  showModeSelect = true,
   connectMode,
   hasSelection,
   themeId,
@@ -75,24 +77,28 @@ export function DiagramToolbar({
 }: DiagramToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/30 p-3">
-      <Select value={mode} onValueChange={(v) => onModeChange(v as DiagramMode)}>
-        <SelectTrigger className="w-[190px]">
-          <SelectValue placeholder="Template" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="kill-chain">Kill Chain</SelectItem>
-          <SelectItem value="diamond-model">Diamond Model</SelectItem>
-          <SelectItem value="hybrid">Hybrid (Both)</SelectItem>
-          <SelectItem value="unified-kill-chain">Unified Kill Chain</SelectItem>
-          <SelectItem value="attack-tree">Attack Tree</SelectItem>
-          <SelectItem value="ooda">OODA Loop</SelectItem>
-          <SelectItem value="f3ead">F3EAD Cycle</SelectItem>
-          <SelectItem value="bow-tie">Bow-Tie Diagram</SelectItem>
-          <SelectItem value="blank">Blank Canvas</SelectItem>
-        </SelectContent>
-      </Select>
+      {showModeSelect && (
+        <>
+          <Select value={mode} onValueChange={(v) => onModeChange(v as DiagramMode)}>
+            <SelectTrigger className="w-[190px]">
+              <SelectValue placeholder="Template" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="kill-chain">Kill Chain</SelectItem>
+              <SelectItem value="diamond-model">Diamond Model</SelectItem>
+              <SelectItem value="hybrid">Hybrid (Both)</SelectItem>
+              <SelectItem value="unified-kill-chain">Unified Kill Chain</SelectItem>
+              <SelectItem value="attack-tree">Attack Tree</SelectItem>
+              <SelectItem value="ooda">OODA Loop</SelectItem>
+              <SelectItem value="f3ead">F3EAD Cycle</SelectItem>
+              <SelectItem value="bow-tie">Bow-Tie Diagram</SelectItem>
+              <SelectItem value="blank">Blank Canvas</SelectItem>
+            </SelectContent>
+          </Select>
 
-      <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="h-6" />
+        </>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

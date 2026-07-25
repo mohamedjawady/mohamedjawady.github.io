@@ -40,9 +40,14 @@ function clampZoom(z: number) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 }
 
-export function CtiDiagramBuilder() {
-  const [mode, setMode] = useState<DiagramMode>("kill-chain")
-  const [state, setState] = useState<DiagramState>(() => getPreset("kill-chain"))
+interface CtiDiagramBuilderProps {
+  initialMode: DiagramMode
+  allowModeSwitch?: boolean
+}
+
+export function CtiDiagramBuilder({ initialMode, allowModeSwitch = false }: CtiDiagramBuilderProps) {
+  const [mode, setMode] = useState<DiagramMode>(initialMode)
+  const [state, setState] = useState<DiagramState>(() => getPreset(initialMode))
   const [selected, setSelected] = useState<Selection>(null)
   const [connectMode, setConnectMode] = useState(false)
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
@@ -283,6 +288,7 @@ export function CtiDiagramBuilder() {
 
       <DiagramToolbar
         mode={mode}
+        showModeSelect={allowModeSwitch}
         connectMode={connectMode}
         hasSelection={selected !== null}
         themeId={themeId}

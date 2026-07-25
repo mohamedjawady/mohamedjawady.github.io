@@ -5,6 +5,7 @@ import { getAllVisualizations } from '@/lib/visualizations'
 import { getAllCheatsheets } from '@/lib/cheatsheets'
 import { getAllNotes } from '@/lib/notes'
 import { getAllStudyDecks } from '@/lib/study-decks'
+import { getTools } from '@/lib/tools'
 import { getCanonicalUrl } from '@/lib/url'
 import { MetadataRoute } from 'next'
 
@@ -101,30 +102,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly',
       priority: 0.7,
     },
-    {
-      url: getCanonicalUrl('/tools/diagram-builder'),
+    ...getTools().map((tool) => ({
+      url: getCanonicalUrl(tool.href),
       lastModified: new Date(),
-      changeFrequency: 'monthly',
+      changeFrequency: 'monthly' as const,
       priority: 0.7,
-    },
-    {
-      url: getCanonicalUrl('/tools/attack-matrix'),
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.7,
-    },
-    {
-      url: getCanonicalUrl('/tools/coa-matrix'),
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.7,
-    },
-    {
-      url: getCanonicalUrl('/tools/admiralty-code'),
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.7,
-    },
+    })),
     {
       url: getCanonicalUrl('/about'),
       lastModified: new Date(),

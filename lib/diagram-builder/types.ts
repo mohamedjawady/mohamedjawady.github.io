@@ -1,4 +1,13 @@
-export type DiagramMode = "kill-chain" | "diamond-model" | "hybrid" | "unified-kill-chain" | "attack-tree" | "blank"
+export type DiagramMode =
+  | "kill-chain"
+  | "diamond-model"
+  | "hybrid"
+  | "unified-kill-chain"
+  | "attack-tree"
+  | "ooda"
+  | "f3ead"
+  | "bow-tie"
+  | "blank"
 
 export type NodeKind =
   | "kill-chain"
@@ -12,6 +21,11 @@ export type NodeKind =
   | "ukc-out"
   | "attack-root"
   | "attack-node"
+  | "ooda"
+  | "f3ead"
+  | "bowtie-cause"
+  | "bowtie-event"
+  | "bowtie-consequence"
 
 export type NodeShape = "rect" | "diamond" | "ellipse"
 
@@ -60,6 +74,11 @@ export const NODE_STYLES: Record<NodeKind, { fill: string; stroke: string; text:
   "ukc-out": { fill: "#fee2e2", stroke: "#dc2626", text: "#7f1d1d", shape: "rect", label: "Out (Action on Objectives)" },
   "attack-root": { fill: "#fef2f2", stroke: "#991b1b", text: "#7f1d1d", shape: "rect", label: "Attack Goal" },
   "attack-node": { fill: "#eef2ff", stroke: "#4f46e5", text: "#312e81", shape: "rect", label: "Attack Step" },
+  ooda: { fill: "#ecfeff", stroke: "#0891b2", text: "#164e63", shape: "rect", label: "OODA Phase" },
+  f3ead: { fill: "#fdf2f8", stroke: "#db2777", text: "#831843", shape: "rect", label: "F3EAD Phase" },
+  "bowtie-cause": { fill: "#fefce8", stroke: "#ca8a04", text: "#713f12", shape: "rect", label: "Threat / Cause" },
+  "bowtie-event": { fill: "#fee2e2", stroke: "#dc2626", text: "#7f1d1d", shape: "rect", label: "Top Event" },
+  "bowtie-consequence": { fill: "#f8fafc", stroke: "#475569", text: "#0f172a", shape: "rect", label: "Consequence" },
 }
 
 export const CANVAS_WIDTH = 1200

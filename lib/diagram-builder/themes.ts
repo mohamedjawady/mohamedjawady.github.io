@@ -20,6 +20,11 @@ const DARK_CSS = `
 .ctidiag-node--ukc-out { fill: #450a0a; stroke: #f87171; }
 .ctidiag-node--attack-root { fill: #450a0a; stroke: #f87171; }
 .ctidiag-node--attack-node { fill: #312e81; stroke: #818cf8; }
+.ctidiag-node--ooda { fill: #083344; stroke: #22d3ee; }
+.ctidiag-node--f3ead { fill: #500724; stroke: #f472b6; }
+.ctidiag-node--bowtie-cause { fill: #422006; stroke: #facc15; }
+.ctidiag-node--bowtie-event { fill: #450a0a; stroke: #f87171; }
+.ctidiag-node--bowtie-consequence { fill: #1e293b; stroke: #94a3b8; }
 .ctidiag-node-text { fill: #f8fafc; }
 .ctidiag-edge { stroke: #94a3b8; }
 .ctidiag-edge-label { fill: #e2e8f0; }
@@ -49,6 +54,11 @@ const CORPORATE_CSS = `
 .ctidiag-node--ukc-out { fill: #fee2e2; stroke: #b91c1c; }
 .ctidiag-node--attack-root { fill: #fee2e2; stroke: #b91c1c; }
 .ctidiag-node--attack-node { fill: #e0e7ff; stroke: #4338ca; }
+.ctidiag-node--ooda { fill: #cffafe; stroke: #0e7490; }
+.ctidiag-node--f3ead { fill: #fce7f3; stroke: #be185d; }
+.ctidiag-node--bowtie-cause { fill: #fef9c3; stroke: #a16207; }
+.ctidiag-node--bowtie-event { fill: #fee2e2; stroke: #b91c1c; }
+.ctidiag-node--bowtie-consequence { fill: #f1f5f9; stroke: #334155; }
 .ctidiag-node-text { fill: #0f172a; }
 .ctidiag-edge { stroke: #64748b; }
 `.trim()
@@ -63,7 +73,7 @@ export const DIAGRAM_THEMES: DiagramTheme[] = [
 
 export const CUSTOM_CSS_CLASS_REFERENCE = [
   ".ctidiag-canvas-bg",
-  ".ctidiag-node, .ctidiag-node--kill-chain / --adversary / --capability / --infrastructure / --victim / --custom / --ukc-in / --ukc-through / --ukc-out / --attack-root / --attack-node",
+  ".ctidiag-node, .ctidiag-node--kill-chain / --adversary / --capability / --infrastructure / --victim / --custom / --ukc-in / --ukc-through / --ukc-out / --attack-root / --attack-node / --ooda / --f3ead / --bowtie-cause / --bowtie-event / --bowtie-consequence",
   ".ctidiag-node-text",
   ".ctidiag-edge, .ctidiag-edge--dashed",
   ".ctidiag-edge-label, .ctidiag-edge-label-bg",

@@ -7,6 +7,7 @@ import { DiagramMode, NodeKind } from "@/lib/diagram-builder/types"
 import { DIAGRAM_THEMES } from "@/lib/diagram-builder/themes"
 import {
   Cable,
+  Crosshair,
   Download,
   FileImage,
   FileJson,
@@ -14,7 +15,9 @@ import {
   GitMerge,
   Network,
   Plus,
+  RefreshCw,
   RotateCcw,
+  Shield,
   Swords,
   Trash2,
   TreeDeciduous,
@@ -35,7 +38,7 @@ interface DiagramToolbarProps {
   themeId: string
   onModeChange: (mode: DiagramMode) => void
   onAddNode: (kind: NodeKind) => void
-  onInsertBlock: (block: "diamond-model" | "kill-chain" | "unified-kill-chain" | "attack-tree") => void
+  onInsertBlock: (block: "diamond-model" | "kill-chain" | "unified-kill-chain" | "attack-tree" | "ooda" | "f3ead" | "bow-tie") => void
   onToggleConnect: () => void
   onDeleteSelected: () => void
   onReset: () => void
@@ -82,6 +85,9 @@ export function DiagramToolbar({
           <SelectItem value="hybrid">Hybrid (Both)</SelectItem>
           <SelectItem value="unified-kill-chain">Unified Kill Chain</SelectItem>
           <SelectItem value="attack-tree">Attack Tree</SelectItem>
+          <SelectItem value="ooda">OODA Loop</SelectItem>
+          <SelectItem value="f3ead">F3EAD Cycle</SelectItem>
+          <SelectItem value="bow-tie">Bow-Tie Diagram</SelectItem>
           <SelectItem value="blank">Blank Canvas</SelectItem>
         </SelectContent>
       </Select>
@@ -119,6 +125,18 @@ export function DiagramToolbar({
           <DropdownMenuItem onClick={() => onInsertBlock("attack-tree")}>
             <TreeDeciduous className="w-4 h-4 mr-2" />
             Attack Tree (example)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsertBlock("ooda")}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            OODA Loop (4 phases)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsertBlock("f3ead")}>
+            <Crosshair className="w-4 h-4 mr-2" />
+            F3EAD Cycle (6 phases)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsertBlock("bow-tie")}>
+            <Shield className="w-4 h-4 mr-2" />
+            Bow-Tie Diagram (example)
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

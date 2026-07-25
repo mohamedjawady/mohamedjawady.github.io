@@ -153,6 +153,61 @@ export function attackTreePreset(): DiagramState {
   return { title: "Attack Tree: Domain Admin Compromise", nodes, edges }
 }
 
+function circleBlock(labels: string[], kind: NodeKind, cx: number, cy: number, radius: number, edgeColor: string): { nodes: DiagramNode[]; edges: DiagramEdge[] } {
+  const n = labels.length
+  const nodes = labels.map((label, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n
+    const x = cx + radius * Math.cos(angle)
+    const y = cy + radius * Math.sin(angle)
+    return createNode(kind, x, y, label)
+  })
+  const edges = nodes.map((node, i) => createEdge(node.id, nodes[(i + 1) % nodes.length].id, { color: edgeColor }))
+  return { nodes, edges }
+}
+
+export function oodaBlock(cx: number, cy: number, radius = 220): { nodes: DiagramNode[]; edges: DiagramEdge[] } {
+  return circleBlock(["Observe", "Orient", "Decide", "Act"], "ooda", cx, cy, radius, "#0891b2")
+}
+
+export function oodaPreset(): DiagramState {
+  const { nodes, edges } = oodaBlock(CANVAS_WIDTH / 2, 380)
+  return { title: "OODA Loop (Boyd)", nodes, edges }
+}
+
+export function f3eadBlock(cx: number, cy: number, radius = 260): { nodes: DiagramNode[]; edges: DiagramEdge[] } {
+  return circleBlock(["Find", "Fix", "Finish", "Exploit", "Analyze", "Disseminate"], "f3ead", cx, cy, radius, "#db2777")
+}
+
+export function f3eadPreset(): DiagramState {
+  const { nodes, edges } = f3eadBlock(CANVAS_WIDTH / 2, 400)
+  return { title: "F3EAD Cycle", nodes, edges }
+}
+
+export function bowTieBlock(cx: number, cy: number): { nodes: DiagramNode[]; edges: DiagramEdge[] } {
+  const event = createNode("bowtie-event", cx, cy, "Ransomware Deployed on Network")
+
+  const causeLabels = ["Phishing Email Delivered", "Exposed RDP Service", "Unpatched Vulnerability Exploited"]
+  const causeBarriers = ["Email Filtering", "VPN + MFA Required", "Patch Management"]
+  const causes = causeLabels.map((label, i) => createNode("bowtie-cause", cx - 400, cy + (i - 1) * 170, label))
+
+  const consequenceLabels = ["Data Loss", "Lateral Spread to Critical Systems", "Extended Business Downtime"]
+  const consequenceBarriers = ["Offline Backups", "Network Segmentation", "Incident Response Plan"]
+  const consequences = consequenceLabels.map((label, i) => createNode("bowtie-consequence", cx + 400, cy + (i - 1) * 170, label))
+
+  const nodes = [event, ...causes, ...consequences]
+  const edges = [
+    ...causes.map((c, i) => createEdge(c.id, event.id, { color: "#ca8a04", label: causeBarriers[i] })),
+    ...consequences.map((c, i) => createEdge(event.id, c.id, { color: "#475569", label: consequenceBarriers[i] })),
+  ]
+
+  return { nodes, edges }
+}
+
+export function bowTiePreset(): DiagramState {
+  const { nodes, edges } = bowTieBlock(CANVAS_WIDTH / 2, 400)
+  return { title: "Bow-Tie Risk Diagram: Ransomware Deployment", nodes, edges }
+}
+
 export function blankPreset(): DiagramState {
   return { title: "Untitled Diagram", nodes: [], edges: [] }
 }
@@ -169,6 +224,12 @@ export function getPreset(mode: string): DiagramState {
       return unifiedKillChainPreset()
     case "attack-tree":
       return attackTreePreset()
+    case "ooda":
+      return oodaPreset()
+    case "f3ead":
+      return f3eadPreset()
+    case "bow-tie":
+      return bowTiePreset()
     default:
       return blankPreset()
   }

@@ -10,7 +10,16 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react"
 import { exportRaster, exportSvg } from "@/lib/svg-export"
-import { attackTreeBlock, diamondModelBlock, getPreset, killChainBlock, unifiedKillChainBlock } from "@/lib/diagram-builder/presets"
+import {
+  attackTreeBlock,
+  bowTieBlock,
+  diamondModelBlock,
+  f3eadBlock,
+  getPreset,
+  killChainBlock,
+  oodaBlock,
+  unifiedKillChainBlock,
+} from "@/lib/diagram-builder/presets"
 import { CANVAS_HEIGHT, CANVAS_WIDTH, createEdge, createNode, DiagramMode, DiagramState, NodeKind } from "@/lib/diagram-builder/types"
 import { CUSTOM_CSS_CLASS_REFERENCE, getTheme } from "@/lib/diagram-builder/themes"
 import { autoLayoutTree } from "@/lib/diagram-builder/layout"
@@ -83,20 +92,25 @@ export function CtiDiagramBuilder() {
     setSelected({ type: "node", id: node.id })
   }
 
-  const handleInsertBlock = (block: "diamond-model" | "kill-chain" | "unified-kill-chain" | "attack-tree") => {
+  type InsertBlockKind = "diamond-model" | "kill-chain" | "unified-kill-chain" | "attack-tree" | "ooda" | "f3ead" | "bow-tie"
+
+  const INSERT_BLOCKS: Record<InsertBlockKind, { defaultY: number; halfHeight: number; generate: (cx: number, cy: number) => ReturnType<typeof killChainBlock> }> = {
+    "diamond-model": { defaultY: 400, halfHeight: 210, generate: (cx, cy) => diamondModelBlock(cx, cy, 170) },
+    "kill-chain": { defaultY: 140, halfHeight: 40, generate: (cx, cy) => killChainBlock(cx, cy, CANVAS_WIDTH - 70) },
+    "unified-kill-chain": { defaultY: 140, halfHeight: 300, generate: (cx, cy) => unifiedKillChainBlock(cx, cy, CANVAS_WIDTH - 60, 130) },
+    "attack-tree": { defaultY: 140, halfHeight: 380, generate: (cx, cy) => attackTreeBlock(cx, cy) },
+    ooda: { defaultY: 260, halfHeight: 260, generate: (cx, cy) => oodaBlock(cx, cy, 200) },
+    f3ead: { defaultY: 300, halfHeight: 300, generate: (cx, cy) => f3eadBlock(cx, cy, 240) },
+    "bow-tie": { defaultY: 400, halfHeight: 210, generate: (cx, cy) => bowTieBlock(cx, cy) },
+  }
+
+  const handleInsertBlock = (block: InsertBlockKind) => {
     setState((s) => {
+      const { defaultY, halfHeight, generate } = INSERT_BLOCKS[block]
       const maxY = s.nodes.reduce((max, n) => Math.max(max, n.y + n.height / 2), 0)
-      const defaultY = block === "diamond-model" ? 400 : 140
-      const maxInsertY = block === "unified-kill-chain" || block === "attack-tree" ? CANVAS_HEIGHT - 300 : CANVAS_HEIGHT - 120
+      const maxInsertY = CANVAS_HEIGHT - halfHeight - 20
       const insertY = s.nodes.length === 0 ? defaultY : Math.min(maxY + 140, maxInsertY)
-      const generated =
-        block === "diamond-model"
-          ? diamondModelBlock(CANVAS_WIDTH / 2, insertY, 170)
-          : block === "unified-kill-chain"
-            ? unifiedKillChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 60, 130)
-            : block === "attack-tree"
-              ? attackTreeBlock(CANVAS_WIDTH / 2, insertY)
-              : killChainBlock(CANVAS_WIDTH / 2, insertY, CANVAS_WIDTH - 70)
+      const generated = generate(CANVAS_WIDTH / 2, insertY)
       return { ...s, nodes: [...s.nodes, ...generated.nodes], edges: [...s.edges, ...generated.edges] }
     })
   }

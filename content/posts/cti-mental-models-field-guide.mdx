@@ -1,0 +1,114 @@
+---
+title: "The Kill Chain Is Not Your Only Model: A Field Guide to CTI's Mental Models"
+description: "Most teams reach for the kill chain for every question, even the ones it was never built to answer. Seven mental models, what question each one actually answers, and where to build every one of them yourself in the new interactive Tools section."
+date: "2026-07-27"
+author: "Mohamed Habib Jaouadi"
+tags: ["threat-intelligence", "kill-chain", "diamond-model", "attack-tree", "mental-models", "cti-tools"]
+visibility: "draft"
+---
+
+> **Model Focus:** The kill chain is the model most analysts learn first, so it becomes the model they reach for every time, including the times a different shape would answer the question faster and more honestly. This post is about picking the model that fits the question, not the model that comes to mind first.
+
+**TL;DR:** A <Term concept="mental-model">mental model</Term> is a shape you impose on a mess of facts so you can reason about it, and the shape you pick determines which questions you can even ask. The kill chain answers "what sequence of steps did the adversary follow." The <Term concept="diamond-model">Diamond Model</Term> answers "what four things does every intrusion event require, and what do they have in common with the last one." An <Term concept="attack-tree">attack tree</Term> answers "what combination of sub-goals gets an adversary to this objective." The <Term concept="ooda-loop">OODA loop</Term> and <Term concept="f3ead">F3EAD</Term> answer "how fast can we cycle from observation to action," which is a different question from any of the above. A <Term concept="bow-tie">bow-tie</Term> diagram answers "what stops this specific bad thing from happening, and what limits the damage if it does anyway." None of these models compete with each other. They answer different questions, which is why the CTI Diagram Builder in the <a href="/tools">Tools section</a> now ships all of them as dedicated, exportable tools instead of forcing every diagram through one template.
+
+## Introduction
+
+Ask a SOC analyst to diagram an intrusion and most will draw the same seven boxes: Reconnaissance, Weaponization, Delivery, Exploitation, Installation, Command and Control, Actions on Objectives. It is not a bad instinct. The <Term concept="kill-chain">kill chain</Term> is the most widely taught model in the field, and it is genuinely useful for exactly what it was built for, narrating an intrusion as a sequence a defender can interrupt at any link.
+
+The trouble starts when the kill chain becomes the only tool in the box. Ask that same analyst to explain why an adversary keeps reusing the same registrar across five unrelated campaigns, or to prioritize which sub-goal in a domain-compromise attempt is cheapest to block, or to justify why watching beats blocking for a specific piece of infrastructure, and a seven-phase linear chain has nothing to say. Not because the analyst is wrong, but because they are holding a hammer and every one of those questions is not a nail.
+
+This post walks through seven mental models, plus the three scoring matrices that go with them, groups them by the actual question each one answers, and points to the interactive tool for each one, all now living in the site's <a href="/tools">Tools section</a> as dedicated builders rather than templates buried in a single generic canvas.
+
+## Intrusion Chains: When the Question Is "What Sequence"
+
+The kill chain and its descendants are the right model exactly when the question is narrative and sequential: what has to happen, in roughly what order, for this specific kind of attack to succeed.
+
+The original <Term concept="kill-chain">Cyber Kill Chain</Term>, from Lockheed Martin's 2011 Intelligence-Driven Computer Network Defense paper, breaks an intrusion into seven phases and rests on one operational claim: interrupting any single phase breaks the whole chain, so a defender does not need to stop everything, they need to stop one thing per intrusion. It is the right model for briefing an incident end to end, for mapping detections against Courses of Action (covered in depth in a [previous post](/posts/courses-of-action-gain-loss)), and for onboarding someone who has never reasoned about an intrusion's shape before.
+
+Its limitation is the same thing that makes it teachable: it assumes intrusions are linear. Real campaigns loop back, pivot laterally many times, and re-enter earlier phases against new targets inside the same network. That gap is what the <Term concept="unified-kill-chain">Unified Kill Chain</Term> closes. Paul Pols' 2017 model expands the same idea to 18 phases and groups them into three stages instead of one straight line: In (the eight phases that get an adversary an initial foothold), Through (the six phases of moving around inside the network), and Out (the four phases that achieve the actual objective). The extra granularity matters most once an intrusion is past initial access, where the original seven phases compress everything interesting, privilege escalation, discovery, lateral movement, credential access, into a single "Installation" box. When you need to show a stakeholder that most of an incident's duration and most of the analyst's actual work happened inside the Through stage, the Unified Kill Chain has the vocabulary for it and the classic kill chain does not.
+
+Build either one, or a hybrid of both plus the Diamond Model, in the [Kill Chain Builder](/tools/kill-chain) and the [Unified Kill Chain Builder](/tools/unified-kill-chain), or mix models freely in the [Free-Form Diagram Canvas](/tools/diagram-builder).
+
+## Structured Models: When the Question Is "What Relationships" or "What Combination"
+
+Two models in the new tools section are not sequential at all. They exist because some questions are about structure, what things relate to what, or what combination of sub-goals adds up to a bigger one, and a timeline cannot represent structure honestly.
+
+The <Term concept="diamond-model">Diamond Model of Intrusion Analysis</Term>, from Caltagirone, Pendergast, and Betz's 2013 paper, states that every intrusion event requires exactly four things: an adversary, a capability, an infrastructure, and a victim, connected by a socio-political axis (why the adversary is targeting this victim) and a technical axis (how the capability reaches the victim through the infrastructure). Where the kill chain asks "what step is this," the Diamond Model asks "what does this event have in common with the last one," which is precisely the question you need answered to pivot from one indicator to a whole cluster of related activity, and to argue that two intrusions six months apart share an adversary even though nothing about their phases looks alike.
+
+The <Term concept="attack-tree">attack tree</Term>, formalized by Bruce Schneier in 1999, answers a completely different structural question: given an adversary's goal, what is the actual logical combination of sub-goals that gets them there. Every node can be an AND gate, every child required, or an OR gate, any one child sufficient, and that distinction is the entire value of the model. "Compromise Domain Admin Credentials" is not one path, it is Kerberoasting (which itself requires enumerating SPNs AND cracking a ticket offline) OR stealing NTDS.dit (which requires domain controller access AND extracting the file) OR a handful of other branches, and knowing which combinations are AND-gated tells you exactly which single control breaks an entire branch versus which branch has no single point of failure at all. The Attack Tree Builder in the tools section carries the AND/OR gate as a first-class property of every node, and includes an Auto Layout button because an attack tree you build by hand quickly turns into a mess and a tree that reflows to depth and branching automatically stays legible as it grows.
+
+Build either at [Diamond Model Builder](/tools/diamond-model) and [Attack Tree Builder](/tools/attack-tree).
+
+## Decision and Operations Cycles: When the Question Is "How Fast"
+
+Every model so far describes a static structure: a chain, four vertices, a tree. Two more models in the tools section describe something none of the structural models do, tempo, the speed at which an organization or an operator cycles from observing something to acting on it.
+
+The <Term concept="ooda-loop">OODA loop</Term>, John Boyd's Observe-Orient-Decide-Act cycle, is not really about the four boxes; it is about the claim underneath them, that whoever cycles through the loop faster than their opponent controls the engagement regardless of relative force size. In a CTI context that translates directly: an adversary who can observe your defenses, orient to what they mean, decide on a bypass, and act on it faster than your team can observe their bypass and adapt is winning on tempo even if your tooling is objectively better. The loop is a diagnostic question to ask about your own program as much as a description of the adversary: where in our own OODA loop are we slowest, and is that the actual bottleneck instead of whatever tool we were about to buy.
+
+<Term concept="f3ead">F3EAD</Term>, Find-Fix-Finish-Exploit-Analyze-Disseminate, grew out of the older Find-Fix-Finish targeting triad during counterinsurgency operations, and it is best understood as OODA's operational cousin, purpose-built to fuse operations and intelligence into one loop instead of running them as separate pipelines. The first three phases are an operation: locate the target, fix its position, act on it. The back half is what makes it an intelligence cycle rather than just a raid: Exploit what was captured or observed, Analyze it for what it reveals about the wider network, and Disseminate that analysis so it feeds the next Find. In CTI terms this is the shape of a mature detection-to-eviction workflow: contain and evict an intrusion (Find-Fix-Finish), then extract every artifact and TTP from it (Exploit-Analyze) and push the resulting detections and IOCs back into the pipeline (Disseminate) so the next occurrence of the same actor is found faster. If the kill chain describes what the adversary does, F3EAD describes what a mature defender's own operational rhythm looks like in response.
+
+Build either cycle at [OODA Loop Builder](/tools/ooda-loop) and [F3EAD Cycle Builder](/tools/f3ead).
+
+## Risk Analysis: When the Question Is Prevention Versus Consequence
+
+Every model above is built around adversary behavior. The <Term concept="bow-tie">bow-tie diagram</Term> is different on purpose: it is a risk-engineering model, formalized by Royal Dutch Shell in the 1990s out of earlier ICI safety training material, built for physical and process safety long before it was ever applied to security. A bow-tie puts one top event at the center, the bad thing you are actually worried about, with its causes and the preventive barriers that stop each cause from reaching the event on the left, and the event's consequences and the mitigative barriers that limit damage on the right.
+
+The reason this model earns a place next to the adversary-behavior models is that it asks a question none of them do: separately from how an adversary gets in, what actually stops each individual path to a specific bad outcome, and independently, if prevention fails anyway, what limits the blast radius. "Ransomware Deployed on Network" is a top event with several unrelated causes, phishing, exposed RDP, an unpatched vulnerability, each with its own preventive barrier, and several consequences, data loss, lateral spread, downtime, each with its own mitigative barrier that has nothing to do with which cause fired. A kill chain narrates one path end to end; a bow-tie makes you account for every cause and every consequence of one event side by side, which is exactly the shape a tabletop exercise or a control-gap review actually needs.
+
+Build one, seeded with a ransomware example, at [Bow-Tie Risk Diagram Builder](/tools/bow-tie).
+
+## Matrices and Scoring: When the Question Is "Which One" or "How Much"
+
+Three more tools in the section are not diagrams at all; they are grids, because the question they answer is selection or grading rather than shape.
+
+The <Term concept="mitre-att-ck">MITRE ATT&CK</Term> matrix answers "which specific technique," trading the kill chain's seven broad phases for hundreds of named, versioned techniques an adversary might use at any given tactic. The <Term concept="courses-of-action">Courses of Action</Term> matrix, covered in full in [Deny Is Not Free](/posts/courses-of-action-gain-loss), answers "which response, and at what intelligence cost," crossing the kill chain's phases against seven categorical defender actions. The <Term concept="admiralty-code">Admiralty Code</Term> answers a question that has nothing to do with adversary behavior at all: given a piece of raw reporting, how reliable is the source and how credible is this specific claim, a NATO standard (STANAG 2511) that pairs a letter grade for the source's history with a number grade for this one report, so a rating like B2 keeps "who told you this" and "does this particular thing check out" from collapsing into one fuzzy confidence score.
+
+Build and export all three at [MITRE ATT&CK Matrix](/tools/attack-matrix), [Courses of Action Matrix](/tools/coa-matrix), and [Admiralty Code Tool](/tools/admiralty-code).
+
+## Choosing the Right Model
+
+| Model | Answers | Shape | Tool |
+|---|---|---|---|
+| Kill Chain | What sequence of steps | Linear chain, 7 phases | [Kill Chain Builder](/tools/kill-chain) |
+| Unified Kill Chain | What sequence, with realistic looping | 3-stage chain, 18 phases | [Unified Kill Chain Builder](/tools/unified-kill-chain) |
+| Diamond Model | What this event has in common with others | 4 vertices, 2 axes | [Diamond Model Builder](/tools/diamond-model) |
+| Attack Tree | What combination reaches this goal | AND/OR tree | [Attack Tree Builder](/tools/attack-tree) |
+| OODA Loop | How fast we cycle to a decision | 4-phase loop | [OODA Loop Builder](/tools/ooda-loop) |
+| F3EAD | How fast ops and intel fuse into the next find | 6-phase loop | [F3EAD Cycle Builder](/tools/f3ead) |
+| Bow-Tie | What prevents this, what limits it | Causes-event-consequences | [Bow-Tie Risk Diagram Builder](/tools/bow-tie) |
+| ATT&CK Matrix | Which specific technique | Tactic x technique grid | [ATT&CK Matrix](/tools/attack-matrix) |
+| Courses of Action | Which response, at what cost | Phase x action grid | [Courses of Action Matrix](/tools/coa-matrix) |
+| Admiralty Code | How reliable, how credible | Reliability x credibility grid | [Admiralty Code Tool](/tools/admiralty-code) |
+
+The question to ask before opening any of them is not "which model is more rigorous." All ten are rigorous within what they were built for. The question is "what am I actually trying to find out," and the model falls out of the answer. Sequence questions get a chain. Relationship and combination questions get the Diamond Model or an attack tree. Tempo questions get a loop. Prevention-versus-consequence questions get a bow-tie. Selection and grading questions get a matrix.
+
+## Build Them Yourself
+
+Every model in this post now has its own dedicated tool under [/tools](/tools), grouped the same way this post is: Intrusion Chains, Structured Models, Decision and Operations Cycles, Risk Analysis, and Matrices and Scoring, plus a Free-Form Diagram Canvas for anyone who wants to switch templates mid-session or mix two models on one diagram deliberately. Every tool runs entirely in the browser, nothing you draw is uploaded anywhere, and every diagram exports to SVG, PNG, or JPEG so it drops straight into a report or a briefing deck.
+
+## Conclusion
+
+None of these models is the correct one. Each is correct for the question it was built to answer and close to useless for the questions it was not. The habit worth building is not memorizing seven frameworks, it is pausing before the first box gets drawn to ask what shape the actual question requires, and reaching for the kill chain only when the question really is sequential. The [Tools section](/tools) exists so that reaching for the right one costs nothing more than a click.
+
+## References & Further Reading
+
+1. Hutchins, Cloppert, Amin, "Intelligence-Driven Computer Network Defense" (Lockheed Martin). [https://www.lockheedmartin.com/content/dam/lockheed-martin/rms/documents/cyber/LM-White-Paper-Intel-Driven-Defense.pdf](https://www.lockheedmartin.com/content/dam/lockheed-martin/rms/documents/cyber/LM-White-Paper-Intel-Driven-Defense.pdf)
+	The origin of the Cyber Kill Chain.
+2. Caltagirone, Pendergast, Betz, "The Diamond Model of Intrusion Analysis" (2013). [https://www.activeresponse.org/wp-content/uploads/2013/07/diamond.pdf](https://www.activeresponse.org/wp-content/uploads/2013/07/diamond.pdf)
+	The original Diamond Model paper: four vertices, two axes, and the axioms that support pivoting across events.
+3. Pols, "The Unified Kill Chain: Raising Resilience Against Cyber Attacks" (2017). [https://www.unifiedkillchain.com/](https://www.unifiedkillchain.com/)
+	The 18-phase, three-stage merge of the Kill Chain, ATT&CK, and the Diamond Model.
+4. Schneier, "Attack Trees" (Dr. Dobb's Journal, December 1999). [https://www.schneier.com/academic/archives/1999/12/attack_trees.html](https://www.schneier.com/academic/archives/1999/12/attack_trees.html)
+	The original formalization of AND/OR goal decomposition trees.
+5. Coram, "Boyd: The Fighter Pilot Who Changed the Art of War" (biography covering the development of the OODA loop). [https://www.penguinrandomhouse.com/books/294923/boyd-by-robert-coram/](https://www.penguinrandomhouse.com/books/294923/boyd-by-robert-coram/)
+	The most accessible account of Boyd's OODA loop and the tempo argument behind it.
+6. "F3EAD: Ops/Intel Fusion Feeds The SOF Targeting Process" (Small Wars Journal). [https://archive.smallwarsjournal.com/jrnl/art/f3ead-opsintel-fusion-%E2%80%9Cfeeds%E2%80%9D-the-sof-targeting-process](https://archive.smallwarsjournal.com/jrnl/art/f3ead-opsintel-fusion-%E2%80%9Cfeeds%E2%80%9D-the-sof-targeting-process)
+	F3EAD's evolution out of Find-Fix-Finish targeting doctrine during counterinsurgency operations.
+7. Wolters Kluwer, "The History of Bowtie." [https://www.wolterskluwer.com/en/solutions/enablon/bowtie/expert-insights/barrier-based-risk-management-knowledge-base/the-historie-of-bowtie](https://www.wolterskluwer.com/en/solutions/enablon/bowtie/expert-insights/barrier-based-risk-management-knowledge-base/the-historie-of-bowtie)
+	The bow-tie method's path from 1979 ICI safety training material to Shell's 1990s company standard.
+8. NATO Standardization Office, AJP-2.1 (STANAG 2511), Source Reliability and Information Credibility scales.
+	The formal NATO Intelligence Grading System behind the Admiralty Code.
+9. "Deny Is Not Free: The Courses of Action Matrix and Intelligence Gain/Loss" (this blog). [/posts/courses-of-action-gain-loss](/posts/courses-of-action-gain-loss)
+	The full treatment of the Courses of Action matrix referenced above.
+10. MITRE ATT&CK. [https://attack.mitre.org/](https://attack.mitre.org/)
+	The technique-level knowledge base behind the ATT&CK matrix tool.

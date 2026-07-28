@@ -1,0 +1,285 @@
+---
+title: "Active Directory Series: Part 3 - From Enumeration to Privilege Escalation"
+description: "Enumeration finds the candidate paths. This post walks them: Kerberoasting and AS-REP Roasting, unconstrained delegation and RBCD, Shadow Credentials, AD CS ESC1, and DCSync into a Golden Ticket, each one explained from zero, diagrammed where the chain gets confusing, using the tools actually current in 2026, with the detection signal for every step."
+date: "2026-07-28"
+author: "Mohamed Habib Jaouadi"
+tags: ["active-directory", "windows", "red-team", "blue-team", "privilege-escalation", "kerberos", "active-directory-certificate-services", "detection-engineering", "active-directory-series"]
+banner: "/banners/posts/active-directory-privilege-escalation.jpg"
+bannerAlt: "People ascending a concrete spiral staircase, evoking the step-by-step climb from an ordinary domain user to Domain Admin"
+visibility: "public"
+series: "Active Directory Series"
+seriesOrder: 3
+---
+
+> **Series Focus:** Part 1 mapped the architecture. Part 2 walked through enumerating it from an ordinary authenticated user's seat, and pointed out that the ACLs and delegation flags enumeration turns up form a connected graph rather than a list of findings. This part walks that graph: the specific techniques that turn one compromised low-privilege account into Domain Admin, explained assuming no prior exposure to any of them, using the tools actually current in 2026 rather than whatever a course written five years ago still teaches.
+
+**TL;DR:** Privilege escalation in Active Directory is rarely a vulnerability, it is a series of design decisions being used exactly as designed, aimed at a target they weren't meant for. <Term concept="kerberoasting">Kerberoasting</Term> and <Term concept="asrep-roasting">AS-REP Roasting</Term> abuse Kerberos itself to get crackable material with no interaction. <Term concept="unconstrained-delegation">Unconstrained delegation</Term> and <Term concept="rbcd">Resource-Based Constrained Delegation</Term> abuse the mechanism built to let one service act on a user's behalf. <Term concept="shadow-credentials">Shadow Credentials</Term> abuses the same attribute Windows Hello for Business uses to store a passwordless credential. <Term concept="esc1">AD CS ESC1</Term> abuses a certificate template that never checked who it was actually issuing a certificate to. <Term concept="dcsync">DCSync</Term> abuses the replication protocol domain controllers use to trust each other, to walk out with the one hash, <Term concept="krbtgt">krbtgt</Term>'s, that ends the game via a <Term concept="golden-ticket">Golden Ticket</Term>. Every technique below gets the same treatment: what it actually does, a diagram where the chain has more than two steps, the current tool for it (<Term concept="rubeus">Rubeus</Term>, <Term concept="netexec">NetExec</Term>, <Term concept="certipy">Certipy</Term>), and the event ID or signal that catches it.
+
+## Introduction
+
+"Privilege escalation" in Active Directory rarely means finding a bug. It means using a permission, a protocol feature, or a delegation setting exactly the way it was designed to be used, just against a target nobody intended it to reach. Part 2 covered how an attacker builds the map: users, groups, ACLs, delegation flags, certificate templates, all readable by default to any authenticated account. This post covers what happens once that map shows an edge worth walking, from a first foothold to Domain Admin.
+
+Two things before the techniques. First, none of this assumes you've read a specific prior AD course: every technique here is explained from what it actually does, not just named and left as an exercise. Where a chain has more than two steps, there's a diagram. Second, tooling in this space churns fast, and using stale tooling produces stale advice: CrackMapExec was archived in 2023 and its actively maintained successor is <Term concept="netexec">NetExec</Term>; PowerView still works but <Term concept="rubeus">Rubeus</Term> and NetExec cover most of what a modern engagement needs for the techniques below; and AD CS abuse used to mean the Windows-only Certify, but <Term concept="certipy">Certipy</Term> now does the same job cross-platform and is what most current tradecraft actually reaches for. Every tool named below is the one seeing active use and active commits right now, not the one a five-year-old slide deck happened to screenshot.
+
+## Credential Access via Kerberos: Kerberoasting and AS-REP Roasting
+
+**Kerberoasting** gets a full protocol-level treatment, with its own diagram and detection walkthrough, in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids). The short version: any authenticated domain user can request a service ticket for any account with a registered SPN, and that ticket is encrypted with a key derived from the service account's own password, so it can be taken offline and cracked with zero interaction with the target account. Current tooling: `Rubeus kerberoast`, or `netexec ldap <dc> -u user -p pass --kerberoasting output.txt`, both of which replace the older, clunkier combination of PowerView plus a separate offline formatter.
+
+**AS-REP Roasting** is the same offline-cracking idea, one protocol step earlier. Normally, the very first message a client sends the KDC (the AS-REQ) includes a timestamp encrypted with a key derived from the user's password, and the KDC only issues an AS-REP (containing a TGT) back if it can decrypt that timestamp correctly, proving the client actually knows the password. This is called pre-authentication, and it's on by default. Some accounts have it explicitly disabled, the `UF_DONT_REQUIRE_PREAUTH` flag on `userAccountControl`, usually left over from compatibility with an old application. For those accounts, the KDC skips the proof entirely and returns an AS-REP to anyone who asks for one by username, no password required to trigger it. That AS-REP is encrypted with a key derived from the target's actual password, so an attacker takes it offline and cracks it exactly like a Kerberoasted ticket, except no credential was needed to obtain it in the first place, only a valid username.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 230" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Two rows contrasting normal Kerberos pre-authentication with AS-REP Roasting. In the normal row, a client sends an AS-REQ with an encrypted timestamp proving knowledge of the password, and the KDC only returns an AS-REP with a TGT if that timestamp checks out. In the AS-REP Roasting row, an attacker sends an AS-REQ for a username with pre-authentication disabled, no proof of password required, and the KDC immediately returns an AS-REP that the attacker cracks offline.">
+    <text x="15" y="22" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">Normal: pre-authentication required</text>
+    <rect x="10" y="35" width="110" height="44" rx="7" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="65" y="61" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Any user</text>
+    <rect x="470" y="35" width="150" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="545" y="61" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <line x1="120" y1="48" x2="470" y2="48" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRoastA)" />
+    <text x="295" y="42" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.65">AS-REQ + encrypted timestamp (proof of password)</text>
+    <line x1="470" y1="68" x2="120" y2="68" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRoastA)" />
+    <text x="295" y="86" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.65">AS-REP with TGT, only if the timestamp checks out</text>
+
+    <text x="15" y="132" fill="#ef4444" fontSize="10.5" fontWeight="bold" opacity="0.9">AS-REP Roasting: pre-authentication disabled on the target</text>
+    <rect x="10" y="145" width="110" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="65" y="171" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <rect x="470" y="145" width="150" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="545" y="171" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <line x1="120" y1="158" x2="470" y2="158" stroke="#ef4444" strokeOpacity="0.7" strokeWidth="1.3" markerEnd="url(#adRoastB)" />
+    <text x="295" y="152" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.85">AS-REQ for a no-preauth username, no proof required</text>
+    <line x1="470" y1="178" x2="120" y2="178" stroke="#ef4444" strokeOpacity="0.7" strokeWidth="1.3" markerEnd="url(#adRoastB)" />
+    <text x="295" y="196" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.85">AS-REP returned immediately, cracked offline</text>
+    <defs>
+      <marker id="adRoastA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+      <marker id="adRoastB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.8" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The only difference is one flag on the target account. Everything downstream, offline cracking of a password-derived key, is identical to Kerberoasting.</p>
+</div>
+
+Current tooling: `Rubeus asreproast`, `netexec ldap <dc> -u user -p pass --asreproast output.txt`, or Impacket's `GetNPUsers.py` (still actively maintained under Fortra), all of which will enumerate every no-preauth account and dump crackable hashes in one pass.
+
+**Detection.** Both techniques leave a specific fingerprint in the encryption type and volume of Kerberos requests, not in any single request looking wrong. Kerberoasting shows up as a burst of **event 4769** (service ticket requested) for many distinct SPNs from one account in a short window, especially when the encryption type field shows RC4 (`0x17`) instead of AES on an environment that otherwise uses AES, since RC4 is what most cracking tooling still requests by default. AS-REP Roasting shows up as **event 4768** (TGT requested) for an account, with no corresponding pre-authentication success pattern and, again, frequently RC4. Neither is loud on its own; both are exactly the kind of query-volume anomaly Microsoft Defender for Identity is built to baseline and alert on, covered in Part 1's collection points table.
+
+## Delegation Abuse: Unconstrained Delegation and Resource-Based Constrained Delegation
+
+Delegation exists to solve a real problem: a front-end service (a web app, a file server) sometimes needs to act as the user talking to it when it turns around and talks to a second, back-end service, without that user typing their password twice. Kerberos has three ways to do this, and the oldest one is dangerously broad.
+
+**Unconstrained delegation** is a flag on a computer account, `TRUSTED_FOR_DELEGATION`, that says: this server may cache a full copy of the TGT of anyone who authenticates to it, and reuse that TGT to act as them against anything in the domain, not just one back-end service. It predates the more careful delegation models below and still shows up constantly, print servers being the classic, frequently forgotten example. Compromising a machine configured this way means every TGT that ever passed through its LSASS is sitting there for the taking, and an attacker doesn't have to wait: coercion techniques like PetitPotam or the printer bug can force a machine account, or in a worse case a privileged one, to authenticate to an attacker-controlled unconstrained-delegation host on demand.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 250" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram showing a Domain Admin, or a coerced machine account, authenticating to a print server trusted for unconstrained delegation, which caches the full TGT in LSASS. An attacker who compromises that print server extracts the cached TGT and acts as Domain Admin domain-wide.">
+    <rect x="240" y="10" width="200" height="44" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="340" y="36" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Domain Admin (or coerced account)</text>
+    <rect x="200" y="95" width="280" height="54" rx="8" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="340" y="118" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Print Server</text>
+    <text x="340" y="133" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.65">trusted for unconstrained delegation, caches every visitor's TGT</text>
+    <rect x="20" y="195" width="150" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="95" y="221" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <rect x="470" y="195" width="160" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="550" y="215" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Full Domain Admin</text>
+    <text x="550" y="228" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">access, domain-wide</text>
+    <line x1="340" y1="54" x2="340" y2="95" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adUncA)" />
+    <text x="345" y="78" textAnchor="start" fill="currentColor" fontSize="8" opacity="0.65">1. authenticates</text>
+    <line x1="150" y1="205" x2="230" y2="149" stroke="#ef4444" strokeOpacity="0.65" strokeWidth="1.2" markerEnd="url(#adUncB)" />
+    <text x="70" y="175" textAnchor="middle" fill="#ef4444" fontSize="7.5" opacity="0.85">2. compromises</text>
+    <line x1="220" y1="149" x2="120" y2="197" stroke="#ef4444" strokeOpacity="0.65" strokeWidth="1.2" markerEnd="url(#adUncB)" />
+    <text x="230" y="182" textAnchor="middle" fill="#ef4444" fontSize="7.5" opacity="0.85">3. extracts cached TGT</text>
+    <line x1="170" y1="217" x2="470" y2="217" stroke="#ef4444" strokeOpacity="0.65" strokeWidth="1.2" markerEnd="url(#adUncB)" />
+    <text x="320" y="211" textAnchor="middle" fill="#ef4444" fontSize="7.5" opacity="0.85">4. acts as the extracted identity</text>
+    <defs>
+      <marker id="adUncA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+      <marker id="adUncB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.8" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The server never had to be privileged. It only had to be trusted for delegation, and visited once by someone who was.</p>
+</div>
+
+**Resource-Based Constrained Delegation (RBCD)** is the modern, narrower replacement, and it flips who controls the trust: instead of a front-end server being globally trusted for delegation, the back-end resource itself lists exactly which accounts may delegate to it, in an attribute called `msDS-AllowedToActOnBehalfOfOtherIdentity`. That flip is exactly what makes it abusable in a different way: whoever can write that attribute on a computer object controls who gets to impersonate users against it, and writing it doesn't require domain admin, only `GenericWrite` (or equivalent) on that one computer object, an ACE that's easy to overlook. If the attacker doesn't already control a computer account to name in that attribute, <Term concept="machine-account-quota">machine account quota</Term>, ten by default for any authenticated user, lets them create one.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A five-step vertical chain for Resource-Based Constrained Delegation abuse. Step one, the attacker controls a computer account, via machine account quota or existing write access. Step two, the attacker sets msDS-AllowedToActOnBehalfOfOtherIdentity on the target computer to point at that account. Step three, S4U2Self requests a ticket to itself impersonating the target user. Step four, S4U2Proxy trades that ticket for one to the target computer as the same user. Step five, the KDC issues it and the attacker now acts as that user against the target computer.">
+    <rect x="70" y="10" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="34" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">1. Attacker controls a computer account (machine account quota, or existing write access)</text>
+    <rect x="70" y="64" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="88" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">2. Sets msDS-AllowedToActOnBehalfOfOtherIdentity on Target Computer to point at it</text>
+    <rect x="70" y="118" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="142" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">3. S4U2Self: requests a ticket to itself, impersonating the target user</text>
+    <rect x="70" y="172" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="196" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">4. S4U2Proxy: trades that ticket for one to Target Computer, as the same user</text>
+    <rect x="70" y="226" width="500" height="38" rx="6" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="320" y="250" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">5. KDC issues it: attacker now acts as that user against Target Computer</text>
+    <line x1="320" y1="48" x2="320" y2="64" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
+    <line x1="320" y1="102" x2="320" y2="118" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
+    <line x1="320" y1="156" x2="320" y2="172" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
+    <line x1="320" y1="210" x2="320" y2="226" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
+    <defs>
+      <marker id="adRbcd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>S4U2Self and S4U2Proxy are legitimate Kerberos extensions built for exactly this kind of delegated request. Nothing here is a protocol bug.</p>
+</div>
+
+Current tooling: Impacket's `addcomputer.py` (to create the attacker-controlled computer account) and `rbcd.py` (to set the delegation attribute), then Rubeus's `s4u` module (or Impacket's `getST.py`) to run the S4U2Self/S4U2Proxy chain and retrieve the final ticket.
+
+**Detection.** Unconstrained delegation abuse is best caught before it happens: alert on any change that sets `TRUSTED_FOR_DELEGATION` on a computer object (a `userAccountControl` change visible in **event 4738**, or the underlying attribute change in **event 5136**), and watch for coercion attempts, which Microsoft Defender for Identity has dedicated detections for. RBCD abuse leaves two distinct signals: a write to `msDS-AllowedToActOnBehalfOfOtherIdentity` itself (**event 5136**, if a SACL is configured on the object, since as covered in Part 1 this requires deliberate auditing setup) and, often the earlier tell, a burst of new computer account creation (**event 4741**) from a single user account exhausting or approaching its machine account quota.
+
+## Shadow Credentials
+
+Windows Hello for Business needs a way to authenticate a user with a public key instead of a password, and the attribute that stores that key material is `msDS-KeyCredentialLink`. It's a multi-valued attribute on user and computer objects, and, like every other attribute in AD, whether it can be written depends entirely on the object's ACL. An attacker with `GenericWrite`, `GenericAll`, or a couple of other ACE types on a target account can append their own key pair to that attribute, then authenticate as that account using <Term concept="pkinit">PKINIT</Term> and the private half of the key they just added, no password needed, no password changed.
+
+The detail worth sitting with: this technique doesn't require Active Directory Certificate Services to be deployed at all. It uses the Key Trust model, which needs only a domain controller running Windows Server 2016 or later with a server authentication certificate (something most DCs already have for LDAPS) and the domain at the 2016 functional level. That's a much lower bar than most people assume, and it's why write access to this one attribute deserves the same weight as write access to a password reset right during an ACL review.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain: write access to msDS-KeyCredentialLink on a target account, adding an attacker-controlled shadow credential, authenticating via PKINIT with that credential, and receiving back a valid TGT plus the account's NTLM hash with no password required.">
+    <rect x="10" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Write access to</text>
+    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">KeyCredentialLink</text>
+    <rect x="180" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Add attacker</text>
+    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">shadow credential</text>
+    <rect x="350" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="420" y="88" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">PKINIT auth with that key</text>
+    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">TGT + NT hash</text>
+    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">no password used</text>
+    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adShadow)" />
+    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adShadow)" />
+    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adShadow)" />
+    <defs>
+      <marker id="adShadow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The target's real password never changes, and never needs to. The forged key sits alongside it as a second, silent way in.</p>
+</div>
+
+Current tooling: `Whisker` (the original, C#, from Elad Shamir's research) or `pyWhisker` (its Python port, useful from non-domain-joined Linux hosts) to add the credential, and Certipy's `shadow auto` command, which adds the credential, authenticates, retrieves the resulting TGT and NT hash, and restores the original attribute value automatically in one step.
+
+**Detection.** Any write to `msDS-KeyCredentialLink` is inherently suspicious for an account that isn't enrolled in Windows Hello for Business, and shows up as **event 5136** with a SACL configured on the attribute. The authentication itself is a PKINIT-based AS-REQ, visible as **event 4768** with certificate-based pre-authentication indicated, which is rare enough in most environments that Microsoft Defender for Identity flags the volume and pattern directly.
+
+## AD CS Escalation: ESC1
+
+<Term concept="adcs">Active Directory Certificate Services</Term> is Microsoft's in-domain PKI, and it matters here for one specific reason: a certificate can substitute for a password during Kerberos authentication, via PKINIT, exactly as in the Shadow Credentials technique above. That means a misconfigured certificate template isn't just a PKI hygiene issue, it's a direct route to a TGT for whatever identity the certificate claims to belong to. This whole category was catalogued by Will Schroeder and Lee Christensen's 2021 "Certified Pre-Owned" research as the ESC1 through ESC8 techniques, and the list has kept growing since, past ESC16 in current tooling, as more misconfiguration classes get documented.
+
+**ESC1** is the simplest and most common of them, and a good example of the whole category. A certificate template is vulnerable when three things are all true at once: it lets the requester supply their own Subject Alternative Name (`CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT`) rather than the CA filling it in from the requester's own AD identity, it includes the Client Authentication EKU (so the resulting certificate is valid for PKINIT), and enrollment rights on the template are granted broadly, often to `Domain Users` or `Authenticated Users`, because nobody expected the SAN field to matter.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain for AD CS ESC1: a vulnerable certificate template is found, allowing an attacker-supplied Subject Alternative Name with Client Authentication EKU and broad enrollment rights. The attacker requests a certificate with the Subject Alternative Name set to a privileged user's UPN. The certificate authority issues it exactly as requested. The attacker authenticates via PKINIT with that certificate and receives a TGT for the impersonated privileged account.">
+    <rect x="10" y="60" width="140" height="50" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Vulnerable template</text>
+    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">found (Certipy find)</text>
+    <rect x="180" y="60" width="140" height="50" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Request cert, SAN</text>
+    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">= target's UPN</text>
+    <rect x="350" y="60" width="140" height="50" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">CA issues it</text>
+    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">exactly as requested</text>
+    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">PKINIT auth</text>
+    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">TGT as target</text>
+    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adEsc1)" />
+    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adEsc1)" />
+    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adEsc1)" />
+    <defs>
+      <marker id="adEsc1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The CA isn't compromised and never misbehaves. It issues exactly the certificate the template said it could, which is precisely the problem.</p>
+</div>
+
+Current tooling: `certipy find -u user -p pass -dc-ip <dc> -vulnerable` enumerates every template and flags exactly this combination of properties across the whole forest in one pass, and `certipy req` requests the certificate and performs the PKINIT authentication to hand back a usable TGT.
+
+**Detection.** The certificate authority's own event log (**events 4886 and 4887** on the CA server, tracking certificate requests and issuance) is the ground truth: a certificate request where the requesting principal and the Subject Alternative Name don't match, especially when the SAN belongs to a privileged account, is close to unambiguous. The proactive side matters just as much here: running `certipy find -vulnerable` against your own forest on a schedule is the AD CS equivalent of running BloodHound defensively, covered in Part 1's best practices, and catches the misconfiguration before anyone has to detect its abuse.
+
+## DCSync and the Golden Ticket Endgame
+
+Domain controllers trust each other with a specific replication protocol, and any account holding the `Replicating Directory Changes` and `Replicating Directory Changes All` rights, ordinarily just Domain Admins, Enterprise Admins, and the DCs themselves, can ask a DC to replicate any object's data, including password hashes, as though the requester were another domain controller. This is <Term concept="dcsync">DCSync</Term>, and the object worth asking for is always the same one: `krbtgt`, whose password hash is what encrypts and signs every Kerberos ticket in the domain.
+
+Once an attacker holds that hash, they can forge a <Term concept="golden-ticket">Golden Ticket</Term>: a Kerberos TGT built entirely offline, valid for any username and any group membership the attacker writes into it, including accounts that don't exist. Because it never touches a domain controller during creation, no authentication event marks the moment it's forged, only its later use.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain: an attacker holding Replicating Directory Changes rights runs DCSync to pull the krbtgt account's password hash from a domain controller, then forges a Golden Ticket entirely offline, then authenticates as any user with any group membership domain-wide until krbtgt's password is rotated." >
+    <rect x="10" y="60" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Replicating Directory</text>
+    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Changes rights</text>
+    <rect x="180" y="60" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">DCSync pulls</text>
+    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">krbtgt hash</text>
+    <rect x="350" y="60" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Forge Golden Ticket</text>
+    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">entirely offline</text>
+    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Anyone,</text>
+    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">domain-wide</text>
+    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDcsync)" />
+    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDcsync)" />
+    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDcsync)" />
+    <defs>
+      <marker id="adDcsync" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every other technique in this post is a way to reach this point. Once krbtgt is out, it stops mattering which account started the chain.</p>
+</div>
+
+Current tooling: Impacket's `secretsdump.py` (with `-just-dc` to run DCSync specifically) is the standard cross-platform way to pull the hash, and Rubeus's `golden` module, or Mimikatz's `kerberos::golden`, forges the ticket from it.
+
+**Detection.** DCSync itself is the more catchable half: a replication request (`DS-Replication-Get-Changes` or `DS-Replication-Get-Changes-All`, visible as **event 4662** with those specific GUIDs) originating from an IP address that isn't one of your domain controllers is a near-unambiguous signal, and it's exactly the kind of network-level pattern Microsoft Defender for Identity has a dedicated DCSync alert for, since it watches the replication traffic directly rather than depending on this auditing being configured. A Golden Ticket's actual use is far harder to catch after the fact, since it looks like valid Kerberos traffic from a domain perspective; the reliable mitigations are the two most-cited ones for a reason, rotating the krbtgt password twice (a single rotation leaves the previous hash valid) after any suspected DCSync, and limiting who holds replication rights in the first place, which is an ACL review question straight out of Part 1's best practices section.
+
+## Detection Recap
+
+Every technique above gets its own signal, but seeing them side by side is what turns individual alerts into a program. This extends the collection points table from Part 1 with the specific event or signal each technique produces.
+
+| Technique | Primary signal | Where to look |
+|---|---|---|
+| Kerberoasting | TGS-REQ burst for many SPNs from one account, often RC4 | Event 4769 on the DC; MDI |
+| AS-REP Roasting | AS-REQ for a no-preauth account, no proof of password | Event 4768 on the DC; MDI |
+| Unconstrained delegation abuse | TRUSTED_FOR_DELEGATION set on a computer; coercion attempts | Event 4738 / 5136; MDI coercion alerts |
+| RBCD abuse | Write to msDS-AllowedToActOnBehalfOfOtherIdentity; computer account creation burst | Event 5136 (if SACL set); event 4741 |
+| Shadow Credentials | Write to msDS-KeyCredentialLink; certificate-based AS-REQ | Event 5136 (if SACL set); event 4768 |
+| AD CS ESC1 | Certificate issued with a SAN that doesn't match the requester | CA events 4886/4887; proactive `certipy find -vulnerable` |
+| DCSync | Replication request from a non-DC source IP | Event 4662 with replication GUIDs; MDI DCSync alert |
+| Golden Ticket | No creation event; abnormal ticket use after a suspected DCSync | MDI anomaly detection; krbtgt rotation as mitigation |
+
+## Conclusion
+
+Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting and AS-REP Roasting use Kerberos exactly as specified. Unconstrained delegation and RBCD use delegation exactly as designed. Shadow Credentials uses the same key-trust mechanism Windows Hello for Business relies on. ESC1 uses certificate enrollment exactly as the template configured it to work. DCSync uses the replication protocol every domain controller depends on. The common thread across all six is that AD's permission model decides, object by object and attribute by attribute, which of these design features an account is actually allowed to reach, and privilege escalation is what happens when that permission model has drifted from what anyone intended, which per Part 1 is the security descriptor's job in the first place. Enumeration, Part 2's subject, is how that drift gets found before an attacker finds it first, and detecting the techniques in this post, which is what most of it has been about, is the layer that catches the drift nobody found in time.
+
+## References & Further Reading
+
+1. Will Schroeder and Lee Christensen, "Certified Pre-Owned: Abusing Active Directory Certificate Services" (SpecterOps, 2021). [https://specterops.io/wp-content/uploads/sites/3/2022/06/Certified_Pre-Owned.pdf](https://specterops.io/wp-content/uploads/sites/3/2022/06/Certified_Pre-Owned.pdf)
+	The whitepaper that catalogued ESC1 through ESC8, the foundation the ESC1 section is built on.
+2. Elad Shamir, "Shadow Credentials: Abusing Key Trust Account Mapping for Account Takeover" (2021). [https://eladshamir.com/2021/06/21/Shadow-Credentials.html](https://eladshamir.com/2021/06/21/Shadow-Credentials.html)
+	The original research behind the Shadow Credentials section, including the exact technical requirements and the Whisker tool.
+3. eladshamir, Whisker. [https://github.com/eladshamir/Whisker](https://github.com/eladshamir/Whisker)
+	The C# tool for adding, listing, and removing Shadow Credentials referenced above.
+4. MITRE ATT&CK, "Steal or Forge Kerberos Tickets: Golden Ticket," T1558.001. [https://attack.mitre.org/techniques/T1558/001/](https://attack.mitre.org/techniques/T1558/001/)
+	The classification behind the DCSync-to-Golden-Ticket section.
+5. MITRE ATT&CK, "Steal or Forge Kerberos Tickets: AS-REP Roasting," T1558.004. [https://attack.mitre.org/techniques/T1558/004/](https://attack.mitre.org/techniques/T1558/004/)
+	The classification behind the AS-REP Roasting section.
+6. Microsoft, "Kerberos Constrained Delegation Overview." [https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview](https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview)
+	Microsoft's own documentation of unconstrained, constrained, and resource-based constrained delegation.
+7. ly4k, Certipy. [https://github.com/ly4k/Certipy](https://github.com/ly4k/Certipy)
+	The current cross-platform AD CS enumeration and abuse tool referenced throughout the AD CS and Shadow Credentials sections.
+8. Pennyw0rth, NetExec. [https://github.com/Pennyw0rth/NetExec](https://github.com/Pennyw0rth/NetExec)
+	The actively maintained successor to CrackMapExec, referenced throughout for Kerberoasting and AS-REP Roasting.
+9. GhostPack, Rubeus. [https://github.com/GhostPack/Rubeus](https://github.com/GhostPack/Rubeus)
+	The Kerberos ticket manipulation tool referenced across nearly every section of this post.
+10. Microsoft, "Microsoft Defender for Identity Classic Security Alerts." [https://learn.microsoft.com/en-us/defender-for-identity/alerts-mdi-classic](https://learn.microsoft.com/en-us/defender-for-identity/alerts-mdi-classic)
+	The alert categories referenced in every detection subsection above, including the dedicated DCSync alert.
+11. "Kerberos, NTLM, and the Event IDs That Actually Matter" (this blog). [/posts/kerberos-ntlm-windows-event-ids](/posts/kerberos-ntlm-windows-event-ids)
+	The full protocol-level Kerberoasting walkthrough this post links out to rather than repeating.

@@ -311,7 +311,7 @@ export default async function PostPage({ params }: PostPageProps) {
       {/* Series Navigation */}
       {seriesNavigation && seriesNavigation.series && (
         <div className="bg-background/95 backdrop-blur-sm border-b border-border/40">
-          <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="max-w-6xl mx-auto px-6 py-8">
             <SeriesNavigation
               series={seriesNavigation.series}
               posts={seriesNavigation.posts}

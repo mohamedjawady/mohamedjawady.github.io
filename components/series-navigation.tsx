@@ -71,10 +71,10 @@ export function SeriesNavigation({
           {/* Navigation Buttons */}
           <div className="flex flex-col sm:flex-row gap-2">
             {previousPost ? (
-              <Button asChild variant="outline" size="sm" className="flex-1">
-                <Link href={`/posts/${previousPost.slug}`} className="flex items-center justify-center gap-2">
+              <Button asChild variant="outline" size="sm" className="flex-1 min-w-0">
+                <Link href={`/posts/${previousPost.slug}`} className="flex items-center justify-center gap-2 min-w-0">
                   <ChevronLeft className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">
+                  <span className="truncate min-w-0">
                     <span className="hidden sm:inline">Previous: </span>
                     {previousPost.title}
                   </span>
@@ -88,9 +88,9 @@ export function SeriesNavigation({
             )}
 
             {nextPost ? (
-              <Button asChild size="sm" className="flex-1">
-                <Link href={`/posts/${nextPost.slug}`} className="flex items-center justify-center gap-2">
-                  <span className="truncate">
+              <Button asChild size="sm" className="flex-1 min-w-0">
+                <Link href={`/posts/${nextPost.slug}`} className="flex items-center justify-center gap-2 min-w-0">
+                  <span className="truncate min-w-0">
                     <span className="hidden sm:inline">Next: </span>
                     {nextPost.title}
                   </span>

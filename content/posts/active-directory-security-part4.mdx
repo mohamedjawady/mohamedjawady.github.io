@@ -1,0 +1,282 @@
+---
+title: "Active Directory Series: Part 4 - Lateral Movement and Credential Extraction"
+description: "How an attacker actually moves from one compromised host to the next: PowerShell Remoting and the double-hop problem, then every place Windows keeps credentials worth stealing, LSASS, SAM, LSA Secrets, DPAPI and its domain backup key, certificates, and Azure/Entra tokens, what Mimikatz actually does to each, and Over-Pass-the-Hash turning a stolen hash into full Kerberos access."
+date: "2026-07-28"
+author: "Mohamed Habib Jaouadi"
+tags: ["active-directory", "windows", "red-team", "blue-team", "lateral-movement", "credential-access", "kerberos", "dpapi", "detection-engineering", "active-directory-series"]
+banner: "/banners/posts/active-directory-lateral-movement.jpg"
+bannerAlt: "A long hallway lined with doors, evoking the sequence of hosts an attacker moves through one credential at a time"
+visibility: "public"
+series: "Active Directory Series"
+seriesOrder: 4
+---
+
+> **Series Focus:** Part 3 covered turning an ACL, a delegation setting, or a certificate template into a privileged Kerberos ticket. This part covers the loop that usually surrounds that: landing on a host, stealing whatever credential material it holds, and using that material to reach the next host, repeated until something Part 3's techniques can finish the job on is within reach.
+
+**TL;DR:** <Term concept="winrm">PowerShell Remoting</Term> is the primary lateral movement rail in most Windows environments, and its <Term concept="double-hop-problem">double-hop problem</Term> is the same delegation mechanism Part 3 covered as an escalation path, just used legitimately. Once on a host, credential material lives in specific, enumerable places: LSASS memory, the local <Term concept="sam-database">SAM database</Term>, LSA Secrets in the SECURITY hive, <Term concept="dpapi">DPAPI</Term>-protected Credential Manager and Vault entries (decryptable domain-wide via a stolen backup key), certificates, and, on hybrid-joined machines, Azure/Entra tokens including the <Term concept="primary-refresh-token">Primary Refresh Token</Term>. <Term concept="mimikatz">Mimikatz</Term> reads all of these, though <Term concept="credential-guard">Credential Guard</Term> blocks its classic in-memory reads on modern, properly configured hosts, which is why current tradecraft increasingly reaches for offline minidump parsing and DPAPI-specific tooling instead. <Term concept="overpass-the-hash">Over-Pass-the-Hash</Term> turns a stolen NTLM hash into a real Kerberos TGT, and everything in this post exists to eventually reach an account that can run <Term concept="dcsync">DCSync</Term>, Part 3's endgame.
+
+## Introduction
+
+Privilege escalation and lateral movement are not two sequential phases, they're a loop. An attacker lands on a host, steals whatever credential material that host holds, uses it to reach a second host, steals what that one holds, and repeats until something reachable is privileged enough to finish the job, usually via a Part 3 technique. This post is that loop: the rail most environments actually move over, and the specific, enumerable places Windows keeps credentials worth stealing along the way.
+
+Same two ground rules as Part 3. Every technique is explained from what it actually does, not just named, with a diagram wherever the chain has more than two steps. And tooling gets named for what's actually current: <Term concept="mimikatz">Mimikatz</Term> is still the reference implementation for understanding these techniques, but running it unmodified against a modern, EDR-monitored, Credential Guard-enabled host is often closer to a detection test than a working attack, a point the Mimikatz section comes back to directly.
+
+## PowerShell Remoting: The Primary Lateral Movement Rail
+
+<Term concept="winrm">WinRM</Term>, Windows Remote Management, is the protocol behind `Enter-PSSession` and `Invoke-Command`, listening on TCP 5985 (HTTP) or 5986 (HTTPS) by default. It's the primary lateral movement rail in most Windows environments for a simple reason: it's already there, already expected in normal admin traffic, and by default only accepts a connection from an account in the target's local Administrators group, which makes a successful session a strong signal about the identity behind it, useful to both an attacker choosing where to move next and a defender triaging one.
+
+The detail that trips up nearly everyone the first time they rely on it operationally is the <Term concept="double-hop-problem">double-hop problem</Term>. PowerShell Remoting into Server A works fine, and running commands there works fine, but the moment a command inside that session tries to reach out to a third machine, Server B, using your identity, it fails or silently falls back to an unauthenticated context. Kerberos does this on purpose: your session on Server A holds proof of who you are, but not a delegatable copy of your credential it's allowed to forward onward, precisely so that compromising Server A doesn't automatically hand over everything you have access to beyond it.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 190" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram showing an attacker successfully establishing a PowerShell Remoting session to Server A, but a subsequent request from inside that session to a third machine, Server B, failing by default, the Kerberos double-hop problem, unless CredSSP or Resource-Based Constrained Delegation is configured.">
+    <rect x="10" y="60" width="140" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="80" y="86" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <rect x="250" y="60" width="160" height="44" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="330" y="86" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Server A</text>
+    <rect x="490" y="60" width="140" height="44" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="560" y="86" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Server B</text>
+    <line x1="150" y1="82" x2="250" y2="82" stroke="#10b981" strokeOpacity="0.7" strokeWidth="1.3" markerEnd="url(#adHopA)" />
+    <text x="200" y="72" textAnchor="middle" fill="#10b981" fontSize="7.5" opacity="0.9">WinRM session: works</text>
+    <line x1="410" y1="82" x2="490" y2="82" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" strokeDasharray="4 3" markerEnd="url(#adHopB)" />
+    <text x="450" y="72" textAnchor="middle" fill="#ef4444" fontSize="7" opacity="0.9">2nd hop: blocked by default</text>
+    <text x="330" y="130" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.65">Fixed only by CredSSP or Resource-Based Constrained Delegation</text>
+    <text x="330" y="146" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.65">(the same primitive Part 3 covered as an escalation path)</text>
+    <defs>
+      <marker id="adHopA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" opacity="0.8" />
+      </marker>
+      <marker id="adHopB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.8" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The same three fixes, CredSSP, classic constrained delegation, or RBCD, that make legitimate multi-tier administration work are exactly what an attacker needs configured to pivot past the second hop too.</p>
+</div>
+
+**Detection.** A PowerShell Remoting session spawns `wsmprovhost.exe` on the target, a reliable parent-process signal in EDR or Sysmon telemetry, especially with unusual child processes underneath it. With Script Block Logging and Module Logging enabled via Group Policy, **event 4104** captures the full text of every script executed in the session (even deobfuscated at runtime) and **event 4103** logs pipeline and module details, together the two highest-value PowerShell-specific log sources in any Windows environment. On the target, the session itself produces an ordinary **event 4624** logon.
+
+## Credential Extraction: Where Windows Actually Keeps Secrets
+
+Once an attacker is on a box, the question becomes what's actually extractable from it. The honest answer is: more than most people expect, spread across a small, enumerable set of well-known locations.
+
+### LSASS: Memory
+
+<Term concept="lsass">LSASS</Term> holds the credential material behind every currently logged-on session, and depending on what's authenticated to the box and how, that can include NTLM hashes, Kerberos tickets and their session keys, and, if a legacy provider called <Term concept="wdigest">WDigest</Term> is still enabled, a reversibly-encrypted copy of the plaintext password itself.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 190" style={{ width: "100%", maxWidth: "560px" }} role="img" aria-label="A diagram of lsass.exe containing NTLM hashes, Kerberos tickets and keys, and, if WDigest is enabled, a reversibly encrypted plaintext password, with a note that Credential Guard isolates this material into a separate hypervisor-protected process on hardened systems.">
+    <rect x="70" y="10" width="500" height="36" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="320" y="33" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">lsass.exe</text>
+    <rect x="20" y="70" width="180" height="46" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="110" y="98" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">NTLM hashes (msv)</text>
+    <rect x="230" y="70" width="180" height="46" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="320" y="90" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Kerberos tickets</text>
+    <text x="320" y="104" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">and keys</text>
+    <rect x="440" y="70" width="180" height="46" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="530" y="90" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Plaintext, only if</text>
+    <text x="530" y="104" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">WDigest is enabled</text>
+    <text x="320" y="150" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.65">Credential Guard isolates all of this into LsaIso.exe, a separate hypervisor-protected process,</text>
+    <text x="320" y="164" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.65">on hardened, properly configured hosts</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>WDigest is disabled by default since Windows 8.1 and Server 2012 R2, but still turns up toggled on in older or migrated environments.</p>
+</div>
+
+Mimikatz's `sekurlsa::logonpasswords` reads all of this on an unprotected host. On a host with <Term concept="credential-guard">Credential Guard</Term> enabled, that same command returns "KO - LSA Isolated": the secrets simply aren't in a memory space Mimikatz's technique can reach anymore. **Detection:** any process opening a handle to `lsass.exe` with memory-read access is inherently worth alerting on. **Event 4656** (a handle requested to an object) with `lsass.exe` as the target, or Sysmon **event 10** (ProcessAccess) with `lsass.exe` as the target process, are the two primary native signals, and this is one of the very few places where a well-tuned allowlist (a small, known set of legitimate processes ever touch LSASS this way) makes a high-fidelity detection genuinely achievable.
+
+### SAM and LSA Secrets: The SECURITY and SAM Hives
+
+The <Term concept="sam-database">SAM database</Term> holds every local account's password hash on a given machine, encrypted with a machine-specific boot key. The SECURITY hive holds LSA Secrets: service account passwords stored so Windows can log them on automatically, autologon passwords if configured, and, notably for the next section, `DPAPI_SYSTEM`, the machine's own DPAPI protection secret.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "560px" }} role="img" aria-label="A diagram showing the SYSTEM, SAM, and SECURITY registry hives feeding into an offline parsing tool such as secretsdump.py, which outputs local account password hashes and LSA secrets including stored service account passwords and the machine's DPAPI_SYSTEM secret.">
+    <rect x="10" y="15" width="140" height="40" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="80" y="39" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">SYSTEM hive (boot key)</text>
+    <rect x="10" y="65" width="140" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="80" y="89" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">SAM hive</text>
+    <rect x="10" y="115" width="140" height="40" rx="6" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="80" y="132" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">SECURITY hive</text>
+    <text x="80" y="146" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">(LSA secrets)</text>
+    <rect x="240" y="60" width="180" height="50" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="330" y="80" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">secretsdump.py</text>
+    <text x="330" y="94" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">(offline parsing)</text>
+    <rect x="470" y="50" width="160" height="70" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="550" y="72" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Local hashes +</text>
+    <text x="550" y="86" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">service creds +</text>
+    <text x="550" y="100" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">DPAPI_SYSTEM</text>
+    <line x1="150" y1="35" x2="240" y2="70" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" markerEnd="url(#adHive)" />
+    <line x1="150" y1="85" x2="240" y2="85" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" markerEnd="url(#adHive)" />
+    <line x1="150" y1="135" x2="240" y2="100" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" markerEnd="url(#adHive)" />
+    <line x1="420" y1="85" x2="470" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adHive)" />
+    <defs>
+      <marker id="adHive" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Live equivalents: Mimikatz's lsadump::sam and lsadump::secrets, or a simple `reg save` of all three hives followed by offline parsing.</p>
+</div>
+
+**Detection:** reading these hives requires SYSTEM privilege or `SeBackupPrivilege`, and the classic live-extraction pattern, `reg.exe save hklm\sam`, `reg.exe save hklm\security`, `reg.exe save hklm\system` in quick succession, is specific enough to be a reliable process-creation detection on its own, alongside **event 4657** for the underlying registry value access if auditing is configured.
+
+### DPAPI: Credential Manager, Vault, and the Domain Backup Key
+
+<Term concept="dpapi">DPAPI</Term> is what actually protects Windows Credential Manager entries (anything saved via `cmdkey` or the Credentials applet), the Windows Vault, and some browser-saved passwords. Every DPAPI-protected secret is encrypted under a per-user master key, and that master key is where the interesting part lives: it's protected two different ways at once. One copy is derived from the user's own password (or NTLM hash), which is why an attacker who already has that can decrypt locally. The other copy is encrypted under a domain-wide public key and backed up automatically the first time the master key is created, specifically so a forgotten password doesn't mean permanently losing access to Credential Manager entries.
+
+The domain controllers hold the private half of that backup key pair, and it never changes on its own. An attacker with Domain Admin rights extracts it once, with Mimikatz's `lsadump::backupkeys` or the equivalent in <Term concept="sharpdpapi">SharpDPAPI</Term>, and from that point on can decrypt any domain user's DPAPI-protected secrets, forever, without ever knowing that user's password.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="A diagram showing a user's DPAPI protected secret, such as a Credential Manager entry, encrypted under a master key. That master key is itself protected two ways: derived from the user's password for local decryption, and separately backed up under a domain-wide public key whose private half is held by the domain controllers. An attacker with Domain Admin rights extracts that private backup key once and can then decrypt any domain user's DPAPI secrets indefinitely, without ever knowing their password.">
+    <rect x="220" y="10" width="200" height="40" rx="7" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="320" y="35" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Credential Manager / Vault secret</text>
+    <rect x="230" y="70" width="180" height="36" rx="6" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="93" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Master Key</text>
+    <rect x="30" y="130" width="220" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="140" y="149" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Derived from the user's</text>
+    <text x="140" y="163" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">password / NTLM hash</text>
+    <rect x="390" y="130" width="220" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="500" y="149" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Backed up under the domain</text>
+    <text x="500" y="163" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">controllers' public key</text>
+    <rect x="390" y="195" width="220" height="50" rx="7" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="500" y="215" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">DC holds the private key.</text>
+    <text x="500" y="229" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Steal it once, decrypt any</text>
+    <text x="500" y="240" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">user's secrets forever</text>
+    <line x1="320" y1="50" x2="320" y2="70" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDpapi)" />
+    <line x1="290" y1="106" x2="160" y2="130" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adDpapi)" />
+    <line x1="350" y1="106" x2="480" y2="130" stroke="#ef4444" strokeOpacity="0.65" strokeWidth="1.1" markerEnd="url(#adDpapi)" />
+    <line x1="500" y1="174" x2="500" y2="195" stroke="#ef4444" strokeOpacity="0.65" strokeWidth="1.2" markerEnd="url(#adDpapi)" />
+    <defs>
+      <marker id="adDpapi" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The left path requires compromising each user individually. The right path requires compromising the domain once.</p>
+</div>
+
+**Detection:** the domain backup key retrieval itself is rare enough in legitimate operation to be a strong signal, DSInternals documents the specific LSA `LsaRetrievePrivateData` call pattern to alert on (`G$BCKUPKEY_PREFERRED` and `G$BCKUPKEY_P`). Individual master key or credential blob theft is harder to catch directly, which is exactly why the backup key extraction event is the control point worth instrumenting.
+
+### Certificates
+
+A private key marked non-exportable in the Windows certificate store is a policy setting enforced by CryptoAPI (CAPI) or CNG (the newer Cryptography API), not a cryptographic guarantee. Mimikatz's `crypto::capi` and `crypto::cng` commands patch the relevant provider in memory to strip that flag, after which the certificate exports normally. This matters directly for Part 3's AD CS content: a stolen certificate with the Client Authentication EKU authenticates via PKINIT exactly like a freshly requested one, so a certificate an attacker finds sitting on a compromised host can be just as useful as one obtained through ESC1.
+
+### Azure and Entra Tokens
+
+On a hybrid-joined or Entra-joined machine, the highest-value credential often isn't an AD artifact at all. A <Term concept="primary-refresh-token">Primary Refresh Token</Term> bundles proof of user sign-in with proof of device compliance, and because Conditional Access policies frequently key off device compliance, a stolen PRT doesn't just impersonate the user, it bypasses the Conditional Access policies and MFA requirements that would otherwise stop a plain stolen password cold. Tools like `ROADtoken` and `TokenTactics`, along with newer `cloudap::` functionality in Mimikatz itself, extract the PRT and MSAL token caches that browsers, Office applications, and the Azure CLI all maintain locally, turning one compromised endpoint into standing access across every cloud application tied to that identity.
+
+### Mimikatz: The Tool That Ties It Together
+
+Every technique above has a corresponding <Term concept="mimikatz">Mimikatz</Term> module: `sekurlsa::logonpasswords` for LSASS, `lsadump::sam` and `lsadump::secrets` for the local hives, `lsadump::backupkeys` and `dpapi::masterkey`/`dpapi::cred` for DPAPI, `crypto::capi`/`crypto::cng` for certificates, and `lsadump::dcsync` for Part 3's endgame. That breadth is exactly why it's been the reference tool in this space since 2011, and exactly why its raw binary is one of the most heavily signatured pieces of software that exists: running `mimikatz.exe` unmodified on an EDR-monitored host today is closer to a live-fire detection test than a quiet operation.
+
+Two things have shifted current tradecraft as a result. First, **Credential Guard**, now default-on for Windows 11 22H2+ and Server 2025 domain-joined non-DC systems, blocks the live in-memory reads `sekurlsa::logonpasswords` depends on, though it does not stop Kerberos ticket extraction (`sekurlsa::ekeys`) or any of the DPAPI-based techniques above, which is why operators increasingly pivot toward those instead of assuming LSASS is a dead end. Second, where LSASS access is still viable, the pattern has moved toward taking a memory dump offline (`comsvcs.dll` via `rundll32`, or a signed LOLBin equivalent) and parsing it later with a tool like `pypykatz`, entirely off the monitored host, or using a source-recompiled or BOF-based reimplementation rather than the signature-flagged public binary.
+
+## Over-Pass-the-Hash and Pass-the-Key
+
+Classic <Term concept="pass-the-hash">Pass the Hash</Term> reuses a captured NTLM hash directly in an NTLM authentication exchange, and it never touches Kerberos at all, which is also its weakness: NTLM is comparatively rare in a Kerberos-default AD environment, so its use stands out.
+
+<Term concept="overpass-the-hash">Over-Pass-the-Hash</Term> does something more useful: it uses that same NTLM hash as Kerberos long-term key material to request a real TGT directly from the KDC, exactly as if the attacker had authenticated normally. The one caveat is the encryption type. Kerberos accepts RC4 keys, and an NTLM hash is valid RC4 key material as-is, so requesting a TGT with it works, but it's also an encryption-type downgrade in an AES-default environment, a detectable signal by itself. Requesting the same TGT using the account's AES key instead avoids that downgrade entirely, which is specifically why that variant gets its own name, Pass the Key.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 190" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram showing an NTLM hash or AES key extracted from LSASS used as Kerberos key material in an AS-REQ, with the KDC returning a real TGT either way. Using the RC4/NTLM hash is called Over-Pass-the-Hash and produces a detectable encryption downgrade in an AES-default environment. Using the AES key instead is called Pass the Key and blends in with no downgrade.">
+    <rect x="20" y="70" width="150" height="46" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="95" y="90" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Hash / key from</text>
+    <text x="95" y="104" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">LSASS</text>
+    <rect x="240" y="70" width="160" height="46" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="320" y="90" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">AS-REQ using that</text>
+    <text x="320" y="104" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">key material</text>
+    <rect x="470" y="20" width="150" height="44" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="545" y="39" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">RC4: Over-Pass-</text>
+    <text x="545" y="52" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">the-Hash (downgrade)</text>
+    <rect x="470" y="122" width="150" height="44" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="545" y="141" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">AES: Pass the Key</text>
+    <text x="545" y="154" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">(blends in)</text>
+    <line x1="170" y1="93" x2="240" y2="93" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adOpth)" />
+    <line x1="400" y1="85" x2="470" y2="50" stroke="#ef4444" strokeOpacity="0.6" strokeWidth="1.1" markerEnd="url(#adOpth)" />
+    <line x1="400" y1="100" x2="470" y2="140" stroke="#10b981" strokeOpacity="0.6" strokeWidth="1.1" markerEnd="url(#adOpth)" />
+    <defs>
+      <marker id="adOpth" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Either branch yields the same thing: a real TGT, from a real KDC, that outlives the stolen hash it was built from and works everywhere Kerberos does, including against resources NTLM alone couldn't reach.</p>
+</div>
+
+Current tooling: Rubeus's `asktgt` module, with `/rc4:<hash>` for Over-Pass-the-Hash or `/aes256:<key>` for Pass the Key, requests the TGT and injects it directly into the current logon session. The resulting ticket is then reusable exactly like a stolen one, <Term concept="pass-the-ticket">Pass the Ticket</Term> from that point forward.
+
+**Detection:** an **event 4768** (TGT requested) with encryption type `0x17` (RC4) for an account in an environment that otherwise only ever uses AES is close to unambiguous, the same encryption-downgrade signal that flags Kerberoasting and AS-REP Roasting in Part 3. Pass the Key produces no such downgrade and is correspondingly harder to catch from the encryption type alone; the more durable signal there is the same identity authenticating from two hosts in a pattern inconsistent with normal usage.
+
+## The Endgame: From Any of This to DCSync
+
+Everything in this post is in service of one thing: reaching an account, or a hash, or a ticket, that holds Replicating Directory Changes rights, so that <Term concept="dcsync">DCSync</Term> can pull `krbtgt` and end the game with a Golden Ticket, covered in full in Part 3. It rarely takes a specific, named technique to get there; it takes whichever of the credential-extraction paths above happens to be available on whichever host is reachable next.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A five-step horizontal chain summarizing the whole post: an initial foothold, PowerShell Remoting used to pivot to the next host, credential extraction via LSASS, SAM, DPAPI, certificates, or cloud tokens, Over-Pass-the-Hash converting stolen material into Kerberos access, and finally reaching a host or account privileged enough to run DCSync, ending in a Golden Ticket as covered in Part 3.">
+    <rect x="5" y="55" width="115" height="44" rx="7" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="62" y="74" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Initial</text>
+    <text x="62" y="87" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">foothold</text>
+    <rect x="135" y="55" width="115" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="192" y="74" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">PowerShell</text>
+    <text x="192" y="87" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Remoting pivot</text>
+    <rect x="265" y="55" width="115" height="44" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="322" y="74" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Extract creds</text>
+    <text x="322" y="87" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">(LSASS/DPAPI/...)</text>
+    <rect x="395" y="55" width="115" height="44" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="452" y="74" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Over-Pass-</text>
+    <text x="452" y="87" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">the-Hash</text>
+    <rect x="525" y="55" width="110" height="44" rx="7" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="580" y="74" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">DCSync -&gt;</text>
+    <text x="580" y="87" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Golden Ticket</text>
+    <line x1="120" y1="77" x2="135" y2="77" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adChain)" />
+    <line x1="250" y1="77" x2="265" y2="77" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adChain)" />
+    <line x1="380" y1="77" x2="395" y2="77" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adChain)" />
+    <line x1="510" y1="77" x2="525" y2="77" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adChain)" />
+    <text x="322" y="125" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.6">The middle two steps repeat, host after host, until the last box is reachable</text>
+    <defs>
+      <marker id="adChain" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+</div>
+
+## Detection Recap
+
+| Technique | Primary signal | Where to look |
+|---|---|---|
+| PowerShell Remoting | wsmprovhost.exe parent process; full script content | Sysmon/EDR process tree; event 4104 / 4103 |
+| LSASS access | Handle opened to lsass.exe with read access | Event 4656; Sysmon event 10 |
+| SAM / SECURITY hive dump | reg.exe save of SAM/SECURITY/SYSTEM in sequence | Process creation telemetry; event 4657 |
+| DPAPI domain backup key theft | LsaRetrievePrivateData for G$BCKUPKEY_* | LSA API auditing (DSInternals guidance) |
+| Certificate export bypass | crypto provider (CAPI/CNG) patched in-process | EDR in-memory patch detection |
+| Azure/Entra token theft | PRT or MSAL cache read from an unusual process | Entra sign-in logs; device compliance anomalies |
+| Over-Pass-the-Hash | AS-REQ with RC4 in an AES-default environment | Event 4768, encryption type 0x17 |
+| Pass the Key / Pass the Ticket | No encryption downgrade; identity from inconsistent hosts | Behavioral/UEBA correlation, not a single event |
+
+## Conclusion
+
+Nothing in this post is a single dramatic exploit. It's a loop: land, extract whatever the host actually has, use it to move, repeat. PowerShell Remoting is the rail because it's already trusted. LSASS, SAM, LSA Secrets, DPAPI, certificates, and cloud tokens are the targets because Windows has to keep credential material somewhere reachable to function at all, the same tension that ran through the whole series starting with Part 1's forest and domain structure. Mimikatz's declining effectiveness against Credential Guard is a real win, but it's a win against one tool, not against the loop itself, which is exactly why every technique above got paired with a detection signal rather than left as an offense-only walkthrough. Part 3's DCSync and Golden Ticket are still where this loop ends; this post was about everything that gets an attacker there.
+
+## References & Further Reading
+
+1. Microsoft, "Making the second hop in PowerShell Remoting." [https://learn.microsoft.com/en-us/powershell/scripting/security/remoting/ps-remoting-second-hop](https://learn.microsoft.com/en-us/powershell/scripting/security/remoting/ps-remoting-second-hop)
+	Microsoft's own documentation of the double-hop problem and its three fixes.
+2. MITRE ATT&CK, "Remote Services: Windows Remote Management," T1021.006. [https://attack.mitre.org/techniques/T1021/006/](https://attack.mitre.org/techniques/T1021/006/)
+	The classification behind the PowerShell Remoting section.
+3. MITRE ATT&CK, "OS Credential Dumping," T1003 (and sub-techniques .001 LSASS Memory, .002 SAM, .004 LSA Secrets). [https://attack.mitre.org/techniques/T1003/](https://attack.mitre.org/techniques/T1003/)
+	The classification behind the LSASS, SAM, and LSA Secrets sections.
+4. MITRE ATT&CK, "Credentials from Password Stores: Windows Credential Manager," T1555.004. [https://attack.mitre.org/techniques/T1555/004/](https://attack.mitre.org/techniques/T1555/004/)
+	The classification behind the DPAPI section.
+5. DSInternals, "Retrieving DPAPI Backup Keys from Active Directory." [https://www.dsinternals.com/en/retrieving-dpapi-backup-keys-from-active-directory/](https://www.dsinternals.com/en/retrieving-dpapi-backup-keys-from-active-directory/)
+	The mechanics of the domain DPAPI backup key and how to audit its retrieval, referenced throughout the DPAPI section.
+6. GhostPack, SharpDPAPI. [https://github.com/GhostPack/SharpDPAPI](https://github.com/GhostPack/SharpDPAPI)
+	The current tool for bulk DPAPI decryption referenced in the DPAPI section.
+7. dirkjanm, ROADtoken. [https://github.com/dirkjanm/ROADtoken](https://github.com/dirkjanm/ROADtoken)
+	The Primary Refresh Token extraction tool referenced in the Azure and Entra Tokens section.
+8. Benjamin Delpy, Mimikatz. [https://github.com/gentilkiwi/mimikatz](https://github.com/gentilkiwi/mimikatz)
+	The reference tool this entire credential extraction section is organized around.
+9. MITRE ATT&CK, "Use Alternate Authentication Material: Pass the Hash," T1550.002, and "Pass the Ticket," T1550.003. [https://attack.mitre.org/techniques/T1550/002/](https://attack.mitre.org/techniques/T1550/002/) / [https://attack.mitre.org/techniques/T1550/003/](https://attack.mitre.org/techniques/T1550/003/)
+	The classification behind the Over-Pass-the-Hash and Pass the Ticket section.
+10. GhostPack, Rubeus. [https://github.com/GhostPack/Rubeus](https://github.com/GhostPack/Rubeus)
+	The tool behind the asktgt /rc4 and /aes256 commands referenced in the Over-Pass-the-Hash section.
+11. "Active Directory Series: Part 3 - From Enumeration to Privilege Escalation" (this blog). [/posts/active-directory-security-part3](/posts/active-directory-security-part3)
+	The full DCSync and Golden Ticket walkthrough this post's endgame section links out to rather than repeating.

@@ -69,6 +69,28 @@ Inside a domain, <Term concept="organizational-unit">organizational units</Term>
 
 A <Term concept="domain-controller">domain controller</Term> (DC) is a server running the Active Directory Domain Services role. It authenticates logons, answers directory queries, and replicates changes to every other DC in the domain using multi-master replication, meaning any writable DC can accept a change and propagate it, there is no single "primary" DC for ordinary writes. Every writable DC holds a full copy of the domain's partition of the directory in <Term concept="ntds-dit">NTDS.dit</Term>, an Extensible Storage Engine database at `%SystemRoot%\NTDS\ntds.dit` by default. NTDS.dit holds every object in the domain and, critically, the password hash for every domain account, which is the single reason a domain controller is the highest-value host in almost any Windows network and why extracting it (directly, or via <Term concept="dcsync">DCSync</Term> against a DC that never has to be touched at all) is the objective of so much post-compromise tooling.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 220" style={{ width: "100%", maxWidth: "560px" }} role="img" aria-label="A diagram of three domain controllers, DC1, DC2, and DC3, connected to each other in a full mesh with bidirectional arrows, illustrating that any writable domain controller can accept a change and replicate it to every other DC, with no single primary DC for ordinary writes.">
+    <rect x="70" y="40" width="140" height="44" rx="8" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="140" y="66" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">DC1</text>
+    <rect x="430" y="40" width="140" height="44" rx="8" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="500" y="66" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">DC2</text>
+    <rect x="250" y="150" width="140" height="44" rx="8" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="320" y="176" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">DC3</text>
+    <line x1="210" y1="62" x2="430" y2="62" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerStart="url(#adRep)" markerEnd="url(#adRep)" />
+    <text x="320" y="52" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.6">replicates</text>
+    <line x1="155" y1="84" x2="270" y2="150" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerStart="url(#adRep)" markerEnd="url(#adRep)" />
+    <line x1="485" y1="84" x2="370" y2="150" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerStart="url(#adRep)" markerEnd="url(#adRep)" />
+    <text x="320" y="118" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.55" fontStyle="italic">no single primary DC for ordinary writes</text>
+    <defs>
+      <marker id="adRep" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A change accepted at any one DC replicates outward to the others. There is no primary to fail over from, and no single DC whose downtime blocks writes.</p>
+</div>
+
 Not every DC needs to be writable. A Read-Only Domain Controller (RODC) holds a filtered, read-only copy of the database, typically deployed at branch offices where physical security cannot be guaranteed, precisely so that a stolen RODC does not hand over the whole domain's credential material.
 
 A subset of DCs also serve as <Term concept="global-catalog">Global Catalog</Term> (GC) servers. A GC holds a partial, read-only copy of every object in every domain in the forest, not just its own domain, which is what lets a client search or authenticate across domain boundaries without waiting on a referral. Universal group membership, in particular, is only resolved correctly when a GC is reachable, which is why GC availability is a forest-wide operational dependency, not a per-domain one.
@@ -119,11 +141,70 @@ Trusts come in several shapes. Parent-child and tree-root trusts inside a single
 
 Sites are AD's model of physical network topology, independent of the logical domain structure: a site is one or more IP subnets with good connectivity between them, typically a single office or data center. Sites exist for two reasons: to control replication traffic (inter-site replication is scheduled and compressed, intra-site is not) and to let clients find the nearest DC instead of authenticating across a WAN link to a DC on another continent.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 225" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of two AD sites, HQ and Branch-EMEA, each with their own domain controllers and subnet, connected by a site link carrying scheduled, compressed inter-site replication. A client located in the Branch site is shown finding its nearest domain controller, DC3, via a DNS SRV record lookup rather than reaching across the WAN to a DC in HQ.">
+    <rect x="30" y="40" width="260" height="110" rx="8" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="160" y="58" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">Site: HQ</text>
+    <rect x="55" y="70" width="100" height="36" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="105" y="93" textAnchor="middle" fill="currentColor" fontSize="10">DC1 (HQ)</text>
+    <rect x="170" y="70" width="100" height="36" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="220" y="93" textAnchor="middle" fill="currentColor" fontSize="10">DC2 (HQ)</text>
+    <text x="160" y="135" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.55">subnet 10.0.0.0/16</text>
+    <rect x="350" y="40" width="260" height="110" rx="8" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="480" y="58" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">Site: Branch-EMEA</text>
+    <rect x="430" y="70" width="100" height="36" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="480" y="93" textAnchor="middle" fill="currentColor" fontSize="10">DC3 (Branch)</text>
+    <text x="480" y="135" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.55">subnet 10.1.0.0/16</text>
+    <line x1="290" y1="95" x2="350" y2="95" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.2" markerStart="url(#adSite)" markerEnd="url(#adSite)" />
+    <text x="320" y="85" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.6">site link</text>
+    <rect x="420" y="180" width="120" height="34" rx="6" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="480" y="201" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Client (Branch)</text>
+    <line x1="480" y1="180" x2="480" y2="106" stroke="#10b981" strokeOpacity="0.75" strokeWidth="1.4" markerEnd="url(#adSiteA)" />
+    <defs>
+      <marker id="adSite" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+      <marker id="adSiteA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" opacity="0.9" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The client finds DC3 via a DNS SRV lookup because it shares a site, not DC1 or DC2 across the WAN link, and only HQ-to-Branch traffic on that link is subject to scheduled, compressed inter-site replication.</p>
+</div>
+
 Client-to-DC discovery, and Kerberos itself, both depend on DNS being correct. Every DC registers SRV records (`_ldap._tcp`, `_kerberos._tcp`, `_gc._tcp`, and more, under `_msdcs.<forest-root-domain>`) so that clients can locate a DC, a Global Catalog, or a KDC by service rather than by hardcoded hostname. This is not a minor implementation detail: break AD-integrated DNS and authentication breaks with it, which is also exactly why DNS is one of the first things worth enumerating quietly rather than one of the last, a point Part 2 comes back to.
 
 ## Group Policy: Configuration That Flows Down the OU Tree
 
 <Term concept="group-policy">Group Policy Objects</Term> (GPOs) are how configuration, from password policy to software deployment to logon scripts to security settings, gets pushed to users and computers without touching each machine by hand. A GPO has two halves: the Group Policy Container, an object in AD holding version and path metadata, and the Group Policy Template, the actual policy files replicated through <Term concept="sysvol">SYSVOL</Term> to every DC. GPOs are linked to sites, domains, or OUs and applied in that order (Local policy first, then Site, then Domain, then OU, nested OUs innermost-last), the mnemonic most admins learn is LSDOU, with later-applied settings winning on direct conflict unless a GPO is explicitly marked Enforced or a target is marked Block Inheritance. Because GPOs can push scripts and software with SYSTEM-level reach to every computer in an OU, write access to a GPO or the OU it is linked to is functionally equivalent to code execution on every machine that GPO touches, which is a fact enumeration tooling checks for directly.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of the LSDOU Group Policy application order: Local, Site, Domain, OU: Corp, and OU: Sales, applied in that order with later levels able to override earlier ones on direct conflict, except that a Domain-level GPO can be marked Enforced to resist being overridden, and OU: Sales can set Block Inheritance to refuse settings from above.">
+    <text x="320" y="20" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">LSDOU: each level applies after, and can override, the one before it</text>
+    <rect x="10" y="70" width="100" height="40" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="60" y="94" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Local</text>
+    <rect x="130" y="70" width="100" height="40" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="180" y="94" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Site</text>
+    <rect x="250" y="70" width="110" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="305" y="94" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Domain</text>
+    <text x="305" y="128" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.6" fontStyle="italic">can be marked Enforced</text>
+    <rect x="380" y="70" width="110" height="40" rx="6" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="435" y="94" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">OU: Corp</text>
+    <rect x="510" y="70" width="120" height="40" rx="6" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" strokeDasharray="4 3" />
+    <text x="570" y="94" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">OU: Sales</text>
+    <text x="570" y="128" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.6" fontStyle="italic">can Block Inheritance</text>
+    <line x1="110" y1="90" x2="130" y2="90" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adLsdou)" />
+    <line x1="230" y1="90" x2="250" y2="90" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adLsdou)" />
+    <line x1="360" y1="90" x2="380" y2="90" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adLsdou)" />
+    <line x1="490" y1="90" x2="510" y2="90" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adLsdou)" />
+    <defs>
+      <marker id="adLsdou" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Settings flow down the chain and later levels win on conflict, until Enforced or Block Inheritance changes the default flow at a specific level.</p>
+</div>
 
 ## Security Principals, SIDs, and the ACL on Every Object
 
@@ -156,6 +237,25 @@ The mechanism that actually decides what any given security principal can do to 
 ## Where Kerberos and NTLM Fit
 
 Everything above is what AD stores. Authentication is how a security principal proves it is who its SID says it is, and covering that properly, the Kerberos ticket exchange, why NTLM persists as a fallback, and what LSASS, NTDS.dit, and krbtgt each guard, is the entire subject of [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids). The short version for this post: Kerberos is the default and preferred protocol, backed by a Key Distribution Center running on every DC; NTLM is the legacy challenge-response protocol that still fires whenever Kerberos cannot be used, by IP address, across a non-Kerberos trust, or against a workgroup machine, and it is the protocol behind pass-the-hash and NTLM relay because the hash itself is sufficient to authenticate.
+
+## Best Practices and Collection Points
+
+Everything above is architecture. This section is the practical layer on top of it: the controls worth having in place before Part 2's enumeration techniques get run against your own domain, and the places to actually watch for them.
+
+**Best practices.** A <Term concept="tiered-administration">tiered administration model</Term> is the single highest-leverage control: domain controllers, PKI, and identity-sync servers sit in Tier 0, and a Tier 0 credential never gets typed into a lower-tier machine, which is what breaks the credential-theft-then-lateral-movement chain this series keeps returning to. Keep standing membership in Domain Admins, Enterprise Admins, and Schema Admins as close to empty as operationally possible, and use just-in-time elevation from a Privileged Access Workstation instead. Deploy <Term concept="laps">LAPS</Term> so local administrator passwords are unique and rotated per machine, not a single shared credential that turns one compromised workstation into lateral movement everywhere. Put high-value accounts in <Term concept="protected-users">Protected Users</Term>, review unconstrained delegation wherever it still exists and replace it with constrained or resource-based constrained delegation, and enable SID filtering on every trust inventoried back in the Trusts section. Because the security descriptor is where most real attack paths actually live, review the ACLs on <Term concept="adminsdholder">AdminSDHolder</Term> and other high-value objects on a real schedule, ideally by running BloodHound defensively against your own domain before anyone else does.
+
+**Collection points.** Default AD auditing was built for a directory, not a detection program, so most of the following requires deliberate configuration rather than showing up for free.
+
+| Collection point | What it gives you |
+|---|---|
+| DC Security event log | Logon events (4624/4625), Kerberos ticket requests (4768/4769), account and group changes (4720, 4732, 4728) |
+| Directory Service Access auditing | Object-level read/write logging (4662), but only for objects with a SACL explicitly configured, the only native way to see AD reads at all |
+| SYSVOL / Group Policy change auditing | GPO edits, since a writable GPO is functionally code execution on every machine it applies to |
+| DNS server logs | SRV record query patterns and zone transfer attempts, an early recon signal Part 2 comes back to |
+| Microsoft Defender for Identity sensor (per DC) | Network-level LDAP, Kerberos, and NTLM visibility independent of local audit settings, including honeytoken queries |
+| AD CS logs, if certificate services are deployed | Certificate issuance and template changes, a fast-growing escalation path this series does not cover in depth but is worth flagging on sight |
+
+None of these collection points substitute for the tiering and ACL hygiene above. They exist to catch the gap between the best practices that were actually followed and the ones that quietly were not.
 
 ## Conclusion
 

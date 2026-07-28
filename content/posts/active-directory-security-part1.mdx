@@ -1,0 +1,131 @@
+---
+title: "Active Directory Series: Part 1 - What Active Directory Actually Is"
+description: "Active Directory is not a single thing to attack or defend, it is a stack of interlocking components: forests, domains, the NTDS.dit database, FSMO roles, trusts, Group Policy, and the ACLs that quietly decide who can do what to whom. The architecture every later post in this series builds on."
+date: "2026-07-28"
+author: "Mohamed Habib Jaouadi"
+tags: ["active-directory", "windows", "windows-internals", "red-team", "blue-team", "active-directory-series"]
+banner: "/banners/posts/active-directory-fundamentals.jpg"
+bannerAlt: "Rows of server racks in a data center, evoking the domain controllers that hold an Active Directory forest together"
+visibility: "public"
+series: "Active Directory Series"
+seriesOrder: 1
+---
+
+> **Series Focus:** Nearly every real-world enterprise intrusion eventually touches Active Directory, because AD is the one system that knows about every user, every computer, and most of the trust relationships between them. This series starts with the architecture, moves to enumeration in Part 2, and from there into the misconfigurations that turn enumeration into compromise.
+
+**TL;DR:** <Term concept="active-directory">Active Directory</Term> is a hierarchical, <Term concept="ldap">LDAP</Term>-based directory service that stores every user, computer, group, and policy in an enterprise as an object in a replicated database. The logical structure is <Term concept="forest">forest</Term> containing one or more <Term concept="domain-tree">trees</Term>, trees containing <Term concept="domain">domains</Term>, domains containing <Term concept="organizational-unit">organizational units</Term>. Every domain is served by one or more <Term concept="domain-controller">domain controllers</Term>, each holding a copy of <Term concept="ntds-dit">NTDS.dit</Term>, the database that makes a DC worth compromising in the first place. Five <Term concept="fsmo">FSMO roles</Term> handle the operations multi-master replication cannot, <Term concept="group-policy">Group Policy</Term> pushes configuration down the OU hierarchy, and a <Term concept="security-descriptor">security descriptor</Term> on every single object decides who is allowed to read, write, or take ownership of it, which is the mechanism that both secures AD and, misconfigured, is how most real intrusions actually move through it. None of this is optional background: Part 2 enumerates every piece described here, and nothing in that enumeration will make sense without this map first.
+
+## Introduction
+
+Ask most defenders what Active Directory is and you get some version of "the thing that handles logins." That answer is not wrong, but it is the same as describing a city by its traffic lights. Active Directory is the identity and authorization plane for an entire Windows enterprise: every employee, every laptop, every server, every security group, and every policy that governs them lives inside it as an object with a defined set of attributes and a defined set of permissions. Compromise the directory and you do not compromise one machine, you compromise the map that says who is allowed to do what to everything else.
+
+That centrality is exactly why AD is the objective in the overwhelming majority of ransomware and targeted intrusions once an attacker has an initial foothold, and it is why the <Term concept="kill-chain">kill chain</Term>'s later phases and the <Term concept="unified-kill-chain">Unified Kill Chain</Term>'s entire Through stage are, in practice, mostly a story about Active Directory. This post is the architecture that makes the rest of the series legible. Part 2 covers enumerating everything described here from the perspective of an authenticated (or sometimes unauthenticated) domain user, and later parts will cover how the misconfigurations enumeration turns up get abused. None of that will make sense without knowing what a forest, a domain controller, and an ACL actually are, so that is what this post is.
+
+## The Logical Structure: Forests, Trees, and Domains
+
+Active Directory's logical structure is a set of nested containers, and getting the nesting right matters because each level is a different kind of boundary.
+
+A <Term concept="domain">domain</Term> is the smallest complete unit: it has its own partition of the directory database, its own DNS namespace, and its own default security policies (password policy, account lockout policy). A tree is one or more domains that share a contiguous DNS namespace, joined by automatic, transitive parent-child trusts, for example `corp.com` and its child `emea.corp.com`. A <Term concept="forest">forest</Term> is one or more trees, and the forest, not the domain, is the actual security boundary in Active Directory. Every domain in a forest shares one <Term concept="schema">schema</Term> (the forest-wide definition of every object class and attribute that can exist), one Configuration partition, and a <Term concept="global-catalog">Global Catalog</Term>. A Domain Admin in one domain is not automatically an admin anywhere else in the forest, but an Enterprise Admin or a compromised Schema Master is, which is the detail that makes "just isolate the child domain" a much weaker mitigation than it sounds.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A nested hierarchy diagram: a forest at the top containing two trees, each tree containing a root domain and a child domain, and one domain expanded to show organizational units for Sales and IT inside it.">
+    <rect x="20" y="10" width="600" height="50" rx="8" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="320" y="40" textAnchor="middle" fill="currentColor" fontSize="13" fontWeight="bold">FOREST (the actual security boundary, one schema, one Global Catalog)</text>
+    <rect x="40" y="80" width="270" height="34" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1" />
+    <text x="175" y="102" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">TREE: corp.com</text>
+    <rect x="330" y="80" width="270" height="34" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1" />
+    <text x="465" y="102" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">TREE: fabrikam.com</text>
+    <rect x="50" y="130" width="120" height="34" rx="6" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="1.5" />
+    <text x="110" y="152" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">corp.com</text>
+    <rect x="180" y="130" width="120" height="34" rx="6" fill="#10b981" fillOpacity="0.1" stroke="#10b981" strokeWidth="1" strokeDasharray="4 3" />
+    <text x="240" y="152" textAnchor="middle" fill="currentColor" fontSize="10.5">emea.corp.com</text>
+    <line x1="110" y1="164" x2="240" y2="130" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1.2" />
+    <rect x="340" y="130" width="120" height="34" rx="6" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="1.5" />
+    <text x="400" y="152" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">fabrikam.com</text>
+    <rect x="470" y="130" width="120" height="34" rx="6" fill="#10b981" fillOpacity="0.1" stroke="#10b981" strokeWidth="1" strokeDasharray="4 3" />
+    <text x="530" y="152" textAnchor="middle" fill="currentColor" fontSize="10.5">apac.fabrikam.com</text>
+    <line x1="400" y1="164" x2="530" y2="130" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1.2" />
+    <line x1="110" y1="164" x2="110" y2="190" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1.2" markerEnd="url(#adA)" />
+    <defs>
+      <marker id="adA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+    <rect x="30" y="196" width="180" height="94" rx="6" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="0.75" strokeOpacity="0.25" strokeDasharray="3 3" />
+    <text x="120" y="212" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold" opacity="0.8">corp.com domain, inside:</text>
+    <rect x="42" y="222" width="72" height="26" rx="5" fill="#f59e0b" fillOpacity="0.15" stroke="#f59e0b" strokeWidth="1" />
+    <text x="78" y="239" textAnchor="middle" fill="currentColor" fontSize="9">OU: Sales</text>
+    <rect x="122" y="222" width="72" height="26" rx="5" fill="#f59e0b" fillOpacity="0.15" stroke="#f59e0b" strokeWidth="1" />
+    <text x="158" y="239" textAnchor="middle" fill="currentColor" fontSize="9">OU: IT</text>
+    <rect x="42" y="256" width="152" height="26" rx="5" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1" />
+    <text x="118" y="273" textAnchor="middle" fill="currentColor" fontSize="9">Users, Computers, Groups</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Forest at the top, trees inside it joined by transitive trust, domains inside trees, OUs and objects inside domains.</p>
+</div>
+
+Inside a domain, <Term concept="organizational-unit">organizational units</Term> (OUs) are the containers an administrator actually works with day to day: OUs can be nested, can have Group Policy linked to them, and can have delegated administrative permissions scoped to exactly that OU. This is different from the built-in Users and Computers containers, which look similar in a directory browser but cannot have Group Policy linked to them directly, a distinction that trips up more AD deployments than it should.
+
+## Domain Controllers and the Database That Matters
+
+A <Term concept="domain-controller">domain controller</Term> (DC) is a server running the Active Directory Domain Services role. It authenticates logons, answers directory queries, and replicates changes to every other DC in the domain using multi-master replication, meaning any writable DC can accept a change and propagate it, there is no single "primary" DC for ordinary writes. Every writable DC holds a full copy of the domain's partition of the directory in <Term concept="ntds-dit">NTDS.dit</Term>, an Extensible Storage Engine database at `%SystemRoot%\NTDS\ntds.dit` by default. NTDS.dit holds every object in the domain and, critically, the password hash for every domain account, which is the single reason a domain controller is the highest-value host in almost any Windows network and why extracting it (directly, or via <Term concept="dcsync">DCSync</Term> against a DC that never has to be touched at all) is the objective of so much post-compromise tooling.
+
+Not every DC needs to be writable. A Read-Only Domain Controller (RODC) holds a filtered, read-only copy of the database, typically deployed at branch offices where physical security cannot be guaranteed, precisely so that a stolen RODC does not hand over the whole domain's credential material.
+
+A subset of DCs also serve as <Term concept="global-catalog">Global Catalog</Term> (GC) servers. A GC holds a partial, read-only copy of every object in every domain in the forest, not just its own domain, which is what lets a client search or authenticate across domain boundaries without waiting on a referral. Universal group membership, in particular, is only resolved correctly when a GC is reachable, which is why GC availability is a forest-wide operational dependency, not a per-domain one.
+
+## FSMO Roles: The Five Things Multi-Master Replication Cannot Do
+
+Multi-master replication works for almost everything in AD, but a handful of operations would corrupt the directory if two DCs tried to perform them independently and reconcile later. Those operations are pinned to a single DC at a time, the <Term concept="fsmo">FSMO</Term> (Flexible Single Master Operations) roles. Two are forest-wide, held once per forest; three are domain-wide, held once per domain.
+
+| Role | Scope | What breaks without it |
+|---|---|---|
+| Schema Master | Forest | No schema can be extended (new object classes or attributes), which blocks operations like raising the forest functional level or installing schema-dependent products. |
+| Domain Naming Master | Forest | Domains cannot be added to or removed from the forest. |
+| RID Master | Domain | DCs run out of RID pools and eventually cannot create new security principals in that domain. |
+| PDC Emulator | Domain | Time synchronization (which Kerberos depends on directly), password change urgency, account lockout processing, and default Group Policy authority all degrade. |
+| Infrastructure Master | Domain | Cross-domain group membership references (a user from Domain A in a group in Domain B) go stale and show as broken references in tools. |
+
+The PDC Emulator deserves a specific callout: it is the authoritative time source for the domain (Kerberos tickets fail outside a default five-minute clock skew, so time sync is a hard authentication dependency, not a nice-to-have), and it is the first DC any password change or account lockout is urgently replicated to, which is why PDC Emulator health shows up disproportionately often in real outages.
+
+## Trusts: Who Gets to Authenticate Where
+
+A trust lets users authenticated in one domain (or forest) access resources in another, without a duplicate account. The direction is the part people consistently get backwards: if Domain A trusts Domain B, then users from Domain B can authenticate to resources in Domain A, the trust flows in the direction of the domain doing the trusting, and access flows the opposite way, from the trusted domain into the trusting one.
+
+Trusts come in several shapes. Parent-child and tree-root trusts inside a single forest are created automatically, are transitive, and use Kerberos. Forest trusts connect two entire forests and are transitive across every domain in both, provided SID filtering and name suffix routing are configured correctly, which is exactly the kind of configuration detail that turns into a real attack path when it is not. External trusts connect to a single domain outside the forest, are non-transitive, and typically fall back to NTLM. Shortcut trusts are explicit trusts added between two domains that already have a trust path through the hierarchy, purely to shorten the authentication referral chain. Every non-forest-internal trust is worth an explicit inventory, because each one is a potential route for an attacker who has compromised the other side.
+
+## Sites, Subnets, and Why DNS Is Load-Bearing
+
+Sites are AD's model of physical network topology, independent of the logical domain structure: a site is one or more IP subnets with good connectivity between them, typically a single office or data center. Sites exist for two reasons: to control replication traffic (inter-site replication is scheduled and compressed, intra-site is not) and to let clients find the nearest DC instead of authenticating across a WAN link to a DC on another continent.
+
+Client-to-DC discovery, and Kerberos itself, both depend on DNS being correct. Every DC registers SRV records (`_ldap._tcp`, `_kerberos._tcp`, `_gc._tcp`, and more, under `_msdcs.<forest-root-domain>`) so that clients can locate a DC, a Global Catalog, or a KDC by service rather than by hardcoded hostname. This is not a minor implementation detail: break AD-integrated DNS and authentication breaks with it, which is also exactly why DNS is one of the first things worth enumerating quietly rather than one of the last, a point Part 2 comes back to.
+
+## Group Policy: Configuration That Flows Down the OU Tree
+
+<Term concept="group-policy">Group Policy Objects</Term> (GPOs) are how configuration, from password policy to software deployment to logon scripts to security settings, gets pushed to users and computers without touching each machine by hand. A GPO has two halves: the Group Policy Container, an object in AD holding version and path metadata, and the Group Policy Template, the actual policy files replicated through <Term concept="sysvol">SYSVOL</Term> to every DC. GPOs are linked to sites, domains, or OUs and applied in that order (Local policy first, then Site, then Domain, then OU, nested OUs innermost-last), the mnemonic most admins learn is LSDOU, with later-applied settings winning on direct conflict unless a GPO is explicitly marked Enforced or a target is marked Block Inheritance. Because GPOs can push scripts and software with SYSTEM-level reach to every computer in an OU, write access to a GPO or the OU it is linked to is functionally equivalent to code execution on every machine that GPO touches, which is a fact enumeration tooling checks for directly.
+
+## Security Principals, SIDs, and the ACL on Every Object
+
+Every user, computer, and group is a security principal with a unique Security Identifier, a SID. A domain SID has the form `S-1-5-21-<domain-identifier>-<RID>`, where the Relative Identifier (RID) is the part that is actually unique within the domain and is handed out by the RID Master. Some RIDs are fixed and well known regardless of domain: `-500` is the built-in Administrator, `-512` is Domain Admins, `-519` is Enterprise Admins, `-502` is the krbtgt account. Recognizing a well-known RID at the end of a SID is a small habit that pays off constantly during enumeration.
+
+The mechanism that actually decides what any given security principal can do to any given object is the object's security descriptor: an owner, a DACL (Discretionary Access Control List, a list of ACEs granting or denying specific rights like read, write, create-child, or delegated rights like reset-password), and a SACL for auditing. This is not an afterthought bolted onto AD, it is one of the two things AD fundamentally is, a database of objects and the permissions on them. It is also the mechanism responsible for the entire modern generation of AD attack paths: a misconfigured `GenericAll`, `WriteDACL`, or `ForceChangePassword` ACE granted to a low-privileged group, sitting quietly on an OU or a privileged user, is functionally a privilege escalation path that no password policy or patch level will ever catch, which is exactly why graph-based tools that map ACLs across the whole domain, covered in Part 2, exist at all.
+
+## Where Kerberos and NTLM Fit
+
+Everything above is what AD stores. Authentication is how a security principal proves it is who its SID says it is, and covering that properly, the Kerberos ticket exchange, why NTLM persists as a fallback, and what LSASS, NTDS.dit, and krbtgt each guard, is the entire subject of [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids). The short version for this post: Kerberos is the default and preferred protocol, backed by a Key Distribution Center running on every DC; NTLM is the legacy challenge-response protocol that still fires whenever Kerberos cannot be used, by IP address, across a non-Kerberos trust, or against a workgroup machine, and it is the protocol behind pass-the-hash and NTLM relay because the hash itself is sufficient to authenticate.
+
+## Conclusion
+
+None of this architecture is optional context. A forest is the actual trust boundary, not a domain. A domain controller is worth compromising because of NTDS.dit, not because it happens to be a server. FSMO roles are single points of specific operations, not single points of authentication. Trusts move access opposite to their stated direction. GPOs are effectively remote code execution scoped by OU. And underneath every object in the whole structure sits a security descriptor that either protects the object correctly or, far more often than anyone would like, quietly grants an attack path to a group nobody remembers adding. Part 2 walks through enumerating every one of these components as they actually appear to an authenticated domain user, which in AD is nearly everyone.
+
+## References & Further Reading
+
+1. Microsoft, "Active Directory Domain Services Overview." [https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/get-started/virtual-dc/active-directory-domain-services-overview](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/get-started/virtual-dc/active-directory-domain-services-overview)
+	Microsoft's own architectural overview of AD DS.
+2. Microsoft, "FSMO Roles." [https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/fsmo-roles](https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/fsmo-roles)
+	The authoritative reference for what each of the five FSMO roles does and what breaks without it.
+3. Microsoft, "Understanding Active Directory Site Topology." [https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/understanding-active-directory-site-topology](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/understanding-active-directory-site-topology)
+	Sites, subnets, and multi-master replication in detail.
+4. Microsoft, "Security Identifiers." [https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers)
+	The structure of a SID and the well-known RIDs referenced in this post.
+5. "Kerberos, NTLM, and the Event IDs That Actually Matter" (this blog). [/posts/kerberos-ntlm-windows-event-ids](/posts/kerberos-ntlm-windows-event-ids)
+	The full treatment of Kerberos and NTLM referenced above.

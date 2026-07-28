@@ -1,0 +1,87 @@
+---
+title: "Active Directory Series: Part 2 - Enumerating a Domain"
+description: "In most Active Directory environments, any authenticated domain user, including one from a single phished laptop, can read almost the entire directory by default. What that access actually exposes, the tools that turn it into a domain map, and why most of it leaves no alert at all."
+date: "2026-07-28"
+author: "Mohamed Habib Jaouadi"
+tags: ["active-directory", "windows", "red-team", "bloodhound", "detection-engineering", "active-directory-series"]
+banner: "/banners/posts/active-directory-enumeration.jpg"
+bannerAlt: "A dense web of glowing connected nodes, evoking the domain graph that AD enumeration tools like BloodHound build from ordinary LDAP reads"
+visibility: "public"
+series: "Active Directory Series"
+seriesOrder: 2
+---
+
+> **Series Focus:** Part 1 mapped what Active Directory is: forests, domain controllers, FSMO roles, trusts, GPOs, and the ACL on every object. This part enumerates all of it from the seat an attacker actually starts from, an ordinary authenticated domain user, and shows why almost none of that reading gets logged.
+
+**TL;DR:** Active Directory has to be broadly readable to function: every client needs to resolve group membership, look up other users, and find the nearest domain controller, so the default permissions on most objects grant read access to <Term concept="security-principal">Authenticated Users</Term>, not just administrators. That single fact is why enumeration barely counts as a separate attack phase in practice, it is closer to a free query interface handed to anyone with any valid domain credential. This post covers what that access exposes (users, privileged group membership, computer delegation flags, ACLs, trusts, SPNs), the tools that turn raw <Term concept="ldap">LDAP</Term> reads into a usable domain map (<Term concept="powerview">PowerView</Term>, <Term concept="bloodhound">BloodHound</Term>, <Term concept="adrecon">ADRecon</Term>, Impacket), and the uncomfortable defensive reality: standard AD auditing does not log reads, so most enumeration is invisible unless you specifically instrument for the volume and shape of it rather than for any single query.
+
+## Introduction
+
+Part 1 covered what Active Directory is made of. This part covers how someone, attacker or defender, actually finds out what a specific AD environment contains, and the honest starting point is that this is easier than most defenders expect. AD was designed as a directory service before it was hardened as a security boundary, and a directory that nobody can query is not useful, so the default access control on most objects and attributes grants read to Authenticated Users, a group that includes essentially every domain-joined machine and every valid credential, privileged or not.
+
+That default is not a bug report waiting to be filed. It is a deliberate, decades-old design decision, and understanding it is the single most important thing in this post: enumeration in AD is rarely about exploiting a vulnerability, it is about asking the directory questions it was built to answer, at a scale and with a tool it was not built to answer them to. Everything below assumes the attacker already has one valid, unprivileged domain credential, from a phished user, a low-privilege service account, or a single domain-joined workstation, which is the overwhelmingly common starting point in real intrusions.
+
+## Unauthenticated vs. Authenticated: Two Very Different Starting Points
+
+Unauthenticated enumeration, against a modern, patched AD environment, is thin. Null SMB sessions and anonymous LDAP binds, which used to hand over user lists and password policy to anyone on the network, have been closed by default since Windows Server 2003 SP1 and Vista. What is usually still available without credentials is the domain and forest name from DNS, the list of domain controllers from SRV records, and, if Kerberos pre-authentication is reachable, username validation: a Kerberos AS-REQ against a valid username returns a different error than one against an invalid username, which lets an attacker validate a username list without ever supplying a password or triggering a lockout counter.
+
+Authenticated enumeration is a different world entirely. The moment a single valid domain credential is available, an LDAP bind to any domain controller opens read access to nearly the entire directory: every user object and most of its attributes, every group and its membership, every computer object and its delegation flags, every GPO, every trust, and, critically, the security descriptor on all of it. There is effectively no privilege escalation required to go from "one compromised laptop" to "a structural map of the entire domain," which is precisely why this phase of an intrusion is so hard to prevent and, as the last section of this post covers, so hard to detect.
+
+## What Enumeration Actually Exposes
+
+**Domain and forest information.** Domain and forest functional level, the domain SID, the default password and account lockout policy, and any fine-grained password policies (PSOs) applied to specific groups, all readable without any special rights.
+
+**Users.** Every user object, with attributes far more useful than a name: `userAccountControl` flags reveal accounts with `PASSWD_NOTREQD` set or `DONT_EXPIRE_PASSWORD`, the `description` field is a perennial source of plaintext passwords typed in by a well-meaning helpdesk years ago, and `lastLogonTimestamp` separates active accounts from stale ones worth targeting because nobody is watching them.
+
+**Groups, especially nested membership.** Direct membership in Domain Admins is the obvious thing to check, and also the thing most environments have already learned to watch. Nested membership is the part naive enumeration misses: a user in a group that is itself a member of Domain Admins is a Domain Admin in every way that matters, and a simple, non-recursive membership query will not show that relationship at all.
+
+**Computers and their delegation flags.** Operating system and patch level identify easy targets directly. Far more valuable is the `userAccountControl` bit for unconstrained delegation: a computer trusted for unconstrained delegation caches a copy of the Kerberos TGT of any user who authenticates to it, so compromising that one machine can mean harvesting the credentials of everyone who ever logs into it, print servers and file servers being the classic, frequently-overlooked example.
+
+**Service Principal Names.** Any account with an SPN registered, almost always a service account, can have a Kerberos service ticket requested for it by any authenticated user and cracked offline, no interaction with the target account required. Enumerating every SPN in the domain is enumerating every Kerberoasting candidate in the domain in one pass, a technique covered protocol-first in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids).
+
+**ACLs.** The security descriptor on every object, covered structurally in Part 1, is where enumeration stops being a list of facts and becomes a graph. A `GenericAll` or `WriteDACL` ACE granted to a low-privileged group on an OU, a GPO, or a privileged user is a privilege escalation path that exists regardless of patch level, and it is precisely the relationship BloodHound is built to surface at domain scale, because no human is finding it by browsing ACL editor dialogs one object at a time.
+
+**Trusts and delegation.** Direction, transitivity, and SID filtering status of every trust enumerated in Part 1, plus the full picture of delegation across the domain: unconstrained, constrained (with or without protocol transition), and resource-based constrained delegation, each one a distinct escalation primitive with a distinct enumeration signature.
+
+## Tooling: From Native Binaries to Graph Databases
+
+Enumeration tooling spans a spectrum from built-in and quiet to purpose-built and loud, and the right choice depends on what the operator is optimizing for.
+
+**Native Windows tools** require no additional installation and blend into normal admin activity: `net user /domain`, `net group "domain admins" /domain`, `nltest /domain_trusts`, `dsquery`, and the PowerShell ActiveDirectory module's `Get-ADUser`, `Get-ADGroup`, `Get-ADComputer`, and `Get-ADTrust` cmdlets (which require RSAT, but RSAT is common enough on admin workstations to not stand out).
+
+**PowerView**, from the PowerSploit and later Empire toolchains, is the tool most public enumeration writeups are built around: `Get-DomainUser`, `Get-DomainComputer`, `Get-DomainGroupMember`, `Get-DomainTrust`, and `Get-DomainObjectAcl` cover the same ground as native tools with far less friction, plus derived helpers like `Find-DomainShare` and `Get-DomainGPOUserIsAdmin` that answer compound questions directly instead of requiring the operator to correlate raw output by hand.
+
+**<Term concept="bloodhound">BloodHound</Term>**, using the SharpHound (or the cross-platform AzureHound/opengraph) collector, is the tool that changed AD offense and defense more than any other single release in the last decade. SharpHound walks LDAP and, optionally, local session and group data on every reachable computer, and loads the result into a graph database where users, groups, computers, GPOs, and every ACE become nodes and edges. The question that used to take an experienced operator hours of manual correlation, what is the shortest path from this compromised user to Domain Admins, becomes a single graph query. Run defensively against your own domain before an attacker runs it against you, it is the fastest way to find the nested-group and stray-ACL paths this post keeps describing.
+
+**ADRecon** and **PingCastle** trade interactivity for reporting: ADRecon produces a single Excel workbook covering the whole domain, and PingCastle produces a risk-scored security assessment report, both popular in audit and compliance contexts as much as offensive ones.
+
+**Impacket**, the Python toolkit, brings the same enumeration to Linux operators and CI-style automation: `GetADUsers.py` for bulk user detail, `GetUserSPNs.py` specifically for Kerberoastable accounts, and `lookupsid.py` for SID brute-forcing against a target directly.
+
+## The Defensive Reality: Most of This Is Invisible by Design
+
+Here is the uncomfortable part. Default Windows auditing logs object changes well and object reads almost not at all. A user running `Get-ADUser -Filter *` or a full PowerView sweep against the domain generates, by default, essentially no distinguishing event on the domain controller. This is not a logging gap anyone forgot to close, it follows directly from the same design decision that makes enumeration possible in the first place: a directory built to be freely queried does not audit queries by default, because auditing every LDAP read against a busy DC would be its own operational problem.
+
+What is detectable is not any single query, it is the shape and volume of a lot of queries in a short time from one place. A SharpHound collection run touches most objects in the domain within minutes, a pattern normal user activity never produces, and Microsoft Defender for Identity (the direct descendant of Advanced Threat Analytics) is built specifically to baseline normal LDAP query volume per account and alert on the deviation, alongside dedicated detections for reconnaissance patterns like SAM-R enumeration and DNS zone transfer attempts. Kerberoasting leaves a similar volume signature one layer up the stack: a burst of TGS-REQ (event 4769) requests for many distinct SPNs from a single account in a short window is a strong signal even without Defender for Identity, provided the relevant Directory Service Access auditing (event 4662) is enabled with SACLs configured on the objects worth watching, which most domains do not do by default and have to opt into deliberately.
+
+The other practical defense is a honeytoken: a decoy user with a deliberately interesting name, a fake SPN, or a fake privileged group membership that no legitimate process or person has any reason to touch. Native Windows auditing will not flag an LDAP read against it, but a network-based sensor like Defender for Identity watches LDAP traffic directly rather than relying on the DC's own audit log, so it can and does alert the moment the honeytoken object is queried at all, before anyone gets far enough to actually use what they found. That single control turns an otherwise invisible read into one of the highest signal-to-noise detections available against this entire phase.
+
+## Conclusion
+
+Enumeration is not the noisy, exploit-driven phase defenders sometimes picture. In AD, it is closer to reading a phone book that happens to also list who has the keys to every door in the building, made possible by default permissions nobody had to misconfigure and largely invisible under default audit settings nobody had to disable. The map that PowerView or BloodHound builds from that access, privileged group membership, delegation flags, and ACL relationships, is not a list of separate findings, it is a single connected graph, and the next part in this series picks up exactly there: how the paths that graph reveals actually get walked.
+
+## References & Further Reading
+
+1. Microsoft, "Security Principals." [https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers)
+	Security principals, SIDs, and the Authenticated Users group referenced throughout this post.
+2. SpecterOps, BloodHound documentation. [https://bloodhound.specterops.io/](https://bloodhound.specterops.io/)
+	The current, actively maintained documentation for BloodHound and the SharpHound collector.
+3. Robbins, Christensen, Schroeder, "An ACE Up the Sleeve: Designing Active Directory DACL Backdoors" (BlackHat, 2017). [https://specterops.io/wp-content/uploads/sites/3/2022/06/an_ace_up_the_sleeve.pdf](https://specterops.io/wp-content/uploads/sites/3/2022/06/an_ace_up_the_sleeve.pdf)
+	The paper that made ACL-based attack paths, and BloodHound's whole reason for existing, broadly understood.
+4. PowerSploit / PowerView. [https://github.com/PowerShellMafia/PowerSploit/tree/master/Recon](https://github.com/PowerShellMafia/PowerSploit/tree/master/Recon)
+	The original PowerView source and the recon cmdlets referenced in this post.
+5. Fortra, Impacket. [https://github.com/fortra/impacket](https://github.com/fortra/impacket)
+	The Python toolkit behind GetADUsers.py, GetUserSPNs.py, and the other cross-platform enumeration tools referenced above.
+6. Microsoft, "Microsoft Defender for Identity Classic Security Alerts." [https://learn.microsoft.com/en-us/defender-for-identity/alerts-mdi-classic](https://learn.microsoft.com/en-us/defender-for-identity/alerts-mdi-classic)
+	The Reconnaissance and discovery alert category, including Account Enumeration (LDAP), User and Group Membership Reconnaissance (SAMR), and Honeytoken Was Queried via LDAP, referenced in the defensive section.
+7. "Kerberos, NTLM, and the Event IDs That Actually Matter" (this blog). [/posts/kerberos-ntlm-windows-event-ids](/posts/kerberos-ntlm-windows-event-ids)
+	The Kerberoasting mechanics referenced above, covered protocol-first.

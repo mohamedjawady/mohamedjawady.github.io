@@ -41,11 +41,71 @@ Authenticated enumeration is a different world entirely. The moment a single val
 
 **ACLs.** The security descriptor on every object, covered structurally in Part 1, is where enumeration stops being a list of facts and becomes a graph. A `GenericAll` or `WriteDACL` ACE granted to a low-privileged group on an OU, a GPO, or a privileged user is a privilege escalation path that exists regardless of patch level, and it is precisely the relationship BloodHound is built to surface at domain scale, because no human is finding it by browsing ACL editor dialogs one object at a time.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 160" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A path diagram showing a user named jdoe who is a member of the Helpdesk group, which is a member of the Server Admins group, which holds a GenericAll ACE granting full control over Domain Admins, forming a complete attack path built from two membership hops and one ACL edge.">
+    <text x="320" y="20" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold" opacity="0.85">One nested-group hop plus one stray ACE: a complete path to Domain Admins</text>
+    <rect x="10" y="70" width="120" height="44" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="70" y="97" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">jdoe (user)</text>
+    <rect x="157" y="70" width="140" height="44" rx="6" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="227" y="97" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Helpdesk (group)</text>
+    <rect x="324" y="70" width="150" height="44" rx="6" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="399" y="97" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Server Admins (group)</text>
+    <rect x="501" y="70" width="130" height="44" rx="6" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="566" y="97" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold">Domain Admins</text>
+    <line x1="130" y1="92" x2="157" y2="92" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adP2a)" />
+    <text x="143" y="60" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">MemberOf</text>
+    <line x1="297" y1="92" x2="324" y2="92" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adP2a)" />
+    <text x="310" y="60" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">MemberOf</text>
+    <line x1="474" y1="92" x2="501" y2="92" stroke="#ef4444" strokeOpacity="0.7" strokeWidth="1.4" strokeDasharray="4 3" markerEnd="url(#adP2b)" />
+    <text x="487" y="60" textAnchor="middle" fill="#ef4444" fontSize="8.5" fontWeight="bold">GenericAll ACE</text>
+    <defs>
+      <marker id="adP2a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+      <marker id="adP2b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.8" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Neither hop needs a vulnerability: nested membership and a single misconfigured ACE are enough, and it is exactly the shape of relationship BloodHound is built to surface automatically.</p>
+</div>
+
 **Trusts and delegation.** Direction, transitivity, and SID filtering status of every trust enumerated in Part 1, plus the full picture of delegation across the domain: unconstrained, constrained (with or without protocol transition), and resource-based constrained delegation, each one a distinct escalation primitive with a distinct enumeration signature.
 
 ## Tooling: From Native Binaries to Graph Databases
 
 Enumeration tooling spans a spectrum from built-in and quiet to purpose-built and loud, and the right choice depends on what the operator is optimizing for.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A spectrum diagram running from quiet, native tooling on the left, through PowerView and Impacket, to ADRecon and PingCastle, ending with BloodHound and SharpHound as the loudest, graph-scale option on the right.">
+    <line x1="30" y1="90" x2="600" y2="90" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1.5" markerEnd="url(#adP3)" />
+    <defs>
+      <marker id="adP3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+    <circle cx="90" cy="90" r="6" fill="currentColor" fillOpacity="0.5" />
+    <line x1="90" y1="84" x2="90" y2="70" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    <text x="90" y="60" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Native tools</text>
+    <circle cx="205" cy="90" r="6" fill="#0ea5e9" fillOpacity="0.7" />
+    <line x1="205" y1="96" x2="205" y2="110" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    <text x="205" y="123" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">PowerView</text>
+    <circle cx="320" cy="90" r="6" fill="#0ea5e9" fillOpacity="0.7" />
+    <line x1="320" y1="84" x2="320" y2="70" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    <text x="320" y="60" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Impacket</text>
+    <circle cx="435" cy="90" r="6" fill="#f59e0b" fillOpacity="0.7" />
+    <line x1="435" y1="96" x2="435" y2="110" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    <text x="435" y="123" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">ADRecon /</text>
+    <text x="435" y="135" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">PingCastle</text>
+    <circle cx="555" cy="90" r="7" fill="#a855f7" fillOpacity="0.8" stroke="#a855f7" strokeWidth="1.2" />
+    <line x1="555" y1="83" x2="555" y2="70" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    <text x="555" y="48" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">BloodHound /</text>
+    <text x="555" y="60" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">SharpHound</text>
+    <text x="30" y="150" textAnchor="start" fill="currentColor" fontSize="9" opacity="0.6">quieter, blends into normal admin activity</text>
+    <text x="600" y="150" textAnchor="end" fill="currentColor" fontSize="9" opacity="0.6">louder, full domain graph in minutes</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The same questions, asked with more or less friction and more or less noise: native tools blend in, BloodHound trades stealth for a complete graph.</p>
+</div>
 
 **Native Windows tools** require no additional installation and blend into normal admin activity: `net user /domain`, `net group "domain admins" /domain`, `nltest /domain_trusts`, `dsquery`, and the PowerShell ActiveDirectory module's `Get-ADUser`, `Get-ADGroup`, `Get-ADComputer`, and `Get-ADTrust` cmdlets (which require RSAT, but RSAT is common enough on admin workstations to not stand out).
 

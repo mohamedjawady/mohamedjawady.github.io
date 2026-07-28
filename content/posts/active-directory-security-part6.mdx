@@ -1,0 +1,154 @@
+---
+title: "Active Directory Series: Part 6 - Trust and Forest Escalation"
+description: "Part 1 called the forest, not the domain, the actual security boundary and warned that isolating a child domain is weaker than it sounds. This post is exactly why: how the trust key that makes cross-domain authentication work gets stolen or abused, how a compromised child domain escalates straight to Enterprise Admin, and the one setting, off by default inside a forest, that decides whether either attack actually works."
+date: "2026-05-25"
+author: "Mohamed Habib Jaouadi"
+tags: ["active-directory", "windows", "red-team", "blue-team", "trusts", "forest-security", "kerberos", "detection-engineering", "active-directory-series"]
+banner: "/banners/posts/active-directory-trust-escalation.jpg"
+bannerAlt: "A bridge connecting two buildings under a clear sky, evoking the trust relationship that lets authentication cross from one domain into another"
+visibility: "public"
+series: "Active Directory Series"
+seriesOrder: 6
+---
+
+> **Series Focus:** Part 1 stated it plainly: a Domain Admin in one domain is not automatically an admin anywhere else in the forest, but an Enterprise Admin or a compromised Schema Master is, "which is the detail that makes 'just isolate the child domain' a much weaker mitigation than it sounds." This part is that detail, worked all the way through: what actually lets authentication cross a trust, and the two distinct ways a compromised side of one turns into control of the other.
+
+**TL;DR:** Every trust, inside a forest or between two forests, is backed by a shared secret, the <Term concept="inter-realm-trust-key">inter-realm trust key</Term>, that lets one side's domain controller vouch for a user crossing into the other side. A child domain's krbtgt hash forges a Golden Ticket valid only in that child domain, until <Term concept="sid-history">SID History</Term> is added to it: writing the parent's Enterprise Admins SID into the ticket's ExtraSids field escalates a single child domain compromise to full forest control, and it works specifically because <Term concept="sid-filtering">SID filtering</Term>, the control meant to stop exactly this, is off by default on intra-forest trusts. Stealing the trust key itself is the second path, and it works the same way across an actual forest or external trust, where SID filtering is on by default and has to be found already weakened, or a real business reason for having weakened it, before it goes anywhere.
+
+## Introduction
+
+Everything in Parts 3 through 5 stayed inside one domain. This post is about the boundary above it: what a trust relationship actually is under the hood, and the two distinct ways compromising one side of it escalates into the other. Both techniques below ultimately touch the same mechanism, the shared key that makes cross-domain authentication possible at all, but they reach it from different starting points and are stopped, or not, by the same single setting.
+
+## How a Trust Actually Authenticates Across the Boundary
+
+A trust is not a policy statement, it's a shared secret. When two domains (or two forests) establish a trust, each side creates a Trusted Domain Object holding, among other things, an <Term concept="inter-realm-trust-key">inter-realm trust key</Term>, effectively a password, identical on both sides. When a user in Domain A requests access to a resource in Domain B, Domain A's KDC can't issue a normal service ticket for a domain it doesn't control, so instead it issues a referral: an inter-realm TGT encrypted with the shared trust key rather than krbtgt. The user presents that referral to a DC in Domain B, which decrypts it with its own copy of the same trust key, confirms it's legitimate, and issues an ordinary service ticket from there.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain showing legitimate cross-trust authentication: a user in Domain A requests access to a resource in Domain B, Domain A's domain controller issues an inter-realm TGT encrypted with the shared trust key, Domain B's domain controller validates it using its own copy of the same key, and issues a normal service ticket granting access to the resource in Domain B.">
+    <rect x="5" y="60" width="140" height="46" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="75" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">User in Domain A</text>
+    <text x="75" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">requests Domain B access</text>
+    <rect x="165" y="60" width="140" height="46" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="235" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">DC A issues inter-realm</text>
+    <text x="235" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">TGT, encrypted w/ trust key</text>
+    <rect x="325" y="60" width="150" height="46" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="400" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">DC B validates with its</text>
+    <text x="400" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">own copy of the same key</text>
+    <rect x="505" y="60" width="130" height="46" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="570" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Normal service ticket</text>
+    <text x="570" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">in Domain B</text>
+    <line x1="145" y1="83" x2="165" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adTrustKey)" />
+    <line x1="305" y1="83" x2="325" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adTrustKey)" />
+    <line x1="475" y1="83" x2="505" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adTrustKey)" />
+    <defs>
+      <marker id="adTrustKey" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Both attacks below target this exact mechanism: one steals the identity claim a ticket is allowed to carry across it, the other steals the key itself.</p>
+</div>
+
+## Child-to-Parent: Golden Ticket with SID History
+
+A Golden Ticket forged from a child domain's krbtgt hash, Part 3's endgame, is valid for any username and any group membership, but only inside that child domain, since it's krbtgt-signed, not trust-key-signed. Getting it to reach the parent domain, or the whole forest, needs one more piece: <Term concept="sid-history">SID History</Term>.
+
+SID History exists for a legitimate reason: when a user is migrated from one domain to another, tools like ADMT copy their old SID into the new account's SID History attribute so access permissioned against the old SID keeps working during the transition. Kerberos writes every SID in that attribute into the ticket's PAC alongside the account's own SID, which means anything holding those SIDs is granted, not just the account itself. Rubeus's `/sids` flag (or Mimikatz's `kerberos::golden /sids`) writes an arbitrary SID directly into a forged ticket's PAC the same way, and the SID an attacker actually wants there is the parent domain's Enterprise Admins group.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain: an attacker compromises a child domain's krbtgt hash, forges a Golden Ticket with the parent domain's Enterprise Admins SID written into the ExtraSids field, and because SID filtering is off by default on intra-forest trusts, that extra SID is honored forest-wide, granting full Enterprise Admin access from a single child domain compromise.">
+    <rect x="5" y="60" width="140" height="46" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="75" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Compromise child</text>
+    <text x="75" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">domain's krbtgt hash</text>
+    <rect x="165" y="60" width="150" height="46" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="240" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Forge Golden Ticket,</text>
+    <text x="240" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Enterprise Admins in ExtraSids</text>
+    <rect x="335" y="60" width="150" height="46" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="410" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Intra-forest trust:</text>
+    <text x="410" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">SID filtering is off by default</text>
+    <rect x="505" y="60" width="130" height="46" rx="7" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="570" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Full Enterprise</text>
+    <text x="570" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Admin, forest-wide</text>
+    <line x1="145" y1="83" x2="165" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adC2p)" />
+    <line x1="315" y1="83" x2="335" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adC2p)" />
+    <line x1="485" y1="83" x2="505" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adC2p)" />
+    <defs>
+      <marker id="adC2p" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>This is the exact mechanism behind Part 1's warning: the forest, not the domain, is the real boundary, because nothing inside it stops a SID claimed in one domain from being honored in another.</p>
+</div>
+
+## Crossing a Trust Directly: Stolen Trust Keys and Forged Inter-Realm Tickets
+
+The second path doesn't need a child domain relationship at all, any bidirectional trust will do, forest or external. An attacker with Domain Admin rights on one side of the trust extracts the inter-realm trust key itself, with Mimikatz's `lsadump::trust /patch` on a domain controller or by DCSyncing the Trusted Domain Object directly, and then forges an inter-realm TGT signed with that stolen key, the same referral mechanism the legitimate exchange above uses, claiming whatever group membership the attacker wants via the same ExtraSids mechanism.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain: an attacker with Domain Admin rights on one side of a forest or external trust extracts the inter-realm trust key, forges an inter-realm TGT signed with that key claiming privileged group membership, and because SID filtering is on by default for these trust types, the claim is blocked unless SID filtering has already been relaxed, for example to support a domain migration.">
+    <rect x="5" y="60" width="140" height="46" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="75" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">DA rights on one side</text>
+    <text x="75" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">of a forest/external trust</text>
+    <rect x="165" y="60" width="150" height="46" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="240" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Extract the trust key</text>
+    <text x="240" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">(lsadump::trust, or DCSync)</text>
+    <rect x="335" y="60" width="150" height="46" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="410" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Forge an inter-realm TGT</text>
+    <text x="410" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">claiming privileged SIDs</text>
+    <rect x="505" y="60" width="130" height="46" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="570" y="80" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Blocked by default,</text>
+    <text x="570" y="93" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">unless SID filtering was relaxed</text>
+    <line x1="145" y1="83" x2="165" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adTrustSteal)" />
+    <line x1="315" y1="83" x2="335" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adTrustSteal)" />
+    <line x1="485" y1="83" x2="505" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adTrustSteal)" />
+    <defs>
+      <marker id="adTrustSteal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Without a relaxed filter, this still buys a valid, trust-key-signed foothold on the other side, just without the privileged group claim landing. With one relaxed for a migration nobody finished cleaning up, it goes all the way.</p>
+</div>
+
+## SID Filtering: The Inconsistent Default That Decides Which of These Work
+
+Both techniques above ultimately depend on the same setting, and its default value is not consistent across trust types, which is exactly why Part 1 called domain isolation a weaker mitigation than it sounds.
+
+| Trust type | SID filtering (quarantine) default | Practical effect |
+|---|---|---|
+| Parent-child (intra-forest) | Off | ExtraSids from a child domain are honored in the parent without restriction |
+| Tree-root (intra-forest) | Off | Same as parent-child: every domain in a forest is treated as equally trusted |
+| Forest trust | On | Foreign SIDs are stripped unless filtering has been explicitly relaxed |
+| External trust | On | Same as forest trusts: the more common target for `netdom /enablesidhistory:yes` left on after a migration |
+
+Microsoft's own reasoning for the intra-forest default is that every domain in a single forest is already administratively unified, so filtering between them is redundant, the same logic behind Part 1's claim that the forest is the real boundary. The practical consequence is that a single child domain, often the one judged least critical and secured accordingly, is a direct path to full forest compromise, not a contained blast radius.
+
+**Detection.** Trust key extraction (`lsadump::trust` or a DCSync scoped to a Trusted Domain Object) is detectable the same way ordinary DCSync is, covered in Part 3: **event 4662** for a replication-style request against the TDO from a source that isn't a domain controller. SID History abuse is best caught at the object level: any account with a non-empty `sIDHistory` attribute that wasn't the result of a documented, tracked migration is worth alerting on outright, since legitimate uses of the attribute are rare and time-bound while forged uses are neither. Tools built for exactly this, like Microsoft's `Get-ADUser -Filter 'sIDHistory -like "*"'` scoped across the forest, or a scheduled BloodHound collection that flags foreign-domain SIDs, turn an otherwise invisible ticket-level abuse into a standing object-level audit.
+
+## Conclusion
+
+Part 1 spent one sentence on this: an Enterprise Admin, or a compromised Schema Master, is privileged everywhere in the forest, which makes isolating a child domain weaker than it sounds. This post was that sentence, worked all the way through. Both paths here, SID History riding an intra-forest trust with its filter off by default, and a stolen trust key riding a forest or external trust with its filter on but sometimes quietly relaxed, end at the same place: a security boundary that most organizations draw at the domain, when Active Directory itself draws it at the forest. Treating a child domain, or a trusted external forest, as a separate security posture rather than an equally privileged part of the same one is the assumption every technique in this post depends on someone else having made.
+
+## References & Further Reading
+
+1. MITRE ATT&CK, "Access Token Manipulation: SID-History Injection," T1134.005. [https://attack.mitre.org/techniques/T1134/005/](https://attack.mitre.org/techniques/T1134/005/)
+	The classification behind the Child-to-Parent section.
+2. MITRE ATT&CK, "Domain Trust Discovery," T1482. [https://attack.mitre.org/techniques/T1482/](https://attack.mitre.org/techniques/T1482/)
+	The reconnaissance technique that identifies which trusts exist before either attack in this post is attempted.
+3. dirkjanm, "Active Directory forest trusts part 2: Trust transitivity and finding a trust bypass." [https://dirkjanm.io/active-directory-forest-trusts-part-two-trust-transitivity/](https://dirkjanm.io/active-directory-forest-trusts-part-two-trust-transitivity/)
+	Detailed mechanics of inter-realm trust keys and trust transitivity referenced throughout this post.
+4. HackTricks, "SID-History Injection." [https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/sid-history-injection](https://book.hacktricks.xyz/windows-hardening/active-directory-methodology/sid-history-injection)
+	The ExtraSids mechanics and tooling referenced in the Child-to-Parent section.
+5. ired.team, "From Domain Admin to Enterprise Admin." [https://www.ired.team/offensive-security-experiments/active-directory-kerberos-abuse/child-domain-da-to-ea-in-parent-domain](https://www.ired.team/offensive-security-experiments/active-directory-kerberos-abuse/child-domain-da-to-ea-in-parent-domain)
+	A worked example of the child-to-parent escalation referenced above.
+6. itm8, "SID filter as security boundary between domains? (Part 3)." [https://itm8.com/articles/sid-filter-as-security-boundary-between-domains-part-3](https://itm8.com/articles/sid-filter-as-security-boundary-between-domains-part-3)
+	The SID filtering default-behavior table referenced in this post is built from this source's findings.
+7. Microsoft, "Configuring SID Filtering Settings: Domain and Forest Trusts." [https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc772633(v=ws.10)](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc772633(v=ws.10))
+	Microsoft's own technical documentation of quarantine mode and SID filtering configuration.
+8. Sean Metcalf, Mimikatz command reference. [https://adsecurity.org/?page_id=1821](https://adsecurity.org/?page_id=1821)
+	The lsadump::trust and kerberos::golden /sids commands referenced throughout this post.
+9. GhostPack, Rubeus. [https://github.com/GhostPack/Rubeus](https://github.com/GhostPack/Rubeus)
+	The /sids flag referenced in the Child-to-Parent section.
+10. "Active Directory Series: Part 1 - What Active Directory Actually Is" (this blog). [/posts/active-directory-security-part1](/posts/active-directory-security-part1)
+	The forest-as-security-boundary framing this entire post is built to justify in detail.

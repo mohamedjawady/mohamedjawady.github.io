@@ -275,13 +275,39 @@ Client-to-DC discovery, and Kerberos itself, both depend on DNS being correct. E
 
 ## Group Policy: Configuration That Flows Down the OU Tree
 
-<Term concept="group-policy">Group Policy Objects</Term> (GPOs) are how configuration, from password policy to software deployment to logon scripts to security settings, gets pushed to users and computers without touching each machine by hand. A GPO has two halves: the Group Policy Container, an object in AD holding version and path metadata, and the Group Policy Template, the actual policy files replicated through <Term concept="sysvol">SYSVOL</Term> to every DC. GPOs are linked to sites, domains, or OUs and applied in that order (Local policy first, then Site, then Domain, then OU, nested OUs innermost-last), the mnemonic most admins learn is LSDOU, with later-applied settings winning on direct conflict unless a GPO is explicitly marked Enforced or a target is marked Block Inheritance. Because GPOs can push scripts and software with SYSTEM-level reach to every computer in an OU, write access to a GPO or the OU it is linked to is functionally equivalent to code execution on every machine that GPO touches, which is a fact enumeration tooling checks for directly.
+<Term concept="group-policy">Group Policy Objects</Term> (GPOs) are how configuration, from password policy to software deployment to logon scripts to security settings, gets pushed to users and computers without touching each machine by hand. A GPO has two halves: the Group Policy Container, an object in AD holding version and path metadata, and the Group Policy Template, the actual policy files replicated through <Term concept="sysvol">SYSVOL</Term> to every DC. GPOs are linked to sites, domains, or OUs and applied in that order (Local policy first, the machine's own Local Group Policy Object, edited with `gpedit.msc` and stored on the machine itself rather than in AD, then Site, then Domain, then OU, nested OUs innermost-last), the mnemonic most admins learn is LSDOU, with later-applied settings winning on direct conflict unless a GPO is explicitly marked Enforced or a target is marked Block Inheritance. Because GPOs can push scripts and software with SYSTEM-level reach to every computer in an OU, write access to a GPO or the OU it is linked to is functionally equivalent to code execution on every machine that GPO touches, which is a fact enumeration tooling checks for directly.
+
+Sites, domains, and OUs are not three levels of one tree, which is a common misreading of LSDOU. A <Term concept="site">site</Term> is a physical, network-based grouping that sits outside the domain/OU tree entirely and can span multiple domains; a domain contains OUs, and OUs can nest inside other OUs to any depth. A GPO can be linked directly to any of these container types independently, which is what LSDOU's application order is actually walking.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram showing that sites, domains, and OUs are not one tree. A site is a separate, physical, cross-domain container outside the domain and OU hierarchy. A domain contains organizational units, and OU: Sales contains a nested OU: Sales-West, alongside a sibling OU: IT. A GPO can be linked directly to the site, the domain, or any individual OU, independent of where it sits in this structure.">
+    <text x="320" y="20" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">A GPO can link to any of these, independently</text>
+    <rect x="20" y="55" width="180" height="70" rx="8" fill="currentColor" fillOpacity="0.04" stroke="#0ea5e9" strokeWidth="1.2" strokeDasharray="4 3" />
+    <text x="110" y="80" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Site: HQ</text>
+    <text x="110" y="95" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.65">physical, can span</text>
+    <text x="110" y="106" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.65">multiple domains</text>
+    <rect x="230" y="45" width="390" height="200" rx="8" fill="currentColor" fillOpacity="0.03" stroke="#0ea5e9" strokeWidth="1.4" />
+    <text x="425" y="65" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Domain: corp.com</text>
+    <rect x="255" y="80" width="180" height="140" rx="7" fill="#10b981" fillOpacity="0.1" stroke="#10b981" strokeWidth="1.2" />
+    <text x="345" y="100" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">OU: Sales</text>
+    <rect x="270" y="115" width="150" height="90" rx="6" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" strokeDasharray="4 3" />
+    <text x="345" y="140" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">OU: Sales-West</text>
+    <text x="345" y="155" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.65">nested OU</text>
+    <rect x="460" y="80" width="140" height="60" rx="7" fill="#10b981" fillOpacity="0.1" stroke="#10b981" strokeWidth="1.2" />
+    <text x="530" y="115" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">OU: IT</text>
+    <text x="110" y="240" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.6" fontStyle="italic">outside the domain/OU tree</text>
+    <text x="425" y="240" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.6" fontStyle="italic">the actual containment hierarchy: Domain &gt; OU &gt; nested OU</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>LSDOU's order (Local, Site, Domain, OU) is not the shape of a single tree, it's the order Windows walks across two separate structures: the site the computer's IP falls into, and the domain/OU path the account or computer object actually lives in.</p>
+</div>
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of the LSDOU Group Policy application order: Local, Site, Domain, OU: Corp, and OU: Sales, applied in that order with later levels able to override earlier ones on direct conflict, except that a Domain-level GPO can be marked Enforced to resist being overridden, and OU: Sales can set Block Inheritance to refuse settings from above.">
     <text x="320" y="20" textAnchor="middle" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">LSDOU: each level applies after, and can override, the one before it</text>
     <rect x="10" y="70" width="100" height="40" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
-    <text x="60" y="94" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Local</text>
+    <text x="60" y="90" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Local</text>
+    <text x="60" y="128" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.6" fontStyle="italic">the machine's own</text>
+    <text x="60" y="139" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.6" fontStyle="italic">GPO, not from AD</text>
     <rect x="130" y="70" width="100" height="40" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
     <text x="180" y="94" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Site</text>
     <rect x="250" y="70" width="110" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />

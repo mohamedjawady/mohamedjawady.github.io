@@ -1,0 +1,144 @@
+---
+title: "Active Directory Series: Part 7 - Detecting Lateral Movement and Persistence"
+description: "Parts 3 through 6 each ended with a detection recap built around domain controller event logs and Microsoft Defender for Identity. This part covers the other half of the stack: how Microsoft Defender for Endpoint and Attack Surface Reduction rules actually catch these techniques at the process level, with exact rule GUIDs, the events they write, and a master table rolling up every technique this series has covered."
+date: "2026-05-26"
+author: "Mohamed Habib Jaouadi"
+tags: ["active-directory", "windows", "blue-team", "detection-engineering", "edr", "microsoft-defender", "attack-surface-reduction", "active-directory-series"]
+banner: "/banners/posts/active-directory-detection-engineering.jpg"
+bannerAlt: "A white surveillance camera mounted on a wall, evoking endpoint-level monitoring as the counterpart to domain controller logging"
+visibility: "public"
+series: "Active Directory Series"
+seriesOrder: 7
+---
+
+> **Series Focus:** Every detection recap table from Parts 3 through 6 leaned on domain controller event logs and Microsoft Defender for Identity, the identity half of the stack. This part is the other half: what actually runs on the endpoint an attacker is standing on, how Attack Surface Reduction rules intercept specific technique behaviors before an alert even fires, and a single table rolling up everything this series has covered by which layer catches it.
+
+**TL;DR:** <Term concept="mde">Microsoft Defender for Endpoint</Term> and <Term concept="asr-rules">Attack Surface Reduction rules</Term> are the endpoint-side complement to the DC-log and Defender for Identity signals covered throughout this series, intercepting behaviors like LSASS memory access and PSExec/WMI-spawned processes by exact rule GUID rather than by signature. <Term concept="lsa-protection">LSA Protection</Term> and Credential Guard, covered in Part 4, make the LSASS ASR rule redundant where both are already enabled, worth knowing before deploying overlapping controls. Most of the tools named across this series, Rubeus, Mimikatz, Certipy, NetExec, leave process-creation and command-line patterns specific enough to alert on directly. None of this replaces the DC-log and MDI signals from Parts 3 through 6, it closes the gap they can't see: what happens on the box before any of that traffic ever reaches a domain controller.
+
+## Introduction
+
+Every technique in this series has a detection recap table, and every one of those tables is honest about where its strength lies: domain controller event logs and Microsoft Defender for Identity, which watches Kerberos and LDAP traffic directly. That's the identity layer, and it's necessary but not sufficient, because by the time a forged ticket or a DCSync request reaches a domain controller, the credential material behind it was very likely already extracted somewhere else, on an endpoint, using LSASS, a registry hive, or a DPAPI blob, exactly as covered in Part 4. This post is that other layer: what an EDR agent actually sees before any of that traffic exists, using Microsoft Defender for Endpoint and Attack Surface Reduction rules as the concrete example, since they're free with every licensed Windows endpoint and directly cover a meaningful slice of this series' techniques.
+
+## What an EDR Actually Sees
+
+An EDR agent doesn't read minds, it reads a specific set of Windows APIs: process creation, handle requests to sensitive processes like `lsass.exe`, DLL and driver loads, and, through the Antimalware Scan Interface (AMSI), the deobfuscated content of scripts right before they execute. Everything downstream, correlation, alerting, blocking, is built on those raw signals, which is why the process-level detections in this post and the DC-log detections from earlier parts genuinely see different things: an EDR agent has no visibility into a Kerberos ticket's contents, and a domain controller has no visibility into what process just opened a handle to LSASS on a workstation three network hops away.
+
+## Attack Surface Reduction: Blocking Behavior, Not Signatures
+
+<Term concept="asr-rules">ASR rules</Term> are a Microsoft Defender Antivirus feature, available even outside a full MDE deployment, that block or audit specific behaviors by rule GUID rather than by matching a known-bad file. Three of the eighteen standard rules map directly onto techniques covered earlier in this series.
+
+| ASR rule | GUID | What it stops |
+|---|---|---|
+| Block credential stealing from the Windows local security authority subsystem | `9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2` | Untrusted processes opening LSASS with memory-read access, the exact behavior Part 4's `sekurlsa::logonpasswords` depends on |
+| Block process creations originating from PSExec and WMI commands | `d1e49aac-8f56-4280-b9ba-993a6d77406c` | Child processes spawned via PsExec or WMI, common lateral movement rails alongside Part 4's PowerShell Remoting |
+| Block persistence through WMI event subscription | `e6db77e5-3df2-4cf1-b95a-636979351e5b` | WMI-based persistence, the closest ASR equivalent to Part 5's registry- and LSASS-based persistence mechanisms |
+| Block execution of potentially obfuscated scripts | `5beb7efe-fd9a-4556-801d-275e5ffc04cc` | Obfuscated PowerShell, relevant wherever this series' tooling gets wrapped for delivery |
+
+The LSASS rule is worth a specific technical note, because how it works matters for what it actually stops: it doesn't block a process from running, it blocks that process's attempt to open LSASS with memory-read access, and lets the process continue otherwise. A tool with Mimikatz's LSASS-reading behavior still launches successfully; it just gets nothing when it reaches for LSASS.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram showing a credential-theft tool launching successfully and running normally, but its attempt to open a handle to lsass.exe with memory-read access being intercepted by the ASR rule and blocked, while the process itself continues to run." >
+    <rect x="20" y="60" width="150" height="46" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="95" y="80" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Tool launches,</text>
+    <text x="95" y="93" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">runs normally</text>
+    <rect x="235" y="60" width="170" height="46" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="320" y="80" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Attempts to open</text>
+    <text x="320" y="93" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">lsass.exe for reading</text>
+    <rect x="470" y="60" width="150" height="46" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="545" y="80" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">ASR rule blocks</text>
+    <text x="545" y="93" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">the memory access</text>
+    <line x1="170" y1="83" x2="235" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adAsrFlow)" />
+    <line x1="405" y1="83" x2="470" y2="83" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adAsrFlow)" />
+    <defs>
+      <marker id="adAsrFlow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The process itself surviving is normal and doesn't mean the rule failed. The access denial is the control; a Defender for Endpoint alert only fires on Block, never on the process launching.</p>
+</div>
+
+Every rule writes to the Windows Defender Operational log: **event 1121** for a block, **event 1122** for an audit hit (the rule would have blocked, had it been in Block mode rather than Audit). Deploying in Audit first and reviewing 1122 volume for a few weeks before flipping to Block is Microsoft's own recommended rollout, since the LSASS rule specifically generates high audit volume from entirely benign processes that enumerate LSASS without reading anything sensitive from it.
+
+One overlap worth knowing before turning all of this on at once: <Term concept="lsa-protection">LSA Protection</Term> (RunAsPPL), which runs LSASS as a kernel-protected process, and Part 4's Credential Guard both already restrict LSASS access at a lower level than an ASR rule can. Per Microsoft's own guidance, the LSASS ASR rule provides no additional protection where both are already enabled, and is classified as not applicable in Defender for Endpoint's own management settings in that configuration. Layering it on anyway isn't harmful, but it isn't buying anything either.
+
+## Process-Level Signals for This Series' Tooling
+
+Most of the tools named throughout Parts 3 through 6 leave a specific enough process-creation or command-line footprint to alert on directly, independent of whatever ASR rules or AV signatures are or aren't in place.
+
+| Tool / pattern | What to look for |
+|---|---|
+| Rubeus | Command-line arguments like `kerberoast`, `asreproast`, `s4u`, `golden`, `silver`, `diamond`, `ptt`; these survive binary renaming since they're arguments, not the file itself |
+| Mimikatz | Command patterns like `sekurlsa::`, `lsadump::`, `kerberos::golden`; more durably, any unexpected process opening a read handle to `lsass.exe` |
+| rundll32 LSASS dump | `rundll32.exe` spawning with `comsvcs.dll` and the MiniDump export (ordinal 24) as arguments, the offline-dump technique Part 4 mentioned as a Credential Guard workaround |
+| Certipy | Certificate requests against AD CS web enrollment or RPC endpoints from hosts that aren't part of normal PKI administration |
+| NetExec | LDAP or SMB enumeration bursts, especially command lines carrying `--kerberoasting` or `--asreproast` |
+| targetedKerberoast.py | A `servicePrincipalName` attribute written and deleted within seconds, covered in Part 3 as event 5136, but worth flagging here as a process-adjacent artifact too |
+| wsmprovhost.exe | Appearing as the parent of `cmd.exe` or `powershell.exe` on a server that isn't a normal PowerShell Remoting target |
+
+None of these individually prove compromise. All of them are cheap to write as detection rules and expensive for an attacker to avoid entirely, since renaming a binary doesn't change its command-line grammar or its behavior toward LSASS.
+
+## Putting the Layers Together
+
+Every technique in this series is now covered by up to three layers, and no single one of them is sufficient alone.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 200" style={{ width: "100%", maxWidth: "560px" }} role="img" aria-label="Three stacked layers of detection: the identity layer, domain controller event logs and Microsoft Defender for Identity, watching Kerberos and LDAP traffic. The endpoint layer, Microsoft Defender for Endpoint and Attack Surface Reduction rules, watching process behavior. And the cloud identity layer, Entra sign-in logs, watching token and Conditional Access activity on hybrid-joined devices." >
+    <rect x="70" y="10" width="500" height="50" rx="8" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="320" y="30" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Identity layer: DC event logs + Defender for Identity</text>
+    <text x="320" y="46" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">Kerberos and LDAP traffic (Parts 3-6)</text>
+    <rect x="70" y="75" width="500" height="50" rx="8" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="95" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Endpoint layer: Defender for Endpoint + ASR rules</text>
+    <text x="320" y="111" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">Process behavior, this post</text>
+    <rect x="70" y="140" width="500" height="50" rx="8" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="320" y="160" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Cloud identity layer: Entra sign-in logs</text>
+    <text x="320" y="176" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">Token and Conditional Access activity (Part 4's Azure tokens)</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A technique that evades one layer usually still has to touch at least one of the other two. This is the practical version of Part 1's collection points table, three sources instead of six, organized by where an attacker actually stands.</p>
+</div>
+
+## Master Detection Recap
+
+Every technique from Parts 3 through 6, rolled up by which layer actually catches it.
+
+| Technique (Part) | Identity layer (DC log / MDI) | Endpoint layer (MDE / ASR) |
+|---|---|---|
+| Kerberoasting (3) | Event 4769, RC4 burst; MDI | Rubeus/NetExec command-line patterns |
+| AS-REP Roasting (3) | Event 4768, no preauth; MDI | Same tooling patterns as Kerberoasting |
+| Targeted Kerberoasting (3) | Event 5136, transient SPN write | targetedKerberoast.py command line |
+| Unconstrained delegation abuse (3) | Event 4738/5136; MDI coercion alerts | Rubeus/Mimikatz TGT-dump patterns |
+| RBCD abuse (3) | Event 5136, 4741 | Impacket rbcd.py / addcomputer.py patterns |
+| Shadow Credentials (3) | Event 5136, 4768 cert preauth | Whisker/pywhisker/Certipy shadow command lines |
+| AD CS ESC1 (3) | CA events 4886/4887 | Certipy request patterns to enrollment endpoints |
+| DCSync / Golden Ticket (3) | Event 4662; MDI DCSync alert | secretsdump.py `-just-dc`; Mimikatz `lsadump::dcsync` |
+| PowerShell Remoting (4) | Event 4624 | wsmprovhost.exe parent process; events 4103/4104 |
+| LSASS extraction (4) | n/a (endpoint-only) | ASR LSASS rule; event 4656; Sysmon event 10 |
+| SAM/SECURITY hive dump (4) | n/a (endpoint-only) | `reg.exe save` sequence; event 4657 |
+| DPAPI backup key theft (4) | LSA API auditing (DSInternals) | `lsadump::backupkeys`/SharpDPAPI patterns |
+| Over-Pass-the-Hash (4) | Event 4768, RC4 in AES environment | Rubeus `asktgt` command line |
+| Silver / Diamond Ticket (5) | Absent 4768/4769 (Silver); PAC/AD mismatch (Diamond) | Rubeus `silver`/`diamond` command line |
+| Skeleton Key (5) | n/a (endpoint-only) | LSASS Image File Execution Options auditing |
+| DSRM backdoor (5) | Event 4624 for DSRM account | Registry write to DsrmAdminLogonBehavior |
+| Custom SSP (5) | n/a (endpoint-only) | Event 4657; Sysmon event 7 (ImageLoad) |
+| AdminSDHolder abuse (5) | Event 5136 on AdminSDHolder | Scheduled BloodHound ACL review |
+| Trust key theft (6) | Event 4662 on TDO | `lsadump::trust` command line |
+| SID History injection (6) | Non-empty sIDHistory outside migration | Rubeus `/sids` command line |
+
+## Conclusion
+
+This series started with what Active Directory actually is, walked through how it gets mapped, escalated, moved through, persisted in, and finally how a trust extends all of that beyond one domain entirely. This post is the closing argument for why none of those earlier detection tables were ever meant to stand alone: an identity-layer signal like a 4769 burst or an MDI DCSync alert tells you something crossed a domain controller, and an endpoint-layer signal like an ASR block or a Sysmon LSASS access tells you something happened on a box before it ever got that far. Neither one replaces the other, and an attacker who only has to evade one of them still has to get past the rest. That's the actual argument for defense in depth in an AD environment: not that more tools are better in the abstract, but that this series' techniques, every one of them, cross at least one of these layers on the way to working at all.
+
+## References & Further Reading
+
+1. Microsoft, "Attack surface reduction rules reference." [https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-reference](https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-reference)
+	The authoritative source for every ASR rule GUID, behavior, and configuration note referenced in this post.
+2. Microsoft, "Attack surface reduction (ASR) rules overview." [https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-overview](https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-overview)
+	Deployment methods and exclusion behavior referenced in the ASR rollout guidance above.
+3. Microsoft, "Configuring additional LSA protection." [https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/configuring-additional-lsa-protection](https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/configuring-additional-lsa-protection)
+	The RunAsPPL/LSA Protection mechanics referenced alongside Credential Guard in the overlap note above.
+4. MITRE ATT&CK, "OS Credential Dumping: LSASS Memory," T1003.001. [https://attack.mitre.org/techniques/T1003/001/](https://attack.mitre.org/techniques/T1003/001/)
+	The classification behind the LSASS process-level detection content, extending Part 4's coverage.
+5. "Active Directory Series: Part 4 - Lateral Movement and Credential Extraction" (this blog). [/posts/active-directory-security-part4](/posts/active-directory-security-part4)
+	The Credential Guard and LSASS mechanics this post's ASR section builds directly on.
+6. "Active Directory Series: Part 1 - What Active Directory Actually Is" (this blog). [/posts/active-directory-security-part1](/posts/active-directory-security-part1)
+	The original collection points table this post's layered detection diagram is the practical, endpoint-inclusive version of.

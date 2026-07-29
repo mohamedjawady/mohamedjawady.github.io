@@ -33,7 +33,9 @@ Authenticated enumeration is a different world entirely. The moment a single val
 
 **Users.** Every user object, with attributes far more useful than a name: `userAccountControl` flags reveal accounts with `PASSWD_NOTREQD` set or `DONT_EXPIRE_PASSWORD`, the `description` field is a perennial source of plaintext passwords typed in by a well-meaning helpdesk years ago, and `lastLogonTimestamp` separates active accounts from stale ones worth targeting because nobody is watching them.
 
-**Groups, especially nested membership.** Direct membership in Domain Admins is the obvious thing to check, and also the thing most environments have already learned to watch. Nested membership is the part naive enumeration misses: a user in a group that is itself a member of Domain Admins is a Domain Admin in every way that matters, and a simple, non-recursive membership query will not show that relationship at all.
+**Groups, especially nested membership.** Direct membership in Domain Admins is the obvious thing to check, and also the thing most environments have already learned to watch. Nested membership is the part naive enumeration misses: a user in a group that is itself a member of Domain Admins is a Domain Admin in every way that matters, and a simple, non-recursive membership query will not show that relationship at all. Native `net group "domain admins" /domain` and `Get-ADGroupMember -Identity "Domain Admins" -Recursive` both resolve nesting correctly; PowerView's `Get-DomainGroupMember -Recurse` does the same and is usually what public writeups actually run.
+
+**<Term concept="organizational-unit">Organizational units</Term> and delegated permissions.** OUs are readable by default exactly like everything else, and the interesting part is never the OU itself, it is the ACL delegated on it. A help desk group holding reset-password rights over an OU full of ordinary end users is normal and expected; the identical right delegated over an OU that happens to contain Tier 0 accounts is the finding, and it is precisely Part 1's security descriptor structure applied at OU scope rather than to a single object. Native `Get-ADOrganizationalUnit -Filter * -Properties *` or `dsquery ou` lists every OU; the ACL on a specific one comes from `dsacls "OU=Finance,DC=corp,DC=com" /a` natively, or from PowerView's `Get-DomainObjectAcl -SearchBase "OU=Finance,DC=corp,DC=com" -ResolveGUIDs`, which resolves the raw GUIDs in each ACE back to human-readable rights. BloodHound does this for every OU in the domain at once, which is the only way delegated-OU-ACL sprawl actually gets reviewed in practice rather than discovered during an incident.
 
 **Computers and their delegation flags.** Operating system and patch level identify easy targets directly. Far more valuable is the `userAccountControl` bit for unconstrained delegation: a computer trusted for unconstrained delegation caches a copy of the Kerberos TGT of any user who authenticates to it, so compromising that one machine can mean harvesting the credentials of everyone who ever logs into it, print servers and file servers being the classic, frequently-overlooked example.
 
@@ -70,7 +72,36 @@ Authenticated enumeration is a different world entirely. The moment a single val
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Neither hop needs a vulnerability: nested membership and a single misconfigured ACE are enough, and it is exactly the shape of relationship BloodHound is built to surface automatically.</p>
 </div>
 
-**Trusts and delegation.** Direction, transitivity, and SID filtering status of every trust enumerated in Part 1, plus the full picture of delegation across the domain: unconstrained, constrained (with or without protocol transition), and resource-based constrained delegation, each one a distinct escalation primitive with a distinct enumeration signature.
+**<Term concept="group-policy">Group Policy Objects</Term>.** Enumerating GPOs means three separate questions, not one: what a GPO actually configures, which sites, domains, or OUs it is linked to, and, the one naive enumeration misses entirely, whether that GPO grants local administrator rights on every computer it touches through Restricted Groups or a Group Policy Preferences `Groups.xml`. That last one turns "who is in Domain Admins" into "which OU, and therefore which GPO, silently makes an ordinary help desk group local admin on three hundred workstations," a completely different and usually much larger blast radius. Native `Get-GPO -All` and `Get-GPOReport -All -ReportType Html` (both from the GroupPolicy RSAT module) dump every GPO's settings and, via `Get-GPInheritance -Target "OU=Finance,DC=corp,DC=com"`, exactly which OU a given link applies to. PowerView's `Get-DomainGPO` covers the same ground, and `Get-DomainGPOLocalGroup` plus `Get-DomainGPOUserLocalGroupMapping` automate the GPO-to-local-admin correlation directly, the technique harmj0y's "Where My Admins At?" writeup made standard practice: find every machine a chosen user or group is a local admin on by reading GPOs from a domain controller, without ever touching the machines themselves.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain: a GPO sets Restricted Groups or a Group Policy Preferences Groups.xml entry, that GPO is linked to an OU, the setting applies to every computer inside that OU, and the chosen user or group ends up local administrator on all of them, discoverable entirely by reading GPOs from a domain controller." >
+    <rect x="10" y="60" width="140" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">GPO sets Restricted</text>
+    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Groups / GPP Groups.xml</text>
+    <rect x="180" y="60" width="140" height="50" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Linked to an OU</text>
+    <rect x="350" y="60" width="140" height="50" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Applies to every</text>
+    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">computer inside it</text>
+    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Local admin,</text>
+    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">no touch needed</text>
+    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adGpoAdmin)" />
+    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adGpoAdmin)" />
+    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adGpoAdmin)" />
+    <defs>
+      <marker id="adGpoAdmin" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every step is a normal GPO read from a domain controller. Nothing here touches the target machines until the attacker actually uses the access.</p>
+</div>
+
+GPOs also have a second, older enumeration payoff: Group Policy Preferences shipped an option to push local account passwords, including local Administrator, encrypted in an XML file's `cpassword` attribute and stored in SYSVOL, readable by any domain user. Microsoft published the AES key used to encrypt it before patching the feature off in 2014 (KB2962486), so any `cpassword` value found today, in `Groups.xml`, `Services.xml`, `ScheduledTasks.xml`, `DataSources.xml`, `Printers.xml`, or `Drives.xml`, decrypts instantly. `Get-GPPPassword` automates finding and decrypting them; a plain recursive grep for `cpassword` across `\\<domain>\SYSVOL` finds the same thing with no tooling at all, and, per MITRE's own classification of the technique, still turns up in environments that migrated GPOs from an older domain without ever cleaning up the leftover preference files.
+
+**Trusts and delegation.** Direction, transitivity, and SID filtering status of every trust enumerated in Part 1, plus the full picture of delegation across the domain: unconstrained, constrained (with or without protocol transition), and resource-based constrained delegation, each one a distinct escalation primitive with a distinct enumeration signature. Native `nltest /domain_trusts /all_trusts` and `Get-ADTrust -Filter *` list every trust a DC knows about; PowerView's `Get-DomainTrust` covers the same ground and chains naturally into `Get-DomainTrustMapping` for walking transitive trust paths across an entire forest. What an attacker actually does with that map, particularly the SID filtering gap between intra-forest and cross-forest trusts, is the subject of Part 6.
 
 ## Tooling: From Native Binaries to Graph Databases
 
@@ -127,7 +158,7 @@ The other practical defense is a honeytoken: a decoy user with a deliberately in
 
 ## Conclusion
 
-Enumeration is not the noisy, exploit-driven phase defenders sometimes picture. In AD, it is closer to reading a phone book that happens to also list who has the keys to every door in the building, made possible by default permissions nobody had to misconfigure and largely invisible under default audit settings nobody had to disable. The map that PowerView or BloodHound builds from that access, privileged group membership, delegation flags, and ACL relationships, is not a list of separate findings, it is a single connected graph, and the next part in this series picks up exactly there: how the paths that graph reveals actually get walked.
+Enumeration is not the noisy, exploit-driven phase defenders sometimes picture. In AD, it is closer to reading a phone book that happens to also list who has the keys to every door in the building, made possible by default permissions nobody had to misconfigure and largely invisible under default audit settings nobody had to disable. The map that PowerView or BloodHound builds from that access, privileged group membership, OU delegation, GPO-driven local admin rights, delegation flags, and ACL relationships, is not a list of separate findings, it is a single connected graph, and the next part in this series picks up exactly there: how the paths that graph reveals actually get walked.
 
 ## References & Further Reading
 
@@ -145,3 +176,9 @@ Enumeration is not the noisy, exploit-driven phase defenders sometimes picture. 
 	The Reconnaissance and discovery alert category, including Account Enumeration (LDAP), User and Group Membership Reconnaissance (SAMR), and Honeytoken Was Queried via LDAP, referenced in the defensive section.
 7. "Kerberos, NTLM, and the Event IDs That Actually Matter" (this blog). [/posts/kerberos-ntlm-windows-event-ids](/posts/kerberos-ntlm-windows-event-ids)
 	The Kerberoasting mechanics referenced above, covered protocol-first.
+8. harmj0y, "Where My Admins At? (GPO Edition)." [https://blog.harmj0y.net/redteaming/where-my-admins-at-gpo-edition/](https://blog.harmj0y.net/redteaming/where-my-admins-at-gpo-edition/)
+	The technique behind Get-DomainGPOLocalGroup and Get-DomainGPOUserLocalGroupMapping, correlating GPOs to local admin rights without touching target machines.
+9. Sean Metcalf, "Finding Passwords in SYSVOL & Exploiting Group Policy Preferences." [https://adsecurity.org/?p=2288](https://adsecurity.org/?p=2288)
+	The GPP cpassword mechanics and the AES key disclosure behind it, referenced in the Group Policy Objects section.
+10. MITRE ATT&CK, "Unsecured Credentials: Group Policy Preferences," T1552.006. [https://attack.mitre.org/techniques/T1552/006/](https://attack.mitre.org/techniques/T1552/006/)
+	The classification confirming GPP credential leakage is still an active technique against unremediated environments.

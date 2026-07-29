@@ -519,14 +519,14 @@ const LATERAL_MOVEMENT: AttackEntry[] = [
 const PERSISTENCE: AttackEntry[] = [
   {
     title: "Silver Ticket",
-    steps: ["Forge TGS w/ service hash", "Present directly"],
-    description: "Forged entirely from one service account's hash, presented straight to the service; the KDC is never contacted.",
+    steps: ["Forge TGS w/ service hash (not krbtgt)", "Present directly"],
+    description: "Forged from a stolen service account's own password hash, not krbtgt like a Golden Ticket, so no TGT is ever minted and the KDC is never involved at all: the forged TGS is decrypted and trusted by the target service itself.",
     collectAt: "Domain controller",
     whatToCollect: "Absence of 4768/4769 for the access; ValidateKdcPacSignature enforcement",
     color: RED,
     actors: ["Attacker", "Target Service"],
     sequence: [
-      { from: 0, label: "(offline) forges TGS with service hash" },
+      { from: 0, label: "(offline) forges TGS with the service account's own hash, not krbtgt" },
       { from: 0, label: "Presents TGS directly" },
       { from: 1, label: "Access granted, KDC never contacted" },
     ],

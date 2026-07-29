@@ -4,11 +4,12 @@ import React from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChevronLeft, ChevronRight, BookOpen, List, Calendar, Clock } from "lucide-react"
+import { ChevronLeft, ChevronRight, BookOpen, List, Calendar, Clock, Network } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useState } from "react"
 import { formatDate } from "@/lib/utils"
+import { SeriesEngagementGraph, hasEngagementGraph } from "@/components/series-engagement-graph"
 
 interface Post {
   slug: string
@@ -36,6 +37,8 @@ export function SeriesNavigation({
   nextPost 
 }: SeriesNavigationProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const showGraphToggle = hasEngagementGraph(series)
+  const [viewMode, setViewMode] = useState<"list" | "graph">("list")
   const currentPost = posts[currentIndex]
 
   return (
@@ -48,9 +51,37 @@ export function SeriesNavigation({
               <BookOpen className="w-5 h-5" />
               <span className="font-bold text-sm sm:text-base">{series}</span>
             </div>
-            <Badge variant="secondary" className="self-start sm:ml-auto">
-              Part {currentIndex + 1} of {posts.length}
-            </Badge>
+            <div className="flex items-center gap-2 self-start sm:ml-auto">
+              {showGraphToggle && (
+                <div className="inline-flex items-center rounded-md border border-blue-200 dark:border-blue-800 bg-background/60 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    aria-pressed={viewMode === "list"}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 font-medium transition-colors ${
+                      viewMode === "list" ? "bg-blue-600 text-white" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("graph")}
+                    aria-pressed={viewMode === "graph"}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 font-medium transition-colors ${
+                      viewMode === "graph" ? "bg-blue-600 text-white" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Network className="w-3.5 h-3.5" />
+                    Graph
+                  </button>
+                </div>
+              )}
+              <Badge variant="secondary">
+                Part {currentIndex + 1} of {posts.length}
+              </Badge>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -61,13 +92,17 @@ export function SeriesNavigation({
               <span>{Math.round(((currentIndex + 1) / posts.length) * 100)}%</span>
             </div>
             <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2">
-              <div 
+              <div
                 className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
                 style={{ width: `${((currentIndex + 1) / posts.length) * 100}%` }}
               />
             </div>
           </div>
 
+          {showGraphToggle && viewMode === "graph" ? (
+            <SeriesEngagementGraph posts={posts} currentIndex={currentIndex} />
+          ) : (
+            <>
           {/* Navigation Buttons */}
           <div className="flex flex-col sm:flex-row gap-2">
             {previousPost ? (
@@ -173,6 +208,8 @@ export function SeriesNavigation({
               </div>
             </CollapsibleContent>
           </Collapsible>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

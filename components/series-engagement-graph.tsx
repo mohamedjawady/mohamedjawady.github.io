@@ -102,13 +102,21 @@ export function SeriesEngagementGraph({ posts, currentIndex }: SeriesEngagementG
     }
   }, [measure])
 
+  // Reserve enough bottom space for the deepest dependency arc so it never
+  // spills past this component's own box (each arc dips 26 + i*16 px, plus margin).
+  const maxArcDip = arcs.length > 0 ? 26 + (arcs.length - 1) * 16 + 24 : 0
+
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         Each node is one stage of the engagement this series walks through. Dotted arcs point back to the post that helps most with reading that node.
       </p>
-      <div className="overflow-x-auto pb-2">
-        <div ref={containerRef} className="relative flex items-center gap-1 min-w-fit px-2 py-6">
+      <div className="overflow-x-auto overflow-y-hidden pb-2">
+        <div
+          ref={containerRef}
+          className="relative flex items-center gap-1 min-w-fit px-2 pt-6"
+          style={{ paddingBottom: 24 + maxArcDip }}
+        >
           {posts.map((post, index) => {
               const info = ENGAGEMENT_STAGES[post.slug]
               const isCurrent = index === currentIndex
@@ -149,7 +157,8 @@ export function SeriesEngagementGraph({ posts, currentIndex }: SeriesEngagementG
 
           {arcs.length > 0 && containerSize.width > 0 && (
             <svg
-              className="absolute inset-0 hidden sm:block pointer-events-none"
+              className="absolute top-0 left-0 hidden sm:block pointer-events-none overflow-visible"
+              style={{ width: containerSize.width, height: containerSize.height }}
               width={containerSize.width}
               height={containerSize.height}
               aria-hidden="true"

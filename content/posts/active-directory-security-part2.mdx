@@ -23,7 +23,70 @@ That default is not a bug report waiting to be filed. It is a deliberate, decade
 
 ## Unauthenticated vs. Authenticated: Two Very Different Starting Points
 
-Unauthenticated enumeration, against a modern, patched AD environment, is thin. Null SMB sessions and anonymous LDAP binds, which used to hand over user lists and password policy to anyone on the network, have been closed by default since Windows Server 2003 SP1 and Vista. What is usually still available without credentials is the domain and forest name from DNS, the list of domain controllers from SRV records, and, if Kerberos pre-authentication is reachable, username validation: a Kerberos AS-REQ against a valid username returns a different error than one against an invalid username, which lets an attacker validate a username list without ever supplying a password or triggering a lockout counter.
+Unauthenticated enumeration, against a modern, patched AD environment, is thin. Null SMB sessions and anonymous LDAP binds, which used to hand over user lists and password policy to anyone on the network, have been closed by default since Windows Server 2003 SP1 and Vista, though it's still worth checking both directly, since either being open on an older or misconfigured domain skips straight to the authenticated section below with zero credentials spent.
+
+```bash
+# worth trying regardless: both are closed by default, not always closed in practice
+rpcclient -U "" -N $DC_IP     # null MS-RPC session over the IPC$ share
+ldapsearch -H ldap://$DC_IP -x -s base namingcontexts   # anonymous LDAP bind
+```
+
+What is reliably still available without credentials is the domain and forest name from DNS and the list of domain controllers from SRV records.
+
+```bash
+# find the PDC, all DCs, and the Global Catalog via DNS SRV records
+nslookup -type=srv _ldap._tcp.pdc._msdcs.$DOMAIN
+nslookup -type=srv _ldap._tcp.dc._msdcs.$DOMAIN
+nslookup -type=srv _gc._msdcs.$DOMAIN
+```
+
+The other thing usually still available is Kerberos username validation, if pre-authentication is reachable at all: a Kerberos AS-REQ against a valid username returns a different error than one against an invalid username, which lets an attacker validate a username list without ever supplying a password or triggering a lockout counter.
+
+**Requirements:** network line of sight to a KDC on port 88 and a candidate username list; no credential of any kind is spent, and no lockout counter increments, since the KDC never gets far enough to check a password.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 210" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Two rows contrasting the KDC's response to an AS-REQ for a valid username versus an invalid one, with no password supplied in either case. For a valid username, the KDC replies KRB5KDC_ERR_PREAUTH_REQUIRED, confirming the account exists. For an invalid username, the KDC replies KRB5KDC_ERR_C_PRINCIPAL_UNKNOWN. The two distinct error codes let an attacker validate a username list with zero credentials and no lockout risk.">
+    <text x="15" y="22" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">Valid username, no password supplied</text>
+    <rect x="10" y="35" width="130" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="75" y="61" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <rect x="480" y="35" width="150" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="61" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <line x1="140" y1="57" x2="480" y2="57" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adUserEnumA)" />
+    <text x="310" y="49" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">AS-REQ for jdoe, no pre-auth data</text>
+    <line x1="480" y1="79" x2="140" y2="79" stroke="#f59e0b" strokeOpacity="0.8" strokeWidth="1.3" markerEnd="url(#adUserEnumB)" />
+    <text x="310" y="97" textAnchor="middle" fill="#f59e0b" fontSize="8" opacity="0.9">KRB5KDC_ERR_PREAUTH_REQUIRED: the account exists</text>
+
+    <text x="15" y="132" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">Invalid username, no password supplied</text>
+    <rect x="10" y="145" width="130" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="75" y="171" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <rect x="480" y="145" width="150" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="171" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <line x1="140" y1="167" x2="480" y2="167" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adUserEnumA)" />
+    <text x="310" y="159" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">AS-REQ for nosuchuser, no pre-auth data</text>
+    <line x1="480" y1="189" x2="140" y2="189" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1.2" markerEnd="url(#adUserEnumC)" />
+    <text x="310" y="204" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.75">KRB5KDC_ERR_C_PRINCIPAL_UNKNOWN: no such account</text>
+    <defs>
+      <marker id="adUserEnumA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adUserEnumB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" opacity="0.85" />
+      </marker>
+      <marker id="adUserEnumC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The same distinction AS-REP Roasting (Part 3) exploits one step later: the KDC answers a question about identity before it ever asks for proof of it.</p>
+</div>
+
+```bash
+# Kerberos pre-auth username validation, no credentials, no lockout risk
+kerbrute userenum -d $DOMAIN --dc $DC_IP users.txt
+
+# NetExec's equivalent, over the same mechanism
+netexec smb $DC_IP -u users.txt -p '' --no-bruteforce
+```
 
 Authenticated enumeration is a different world entirely. The moment a single valid domain credential is available, an LDAP bind to any domain controller opens read access to nearly the entire directory: every user object and most of its attributes, every group and its membership, every computer object and its delegation flags, every GPO, every trust, and, critically, the security descriptor on all of it. There is effectively no privilege escalation required to go from "one compromised laptop" to "a structural map of the entire domain," which is precisely why this phase of an intrusion is so hard to prevent and, as the last section of this post covers, so hard to detect.
 
@@ -31,17 +94,79 @@ Authenticated enumeration is a different world entirely. The moment a single val
 
 **Domain and forest information.** Domain and forest functional level, the domain SID, the default password and account lockout policy, and any fine-grained password policies (PSOs) applied to specific groups, all readable without any special rights.
 
+```bash
+# native, RSAT
+Get-ADDomain
+Get-ADForest
+net accounts /domain
+
+# ldapsearch, cross-platform, needs only a bind
+ldapsearch -H ldap://$DC_IP -x -D "$USER@$DOMAIN" -w "$PASSWORD" -b "DC=corp,DC=com" "(objectClass=domainDNS)" msDS-Behavior-Version
+
+# NetExec's password-policy module, over MS-RPC
+netexec smb $DC_IP -u $USER -p $PASSWORD --pass-pol
+```
+
 **Users.** Every user object, with attributes far more useful than a name: `userAccountControl` flags reveal accounts with `PASSWD_NOTREQD` set or `DONT_EXPIRE_PASSWORD`, the `description` field is a perennial source of plaintext passwords typed in by a well-meaning helpdesk years ago, and `lastLogonTimestamp` separates active accounts from stale ones worth targeting because nobody is watching them.
+
+```bash
+# native
+Get-ADUser -Filter * -Properties Description,PasswordLastSet,LastLogonTimestamp,userAccountControl
+
+# Impacket, from Linux, bulk detail on every user in one pass
+GetADUsers.py $DOMAIN/$USER:$PASSWORD -dc-ip $DC_IP -all
+
+# PowerView, same ground with less friction
+Get-DomainUser -Properties samaccountname,description,useraccountcontrol
+```
 
 **Groups, especially nested membership.** Direct membership in Domain Admins is the obvious thing to check, and also the thing most environments have already learned to watch. Nested membership is the part naive enumeration misses: a user in a group that is itself a member of Domain Admins is a Domain Admin in every way that matters, and a simple, non-recursive membership query will not show that relationship at all. Native `net group "domain admins" /domain` and `Get-ADGroupMember -Identity "Domain Admins" -Recursive` both resolve nesting correctly; PowerView's `Get-DomainGroupMember -Recurse` does the same and is usually what public writeups actually run.
 
-**<Term concept="organizational-unit">Organizational units</Term> and delegated permissions.** OUs are readable by default exactly like everything else, and the interesting part is never the OU itself, it is the ACL delegated on it. A help desk group holding reset-password rights over an OU full of ordinary end users is normal and expected; the identical right delegated over an OU that happens to contain Tier 0 accounts is the finding, and it is precisely Part 1's security descriptor structure applied at OU scope rather than to a single object. Native `Get-ADOrganizationalUnit -Filter * -Properties *` or `dsquery ou` lists every OU; the ACL on a specific one comes from `dsacls "OU=Finance,DC=corp,DC=com" /a` natively, or from PowerView's `Get-DomainObjectAcl -SearchBase "OU=Finance,DC=corp,DC=com" -ResolveGUIDs`, which resolves the raw GUIDs in each ACE back to human-readable rights. BloodHound does this for every OU in the domain at once, which is the only way delegated-OU-ACL sprawl actually gets reviewed in practice rather than discovered during an incident.
+```bash
+net group "domain admins" /domain
+Get-ADGroupMember -Identity "Domain Admins" -Recursive
+Get-DomainGroupMember -Identity "Domain Admins" -Recurse
+```
+
+**<Term concept="organizational-unit">Organizational units</Term> and delegated permissions.** OUs are readable by default exactly like everything else, and the interesting part is never the OU itself, it is the ACL delegated on it. A help desk group holding reset-password rights over an OU full of ordinary end users is normal and expected; the identical right delegated over an OU that happens to contain Tier 0 accounts is the finding, and it is precisely Part 1's security descriptor structure applied at OU scope rather than to a single object. BloodHound does this for every OU in the domain at once, which is the only way delegated-OU-ACL sprawl actually gets reviewed in practice rather than discovered during an incident.
+
+```bash
+# list every OU
+Get-ADOrganizationalUnit -Filter * -Properties *
+dsquery ou
+
+# the ACL on one specific OU
+dsacls "OU=Finance,DC=corp,DC=com" /a
+Get-DomainObjectAcl -SearchBase "OU=Finance,DC=corp,DC=com" -ResolveGUIDs
+```
 
 **Computers and their delegation flags.** Operating system and patch level identify easy targets directly. Far more valuable is the `userAccountControl` bit for unconstrained delegation: a computer trusted for unconstrained delegation caches a copy of the Kerberos TGT of any user who authenticates to it, so compromising that one machine can mean harvesting the credentials of everyone who ever logs into it, print servers and file servers being the classic, frequently-overlooked example.
 
-**Service Principal Names.** Any account with an SPN registered, almost always a service account, can have a Kerberos service ticket requested for it by any authenticated user and cracked offline, no interaction with the target account required. Enumerating every SPN in the domain is enumerating every Kerberoasting candidate in the domain in one pass, a technique covered protocol-first in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids).
+```bash
+# native: every computer, with OS and delegation-relevant flags
+Get-ADComputer -Filter * -Properties OperatingSystem,TrustedForDelegation,msDS-AllowedToDelegateTo
+
+# PowerView: computers specifically trusted for unconstrained delegation
+Get-DomainComputer -Unconstrained -Properties dnshostname
+```
+
+**Service Principal Names.** Any account with an <Term concept="spn">SPN</Term> registered, almost always a service account, can have a Kerberos service ticket requested for it by any authenticated user and cracked offline, no interaction with the target account required. Enumerating every SPN in the domain is enumerating every Kerberoasting candidate in the domain in one pass, a technique covered protocol-first, including the SPN format itself, in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids), with the full cracking workflow in [Part 3](/posts/active-directory-security-part3).
+
+```bash
+# list every account with a registered SPN, enumeration only, no ticket requested
+Get-ADUser -Filter {ServicePrincipalName -ne "$null"} -Properties ServicePrincipalName
+setspn -Q */* 
+```
 
 **ACLs.** The security descriptor on every object, covered structurally in Part 1, is where enumeration stops being a list of facts and becomes a graph. A `GenericAll` or `WriteDACL` ACE granted to a low-privileged group on an OU, a GPO, or a privileged user is a privilege escalation path that exists regardless of patch level, and it is precisely the relationship BloodHound is built to surface at domain scale, because no human is finding it by browsing ACL editor dialogs one object at a time.
+
+```bash
+# the inbound ACL on any single object
+Get-DomainObjectAcl -Identity "CN=Domain Admins,CN=Users,DC=corp,DC=com" -ResolveGUIDs
+
+# every dangerous ACE (GenericAll, WriteDACL, WriteOwner, ...) held by a specific principal, domain-wide
+Find-InterestingDomainAcl -ResolveGUIDs | Where-Object { $_.IdentityReferenceName -eq "lowpriv-user" }
+```
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 160" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A path diagram showing a user named jdoe who is a member of the Helpdesk group, which is a member of the Server Admins group, which holds a GenericAll ACE granting full control over Domain Admins, forming a complete attack path built from two membership hops and one ACL edge.">
@@ -72,7 +197,19 @@ Authenticated enumeration is a different world entirely. The moment a single val
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Neither hop needs a vulnerability: nested membership and a single misconfigured ACE are enough, and it is exactly the shape of relationship BloodHound is built to surface automatically.</p>
 </div>
 
-**<Term concept="group-policy">Group Policy Objects</Term>.** Enumerating GPOs means three separate questions, not one: what a GPO actually configures, which sites, domains, or OUs it is linked to, and, the one naive enumeration misses entirely, whether that GPO grants local administrator rights on every computer it touches through Restricted Groups or a Group Policy Preferences `Groups.xml`. That last one turns "who is in Domain Admins" into "which OU, and therefore which GPO, silently makes an ordinary help desk group local admin on three hundred workstations," a completely different and usually much larger blast radius. Native `Get-GPO -All` and `Get-GPOReport -All -ReportType Html` (both from the GroupPolicy RSAT module) dump every GPO's settings and, via `Get-GPInheritance -Target "OU=Finance,DC=corp,DC=com"`, exactly which OU a given link applies to. PowerView's `Get-DomainGPO` covers the same ground, and `Get-DomainGPOLocalGroup` plus `Get-DomainGPOUserLocalGroupMapping` automate the GPO-to-local-admin correlation directly, the technique harmj0y's "Where My Admins At?" writeup made standard practice: find every machine a chosen user or group is a local admin on by reading GPOs from a domain controller, without ever touching the machines themselves.
+**<Term concept="group-policy">Group Policy Objects</Term>.** Enumerating GPOs means three separate questions, not one: what a GPO actually configures, which sites, domains, or OUs it is linked to, and, the one naive enumeration misses entirely, whether that GPO grants local administrator rights on every computer it touches through Restricted Groups or a Group Policy Preferences `Groups.xml`. That last one turns "who is in Domain Admins" into "which OU, and therefore which GPO, silently makes an ordinary help desk group local admin on three hundred workstations," a completely different and usually much larger blast radius. The technique below, correlating GPOs to local admin rights without ever touching a target machine, is harmj0y's "Where My Admins At?" writeup made standard practice.
+
+```bash
+# native: dump every GPO's settings, and where a specific link applies
+Get-GPO -All
+Get-GPOReport -All -ReportType Html -Path allgpos.html
+Get-GPInheritance -Target "OU=Finance,DC=corp,DC=com"
+
+# PowerView: the same ground, plus direct GPO-to-local-admin correlation
+Get-DomainGPO
+Get-DomainGPOLocalGroup
+Get-DomainGPOUserLocalGroupMapping -Identity lowpriv-user
+```
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain: a GPO sets Restricted Groups or a Group Policy Preferences Groups.xml entry, that GPO is linked to an OU, the setting applies to every computer inside that OU, and the chosen user or group ends up local administrator on all of them, discoverable entirely by reading GPOs from a domain controller." >
@@ -99,9 +236,30 @@ Authenticated enumeration is a different world entirely. The moment a single val
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every step is a normal GPO read from a domain controller. Nothing here touches the target machines until the attacker actually uses the access.</p>
 </div>
 
-GPOs also have a second, older enumeration payoff: Group Policy Preferences shipped an option to push local account passwords, including local Administrator, encrypted in an XML file's `cpassword` attribute and stored in SYSVOL, readable by any domain user. Microsoft published the AES key used to encrypt it before patching the feature off in 2014 (KB2962486), so any `cpassword` value found today, in `Groups.xml`, `Services.xml`, `ScheduledTasks.xml`, `DataSources.xml`, `Printers.xml`, or `Drives.xml`, decrypts instantly. `Get-GPPPassword` automates finding and decrypting them; a plain recursive grep for `cpassword` across `\\<domain>\SYSVOL` finds the same thing with no tooling at all, and, per MITRE's own classification of the technique, still turns up in environments that migrated GPOs from an older domain without ever cleaning up the leftover preference files.
+GPOs also have a second, older enumeration payoff: Group Policy Preferences shipped an option to push local account passwords, including local Administrator, encrypted in an XML file's `cpassword` attribute and stored in SYSVOL, readable by any domain user. Microsoft published the AES key used to encrypt it before patching the feature off in 2014 (KB2962486), so any `cpassword` value found today, in `Groups.xml`, `Services.xml`, `ScheduledTasks.xml`, `DataSources.xml`, `Printers.xml`, or `Drives.xml`, decrypts instantly, and, per MITRE's own classification of the technique, still turns up in environments that migrated GPOs from an older domain without ever cleaning up the leftover preference files.
 
-**Trusts and delegation.** Direction, transitivity, and SID filtering status of every trust enumerated in Part 1, plus the full picture of delegation across the domain: unconstrained, constrained (with or without protocol transition), and resource-based constrained delegation, each one a distinct escalation primitive with a distinct enumeration signature. Native `nltest /domain_trusts /all_trusts` and `Get-ADTrust -Filter *` list every trust a DC knows about; PowerView's `Get-DomainTrust` covers the same ground and chains naturally into `Get-DomainTrustMapping` for walking transitive trust paths across an entire forest. What an attacker actually does with that map, particularly the SID filtering gap between intra-forest and cross-forest trusts, is the subject of Part 6.
+**Requirements:** any valid domain credential with read access to SYSVOL, which by default is every domain user, since SYSVOL is itself just a share.
+
+```bash
+# automated: finds and decrypts every cpassword under SYSVOL
+Get-GPPPassword.ps1
+
+# no tooling at all, from Linux against the SYSVOL share
+smbclient //$DC_IP/SYSVOL -U $DOMAIN/$USER%$PASSWORD -c 'recurse; ls *.xml'
+grep -riE 'cpassword' -R /mnt/sysvol
+```
+
+**Trusts and delegation.** Direction, transitivity, and SID filtering status of every trust enumerated in Part 1, plus the full picture of delegation across the domain: unconstrained, constrained (with or without protocol transition), and resource-based constrained delegation, each one a distinct escalation primitive with a distinct enumeration signature. What an attacker actually does with that map, particularly the SID filtering gap between intra-forest and cross-forest trusts, is the subject of Part 6.
+
+```bash
+# native: every trust a DC knows about
+nltest /domain_trusts /all_trusts
+Get-ADTrust -Filter *
+
+# PowerView: same ground, plus walking transitive trust paths across the forest
+Get-DomainTrust
+Get-DomainTrustMapping
+```
 
 ## Tooling: From Native Binaries to Graph Databases
 
@@ -144,9 +302,36 @@ Enumeration tooling spans a spectrum from built-in and quiet to purpose-built an
 
 **<Term concept="bloodhound">BloodHound</Term>**, using the SharpHound (or the cross-platform AzureHound/opengraph) collector, is the tool that changed AD offense and defense more than any other single release in the last decade. SharpHound walks LDAP and, optionally, local session and group data on every reachable computer, and loads the result into a graph database where users, groups, computers, GPOs, and every ACE become nodes and edges. The question that used to take an experienced operator hours of manual correlation, what is the shortest path from this compromised user to Domain Admins, becomes a single graph query. Run defensively against your own domain before an attacker runs it against you, it is the fastest way to find the nested-group and stray-ACL paths this post keeps describing.
 
+**Requirements:** any authenticated domain context, run from a domain-joined Windows host, via `runas /netonly`, or with explicit LDAP credentials from a non-joined machine or Linux.
+
+```bash
+# Windows, the official collector, every collection method in one pass
+SharpHound.exe -c All
+
+# loop session collection specifically, useful for building session data over time
+SharpHound.exe -c Session --Loop --loopduration 03:00:00 --loopinterval 00:10:00
+
+# from Linux, the Python ingestor
+bloodhound.py --zip -c All -d $DOMAIN -u $USER -p $PASSWORD -dc $DC_HOST -ns $DC_IP
+```
+
 **ADRecon** and **PingCastle** trade interactivity for reporting: ADRecon produces a single Excel workbook covering the whole domain, and PingCastle produces a risk-scored security assessment report, both popular in audit and compliance contexts as much as offensive ones.
 
+```bash
+# ADRecon, one Excel workbook covering the whole domain
+Invoke-ADRecon.ps1 -DomainController $DC_IP -Credential $cred
+
+# PingCastle, a risk-scored security assessment report
+PingCastle.exe --healthcheck --server $DC_IP
+```
+
 **Impacket**, the Python toolkit, brings the same enumeration to Linux operators and CI-style automation: `GetADUsers.py` for bulk user detail, `GetUserSPNs.py` specifically for Kerberoastable accounts, and `lookupsid.py` for SID brute-forcing against a target directly.
+
+```bash
+GetADUsers.py $DOMAIN/$USER:$PASSWORD -dc-ip $DC_IP -all
+GetUserSPNs.py $DOMAIN/$USER:$PASSWORD -dc-ip $DC_IP
+lookupsid.py $DOMAIN/$USER:$PASSWORD@$DC_IP
+```
 
 ## The Defensive Reality: Most of This Is Invisible by Design
 
@@ -182,3 +367,9 @@ Enumeration is not the noisy, exploit-driven phase defenders sometimes picture. 
 	The GPP cpassword mechanics and the AES key disclosure behind it, referenced in the Group Policy Objects section.
 10. MITRE ATT&CK, "Unsecured Credentials: Group Policy Preferences," T1552.006. [https://attack.mitre.org/techniques/T1552/006/](https://attack.mitre.org/techniques/T1552/006/)
 	The classification confirming GPP credential leakage is still an active technique against unremediated environments.
+11. ropnop, kerbrute. [https://github.com/ropnop/kerbrute](https://github.com/ropnop/kerbrute)
+	The Kerberos pre-authentication username enumeration tool referenced in the unauthenticated enumeration section.
+12. BloodHound, SharpHound collector documentation. [https://bloodhound.specterops.io/collect-data/ce-collection/sharphound](https://bloodhound.specterops.io/collect-data/ce-collection/sharphound)
+	The official collector's CLI flags referenced in the Tooling section's command block.
+13. The Hacker Recipes, "Active Directory: Recon." [https://www.thehacker.recipes/ad/recon/](https://www.thehacker.recipes/ad/recon/)
+	A command-level reference for AD reconnaissance, used as a structural model for the requirements lines and command blocks added throughout this post.

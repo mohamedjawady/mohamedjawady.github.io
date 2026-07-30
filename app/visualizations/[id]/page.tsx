@@ -144,9 +144,9 @@ export async function generateMetadata({ params }: VisualizationPageProps): Prom
       url: getCanonicalUrl(`/visualizations/${id}`),
       images: [
         {
-          url: `${getCanonicalUrl('/api/og/visualization')}?title=${encodeURIComponent(visualization.title)}&description=${encodeURIComponent(visualization.description)}&author=${encodeURIComponent(visualization.author)}&relatedPost=${encodeURIComponent(visualization.relatedPost || '')}&tags=${encodeURIComponent(visualization.tags.join(','))}`,
-          width: 1200,
-          height: 630,
+          url: getCanonicalUrl('/android-chrome-512x512.png'),
+          width: 512,
+          height: 512,
           alt: `${visualization.title} - 0xHabib`,
         },
       ],
@@ -155,7 +155,7 @@ export async function generateMetadata({ params }: VisualizationPageProps): Prom
       card: "summary_large_image",
       title: `${visualization.title} | 0xHabib`,
       description: visualization.description,
-      images: [`${getCanonicalUrl('/api/og/visualization')}?title=${encodeURIComponent(visualization.title)}&description=${encodeURIComponent(visualization.description)}&author=${encodeURIComponent(visualization.author)}&relatedPost=${encodeURIComponent(visualization.relatedPost || '')}&tags=${encodeURIComponent(visualization.tags.join(','))}`],
+      images: [getCanonicalUrl('/android-chrome-512x512.png')],
     },
   }
 }

@@ -14,14 +14,14 @@ export const metadata: Metadata = {
     type: "website",
     url: getCanonicalUrl("/cheatsheets"),
     images: {
-        url: `${getCanonicalUrl('/api/og/cheatsheet')}?title=Quick Reference Guides&description=Programming, cybersecurity, and development cheatsheets for efficient work&category=reference&difficulty=all&author=0xHabib&tags=programming,cybersecurity,development`,
+        url: getCanonicalUrl('/android-chrome-512x512.png'),
       },
   },
   twitter: {
     card: "summary_large_image",
     title: "Cheatsheets | 0xHabib",
     description: "Quick reference guides and cheatsheets for programming, cybersecurity, and development tools.",
-    images: [`${getCanonicalUrl('/api/og/cheatsheet')}?title=Quick Reference Guides&description=Programming, cybersecurity, and development cheatsheets for efficient work&category=reference&difficulty=all&author=0xHabib&tags=programming,cybersecurity,development`],
+    images: [getCanonicalUrl('/android-chrome-512x512.png')],
   },
 }
 

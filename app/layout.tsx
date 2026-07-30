@@ -45,9 +45,9 @@ export const metadata: Metadata = {
     siteName: "0xHabib",
     images: [
       {
-        url: "/api/og",
-        width: 1200,
-        height: 630,
+        url: "/android-chrome-512x512.png",
+        width: 512,
+        height: 512,
         alt: "0xHabib - Cybersecurity Learning Journey",
       },
     ],
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
     title: "0xHabib - Cybersecurity Learning Journey",
     description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
     creator: "@0xhabib",
-    images: ["/api/og"],
+    images: ["/android-chrome-512x512.png"],
   },
   robots: {
     index: true,

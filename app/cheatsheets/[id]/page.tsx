@@ -64,14 +64,14 @@ export async function generateMetadata({ params }: CheatsheetPageProps): Promise
       type: "article",
       url: getCanonicalUrl(`/cheatsheets/${id}`),
       images: {
-        url: `${getCanonicalUrl('/api/og/cheatsheet')}?title=${encodeURIComponent(cheatsheet.title)}&description=${encodeURIComponent(cheatsheet.description)}&category=${encodeURIComponent(cheatsheet.category)}&difficulty=${encodeURIComponent(cheatsheet.difficulty)}&author=${encodeURIComponent(cheatsheet.author)}&tags=${encodeURIComponent(cheatsheet.tags.join(','))}`,
+        url: getCanonicalUrl('/android-chrome-512x512.png'),
       },
     },
     twitter: {
       card: "summary_large_image",
       title: cheatsheet.title,
       description: cheatsheet.description,
-      images: [`${getCanonicalUrl('/api/og/cheatsheet')}?title=${encodeURIComponent(cheatsheet.title)}&description=${encodeURIComponent(cheatsheet.description)}&category=${encodeURIComponent(cheatsheet.category)}&difficulty=${encodeURIComponent(cheatsheet.difficulty)}&author=${encodeURIComponent(cheatsheet.author)}&tags=${encodeURIComponent(cheatsheet.tags.join(','))}`],
+      images: [getCanonicalUrl('/android-chrome-512x512.png')],
     },
   }
 }

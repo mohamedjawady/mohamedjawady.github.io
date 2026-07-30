@@ -14,9 +14,9 @@ export const metadata: Metadata = {
     url: '/notes',
     images: [
       {
-        url: '/api/og/notes',
-        width: 1200,
-        height: 630,
+        url: '/android-chrome-512x512.png',
+        width: 512,
+        height: 512,
         alt: 'Learning Notes Collection',
       },
     ],
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Learning Notes | 0xhabib',
     description: 'My personal collection of notes from books, courses, videos, and other learning materials.',
-    images: ['/api/og/notes'],
+    images: ['/android-chrome-512x512.png'],
   },
   alternates: {
     canonical: '/notes',

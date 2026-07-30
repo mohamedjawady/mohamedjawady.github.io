@@ -144,7 +144,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
     }
   }
 
-  const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const ogImageUrl = getCanonicalUrl(post.banner || '/android-chrome-512x512.png')
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return {
@@ -205,7 +205,7 @@ export default async function PostPage({ params }: PostPageProps) {
   // Get series navigation data if post is part of a series
   const seriesNavigation = post.series ? await getSeriesNavigation(post.slug) : null
 
-  const ogImageUrl = `${getCanonicalUrl('')}/api/og/post?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description || '')}&author=${encodeURIComponent(post.author || '0xHabib')}&tags=${encodeURIComponent(post.tags.join(','))}`
+  const ogImageUrl = getCanonicalUrl(post.banner || '/android-chrome-512x512.png')
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return (

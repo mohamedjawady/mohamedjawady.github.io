@@ -25,6 +25,8 @@ Two things before the techniques. First, none of this assumes you've read a spec
 
 Every technique in this post reaches into one of three Kerberos exchanges and either abuses a parameter that exchange was always willing to accept, or forges the output of one entirely. Before the individual techniques, here's the whole thing in one place, with the exact fields that matter.
 
+One term worth pinning down before the diagram, since it isn't a fourth exchange, it's data riding inside the first one: **pre-authentication** is the encrypted timestamp attached to the AS-REQ in row 1 below. The client encrypts a timestamp with a key derived from its own password; the KDC, deriving the same key from the account's stored password hash, only returns an AS-REP with a TGT if that timestamp decrypts correctly. It's the proof-of-password step, and it's what's missing when an account has `UF_DONT_REQUIRE_PREAUTH` set, which is the entire gap AS-REP Roasting walks through.
+
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
   <svg viewBox="0 0 640 400" style={{ width: "100%", maxWidth: "640px" }} role="img" aria-label="A three-row diagram of the full Kerberos exchange. Row one, the Authentication Service exchange: a client sends an AS-REQ carrying its cname and, unless pre-authentication is disabled, an encrypted timestamp, and the KDC returns an AS-REP carrying a TGT encrypted with the krbtgt hash and containing a PAC. Row two, the Ticket Granting Service exchange: the client presents that TGT plus a TGS-REQ naming the target service by sname or SPN, and the KDC returns a TGS-REP carrying a service ticket encrypted with the target service account's key at a chosen encryption type, its PAC copied forward from the TGT. Row three, the Application Server exchange: the client presents that service ticket directly to the target server in an AP-REQ, which decrypts it locally and reads the PAC to decide access, optionally returning an AP-REP for mutual authentication.">
     <rect x="10" y="10" width="620" height="110" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
@@ -34,7 +36,7 @@ Every technique in this post reaches into one of three Kerberos exchanges and ei
     <rect x="490" y="40" width="120" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
     <text x="550" y="64" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">KDC (AS)</text>
     <line x1="140" y1="52" x2="490" y2="52" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adKerbFlowA)" />
-    <text x="315" y="46" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">AS-REQ: cname, encrypted timestamp (pre-auth)</text>
+    <text x="315" y="46" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">AS-REQ: cname + encrypted timestamp, this is pre-authentication</text>
     <line x1="490" y1="70" x2="140" y2="70" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adKerbFlowA)" />
     <text x="315" y="90" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">AS-REP: TGT (krbtgt-encrypted, contains a PAC), session key</text>
     <text x="315" y="106" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="bold">used by: AS-REP Roasting (pre-auth), Unconstrained Delegation (the cached TGT itself)</text>

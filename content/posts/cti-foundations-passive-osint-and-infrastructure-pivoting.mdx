@@ -1,0 +1,157 @@
+---
+title: "CTI Foundations: Part 3 - Passive OSINT and Infrastructure Pivoting"
+description: "Part 3 of the CTI Foundations series. A practical pivoting methodology: starting from one indicator and walking outward through passive DNS, certificate transparency, and scan data to map an adversary's infrastructure footprint, without ever touching it directly."
+date: "2026-06-10"
+author: "Mohamed Habib Jaouadi"
+tags: ["cti-foundations", "threat-intelligence", "osint", "infrastructure-pivoting", "threat-hunting", "passive-recon"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Passive OSINT and infrastructure pivoting methodology for threat intelligence"
+visibility: "public"
+series: "CTI Foundations"
+seriesOrder: 3
+---
+
+> **Pivoting Focus:** The Pyramid of Pain told you which layer of indicator is worth your time. This part is about the mechanics of actually walking from one indicator to the next, without ever sending a packet the adversary would notice.
+
+**TL;DR:** Infrastructure pivoting starts from one artifact, an IP, a domain, a certificate, a hash, and walks outward through passive data sources to find everything else connected to it. Every pivot has to stay passive: querying an indexed dataset, never touching the adversary's live infrastructure directly. The output is not a bigger indicator list, it is a map, and the map is what survives after every individual piece on it has rotated.
+
+## Why This Stays Passive
+
+Reconnaissance in an offensive engagement is allowed to be active: scan the target, probe its services, see what answers. CTI recon almost never has that option, and not just for legal reasons. The moment a query touches adversary-controlled infrastructure directly, resolving a domain against their own authoritative nameserver, connecting to their C2 port, submitting a sample to a sandbox that phones home, there is a real chance the adversary notices. A competent operator watching their own server logs sees a request from a security vendor's ASN and knows they've been found. Infrastructure that would have stayed up for another two weeks rotates that night, and the investigation loses the thread it was trying to pull.
+
+<Term concept="infrastructure-pivoting">Passive pivoting</Term> avoids that entirely by querying datasets that already collected the answer somewhere else. <Term concept="passive-dns">Passive DNS</Term> providers log resolutions other clients already made. <Term concept="shodan">Shodan</Term> and <Term concept="censys">Censys</Term> scan the internet on their own schedule and let you query the results afterward. <Term concept="certificate-transparency">Certificate Transparency</Term> logs record every publicly trusted certificate at issuance, permanently, whether or not the analyst ever visits the site. None of these require the analyst to interact with the target at all. The adversary's logs stay exactly as boring as they were before the investigation started.
+
+This is also why the pivot model in this post is not a shortcut. It's slower than active scanning by design. What it buys back is the ability to keep pulling the thread for as long as it stays useful, instead of burning it on the first query.
+
+## The Pivot Model: One Artifact, Several Directions
+
+Every pivot starts from a single seed, whatever indicator triggered the investigation, and asks the same question in a few different directions: what else shares this? An IP has hosted domains before and might host them again. A certificate gets reused across servers an operator controls, because generating a new one for every box is more work than it's worth. A sample communicates with infrastructure that other samples also communicate with. A registrant email shows up on other domains registered the same way.
+
+None of these directions are exclusive. A mature pivot works several of them from the same seed and keeps whatever corroborates across more than one, since a single-source pivot is exactly the kind of low-confidence finding Part 1's confidence rubric warns about.
+
+| Seed artifact | Pivots outward via | What it typically finds |
+|---|---|---|
+| IP address | Passive DNS, reverse DNS, ASN/netblock | Domains hosted there, neighboring infrastructure on the same provider |
+| Domain | WHOIS history, passive DNS, subdomain enumeration | Registrant reuse across other domains, historical hosting moves |
+| TLS certificate | Certificate Transparency logs, Shodan/Censys SAN search | Every other host presenting the same or a related certificate |
+| JA3/JARM fingerprint | Shodan/Censys fingerprint search | Infrastructure running the same C2 framework, even on unrelated IPs |
+| File hash | VirusTotal Relations, sandbox network telemetry | Other samples from the same builder, the C2 infrastructure they call out to |
+| Registrant email | Reverse WHOIS | Every other domain registered with that address, a common operator mistake |
+
+## The Core Tools, by What They Actually Index
+
+**<Term concept="passive-dns">Passive DNS</Term>** (SecurityTrails, DNSDB, RiskIQ) is the workhorse of domain-to-IP and IP-to-domain pivoting, covered in Part 2's infrastructure section. It answers "what has this IP resolved to, historically" and "what IPs has this domain pointed to, historically," which live DNS cannot, since live DNS only ever shows the current answer.
+
+**<Term concept="shodan">Shodan</Term>** and **<Term concept="censys">Censys</Term>** both continuously scan the public internet and index what they find: open ports, banners, and, critically, the TLS certificate presented on each one, including every Subject Alternative Name in it. Searching for a certificate's serial number or fingerprint across either service surfaces every other host currently presenting that same certificate, a direct line to infrastructure an operator reused rather than regenerating for every box.
+
+**<Term concept="certificate-transparency">Certificate Transparency</Term>**, queried through crt.sh or Censys's own certificate search, goes further than a live scan: it's a permanent, publicly auditable log of every certificate ever issued by a trusted CA, including ones for infrastructure that's already offline. Searching CT logs for a distinctive string in a SAN, an internal hostname pattern, a specific subdomain naming convention, finds infrastructure a live scan will never see again because it's already been torn down.
+
+**<Term concept="virustotal">VirusTotal</Term>**'s Relations graph, already introduced in Part 2, pivots from a sample outward to the infrastructure it communicated with and from an IP or domain outward to every sample that called out to it, in both directions from the same query.
+
+**<Term concept="urlscan">urlscan.io</Term>** submits a URL to a real, instrumented browser and records the entire resulting page load: every domain contacted, every redirect followed, a full screenshot. For phishing infrastructure specifically, this recovers the whole delivery chain from a single link, landing page, credential-harvesting form, exfil endpoint, in one pass.
+
+**<Term concept="greynoise">GreyNoise</Term>** solves a different problem: the public internet is scanned constantly by security researchers, botnets, and background noise unrelated to any specific campaign. Before treating a scanning IP as adversary reconnaissance, checking GreyNoise confirms whether that IP scans everyone, in which case it's noise, not a lead.
+
+**<Term concept="alienvault-otx">AlienVault OTX</Term>** is worth checking early rather than last: a pivot chain someone else already built and published as a "pulse" can save hours, and even a stale or partially wrong pulse is a useful cross-reference against what the analyst finds independently.
+
+## A Worked Pivot Chain
+
+The IPs and domains below use RFC 5737 documentation ranges and reserved names rather than real infrastructure, illustrative rather than a claim about any actual campaign.
+
+**Seed:** a phishing report flags `login-secure-portal.example` as the credential-harvesting link.
+
+**Pivot 1, urlscan.** Submitting the URL to urlscan shows the page loading a form that POSTs credentials to `203.0.113.44:8443`, and pulls in a favicon and a specific CSS bundle from the same host, both distinctive enough to fingerprint.
+
+**Pivot 2, Shodan on the IP.** `203.0.113.44` is running a self-signed certificate with the CN `internal-auth.example` and a SAN list including two other hostnames never seen in the phishing report: `hr-portal-secure.example` and `payroll-access.example`. Same operator, same kit, redeployed under different lures.
+
+**Pivot 3, Certificate Transparency.** Searching crt.sh for `internal-auth.example` turns up two more certificates issued for the same name over the preceding six weeks, each with a different IP in the SAN's resolution history, `203.0.113.51` and `203.0.113.67`, both in the same /24 as the original.
+
+**Pivot 4, passive DNS on the /24.** Passive DNS resolution history for that block shows a consistent pattern: each IP hosts one phishing domain for roughly ten days before the domain moves to the next IP in sequence. That cadence, not any single indicator, is the actual finding, an operational pattern durable enough to write a hunt hypothesis around: watch newly observed certificates reusing the CN `internal-auth.example` regardless of which IP presents them next.
+
+Four pivots, starting from one link, end at a behavioral pattern that outlives every individual domain and IP involved. That's the point of the exercise: the IPs will all be gone in a month. The ten-day rotation cadence, and the certificate CN the operator kept reusing out of laziness, might not be.
+
+## Organizing Findings So the Chain Survives You
+
+A pivot chain that lives only in an analyst's browser history is worthless the moment that analyst is on leave. Every hop needs to be recorded with enough context that someone else can verify it or pick it up cold: what was queried, in which tool, on what date, what came back, and how confident the analyst is that this hop is actually related rather than coincidental.
+
+<CollapsibleCode title="Pivot Log Template" language="markdown">
+
+```markdown
+PIVOT CHAIN: [short name / seed indicator]
+Started: [date] | Analyst: [name] | Related requirement: [link to intelligence requirement]
+
+HOP 1
+- From: [seed artifact]
+- Tool/source: [e.g. urlscan.io scan ID]
+- Found: [new artifact]
+- Confidence this hop is related: High/Medium/Low
+- Why: [one line]
+
+HOP 2
+- From: [artifact from Hop 1]
+- Tool/source: [...]
+- Found: [...]
+- Confidence: [...]
+- Why: [...]
+
+[repeat per hop]
+
+SUMMARY
+- Total artifacts found: [count]
+- Pattern identified (if any): [e.g. rotation cadence, shared cert CN, shared registrant]
+- Recommended hunt/detection: [what this pattern lets you watch for going forward]
+- Confidence in overall cluster: High/Medium/Low (per Part 1's rubric)
+```
+
+</CollapsibleCode>
+
+For anything beyond a single afternoon's pivot, a spreadsheet stops scaling and a graph becomes the right tool, because the relationships between artifacts (this cert was seen on that IP, that IP resolved from this domain) are the actual finding, not the artifacts in isolation. A <Term concept="tip">TIP</Term> like MISP models this natively: events hold the artifacts, objects group related ones together, and galaxy clusters tag the whole thing to a known actor or campaign once there's enough confidence to do so. The pivot log template above is the version that works before a finding is confident enough to formalize into MISP; promote it once it is.
+
+## Where Passive Stops Being Free
+
+Every tool named above has a free tier, and every free tier has a rate limit that a serious pivot chain will eventually hit. Shodan's free API allows a small number of query credits per month. VirusTotal's public API rate-limits aggressively and restricts some relationship data to paid tiers. SecurityTrails and DNSDB both gate historical passive DNS depth behind a subscription, and the historical depth is usually exactly what a real investigation needs, since the interesting pivot is rarely the current resolution.
+
+This is precisely the gap a <Term concept="collection-management-framework">Collection Management Framework</Term> exists to make visible rather than discovered mid-investigation: which passive data sources does the program actually have paid access to, how far back does each one's history go, and which intelligence requirements simply can't be answered without a source the budget doesn't cover yet. A team that hits a rate limit mid-pivot and has no documented answer for "do we have a paid alternative" is finding that gap the expensive way, in the middle of a live investigation instead of during planning.
+
+## Hands-On Exercise
+
+Take any indicator you have legitimate access to investigate, an indicator from a past incident, a public threat report, or a sample from a malware repository. Starting from that single artifact, run at least three pivots across different tools (passive DNS, a certificate search, and one of VirusTotal Relations or urlscan). Document each hop using the template above, including your confidence and reasoning for each one.
+
+At the end, write one sentence describing the durable pattern you found, not the list of IOCs, the behavioral or operational pattern connecting them. If you can't write that sentence, the pivot chain hasn't found a pattern yet, only a longer list of indicators, and Part 2's warning about pyramid inversion applies exactly as much to your own notes as it does to a vendor feed.
+
+## Conclusion
+
+Pivoting is not a tool skill, it's the practical application of everything Part 1 and Part 2 already established. The confidence rubric from Part 1 governs how much weight each hop deserves. The Pyramid of Pain from Part 2 tells you which artifacts, once found, are worth building lasting detection around versus which are only useful for the next few hours. This part was the missing piece connecting the two: how an analyst actually gets from one indicator to a mapped, documented cluster, without ever alerting the adversary that the map is being built.
+
+## References & Further Reading
+
+1. Shodan Search Engine. [https://www.shodan.io](https://www.shodan.io)
+	Referenced throughout this post's pivot examples; free accounts provide enough query budget for initial investigations.
+2. Censys Search. [https://censys.io](https://censys.io)
+	The certificate-search-focused alternative to Shodan referenced in the Core Tools section.
+3. crt.sh, Certificate Transparency Search. [https://crt.sh](https://crt.sh)
+	The Certificate Transparency log search tool referenced in the worked pivot chain.
+4. certificate.transparency.dev, "Certificate Transparency." [https://certificate.transparency.dev/](https://certificate.transparency.dev/)
+	Background on how CT logs work and why they persist after infrastructure goes offline.
+5. urlscan.io. [https://urlscan.io](https://urlscan.io)
+	The instrumented-browser URL scanning service referenced in the Core Tools section and the worked pivot chain.
+6. GreyNoise. [https://www.greynoise.io](https://www.greynoise.io)
+	Referenced for filtering internet background noise out of scanning-IP investigations.
+7. AlienVault Open Threat Exchange (OTX). [https://otx.alienvault.com](https://otx.alienvault.com)
+	The community pulse-sharing platform referenced as an early cross-reference step.
+8. VirusTotal. [https://www.virustotal.com](https://www.virustotal.com)
+	The Relations-graph pivoting referenced from Part 2, extended here to the worked example.
+9. MISP Threat Sharing Platform Documentation. [https://www.misp-project.org/documentation/](https://www.misp-project.org/documentation/)
+	The events/objects/galaxy model referenced in the Organizing Findings section.
+10. IETF RFC 5737, "IPv4 Address Blocks Reserved for Documentation." [https://datatracker.ietf.org/doc/html/rfc5737](https://datatracker.ietf.org/doc/html/rfc5737)
+	The documentation-only address range (203.0.113.0/24) used throughout the worked pivot chain example.
+11. "CTI Foundations: Part 1 - What Cyber Threat Intelligence Is and Why It Matters" (this blog). [/posts/cti-foundations-what-is-cti-and-why-it-matters](/posts/cti-foundations-what-is-cti-and-why-it-matters)
+	The confidence rubric and intelligence requirement framing this post's pivot log template is built on.
+12. "CTI Foundations: Part 2 - The Threat Intelligence Pyramid" (this blog). [/posts/cti-foundations-the-threat-intelligence-pyramid](/posts/cti-foundations-the-threat-intelligence-pyramid)
+	The Infrastructure Pivoting Workflow subsection this post extends into a full methodology.
+13. "Collection Management Framework" (this blog). [/posts/collection-management-framework](/posts/collection-management-framework)
+	The framework referenced in the Where Passive Stops Being Free section for tracking which paid sources a program actually has access to.
+
+## What's Next
+
+In Part 4, we move from finding infrastructure to attributing it: using the Diamond Model to structure a cluster of pivoted artifacts into an actual adversary profile, and what confidence level that attribution actually deserves.

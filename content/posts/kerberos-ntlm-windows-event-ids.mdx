@@ -111,6 +111,62 @@ Tickets don't last forever. A **renewal** of an existing TGT rather than a full 
 
 <Term concept="ntlm">NTLM</Term> predates Kerberos and is still Windows' fallback protocol, used whenever Kerberos can't be: no line of sight to a domain controller, access by raw IP address instead of hostname, authentication into a workgroup machine outside any domain, or an application that simply never learned to speak Kerberos. NTLM is challenge-response: the server sends a challenge, the client responds with a value computed from the challenge and the account's password hash, and (in a domain) a domain controller verifies that response over Netlogon. Critically, the NTLM hash itself is what gets used to compute that response, which means possessing the hash is functionally equivalent to possessing the password for authentication purposes, the basis of pass-the-hash attacks.
 
+The exchange is three messages, all part of the same NTLMSSP (NTLM Security Support Provider) handshake, plus one side-channel most explanations skip: the server that receives the response usually can't verify it itself.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 460" style={{ width: "100%", maxWidth: "640px" }} role="img" aria-label="A four-row diagram of the full NTLM exchange. Row one, the client sends a NEGOTIATE_MESSAGE (Type 1) to the server, advertising its negotiation flags. Row two, the server responds with a CHALLENGE_MESSAGE (Type 2) containing an 8-byte server challenge, a random nonce. Row three, the client returns an AUTHENTICATE_MESSAGE (Type 3) carrying the username and an NTLMv2 response, an HMAC-MD5 computed from the account's NTLM hash, the server challenge, a client-generated challenge, and a timestamp. Row four, if the server is domain-joined, it does not verify that response itself: it forwards the challenge and response to a domain controller over Netlogon, and the domain controller, holding its own copy of the account's NTLM hash, recomputes the expected response and confirms or denies the match.">
+    <defs>
+      <marker id="adNtlmArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+
+    <rect x="10" y="10" width="620" height="90" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="25" y="28" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">1. NEGOTIATE_MESSAGE (Type 1)</text>
+    <rect x="20" y="38" width="120" height="40" rx="6" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="62" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Client</text>
+    <rect x="490" y="38" width="120" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="550" y="62" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Server</text>
+    <line x1="140" y1="52" x2="490" y2="52" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adNtlmArrow)" />
+    <text x="315" y="46" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">negotiation flags: unicode, NTLMv2, signing/sealing support</text>
+    <text x="315" y="88" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.6">no credential material yet, just capability negotiation</text>
+
+    <rect x="10" y="110" width="620" height="90" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="25" y="128" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">2. CHALLENGE_MESSAGE (Type 2)</text>
+    <rect x="20" y="138" width="120" height="40" rx="6" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="162" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Client</text>
+    <rect x="490" y="138" width="120" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="550" y="162" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Server</text>
+    <line x1="490" y1="152" x2="140" y2="152" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adNtlmArrow)" />
+    <text x="315" y="146" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">an 8-byte server challenge: a fresh random nonce, generated per connection</text>
+    <text x="315" y="188" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="bold">this is the value an NTLM relay attacker forwards to the client unmodified</text>
+
+    <rect x="10" y="210" width="620" height="105" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="25" y="228" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">3. AUTHENTICATE_MESSAGE (Type 3)</text>
+    <rect x="20" y="238" width="120" height="40" rx="6" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="262" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Client</text>
+    <rect x="490" y="238" width="120" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="550" y="262" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Server</text>
+    <line x1="140" y1="252" x2="490" y2="252" stroke="#ef4444" strokeOpacity="0.7" strokeWidth="1.2" markerEnd="url(#adNtlmArrow)" />
+    <text x="315" y="246" textAnchor="middle" fill="#ef4444" fontSize="7.5" opacity="0.9">username + NTLMv2 response: HMAC-MD5(NTLM hash, server challenge + client challenge + timestamp)</text>
+    <text x="315" y="288" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="bold">this is what pass-the-hash computes directly from a stolen NTLM hash, no password needed</text>
+    <text x="315" y="304" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="bold">and what a relay attacker forwards to the target unmodified, never learning the hash at all</text>
+
+    <rect x="10" y="325" width="620" height="120" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="25" y="343" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">4. Netlogon Validation (domain-joined servers only)</text>
+    <rect x="255" y="353" width="130" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="320" y="377" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Server</text>
+    <rect x="480" y="353" width="130" height="40" rx="6" fill="#8b5cf6" fillOpacity="0.14" stroke="#8b5cf6" strokeWidth="1.2" />
+    <text x="545" y="377" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Domain Controller</text>
+    <line x1="385" y1="367" x2="480" y2="367" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adNtlmArrow)" />
+    <text x="432" y="360" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.75">forwards challenge + response</text>
+    <line x1="480" y1="385" x2="385" y2="385" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adNtlmArrow)" />
+    <text x="432" y="405" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.75">match / no match</text>
+    <text x="315" y="425" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.65">the server never has its own copy of the hash; the DC recomputes the expected response with its own and compares</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Three messages, one hash, no ticket. Everything downstream, pass-the-hash, NTLM relay, over-pass-the-hash, is a different way of getting message 3's response without knowing the account's actual password.</p>
+</div>
+
 | | Kerberos | NTLM |
 |---|---|---|
 | Model | Time-limited tickets, issued once and reused | Challenge-response, repeated per connection |

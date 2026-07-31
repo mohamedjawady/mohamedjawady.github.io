@@ -93,6 +93,27 @@ The table below is the same map in reference form, worth returning to whenever a
 
 Which key the ticket is actually encrypted with depends on its encryption type (etype), and that detail is what makes cracking practical or not. An RC4 ticket is encrypted with a key that's simply the account's NTLM hash, no additional derivation or salting at all, which is why RC4-encrypted tickets crack fast and why cracking tooling defaults to requesting RC4 whenever the KDC will still issue it. An AES ticket derives its key via PBKDF2 from the account's actual password, salted deterministically with the realm name plus the account's username (or, for a computer account, its hostname), which makes offline cracking dramatically slower and is exactly why moving service accounts to AES-only encryption, covered in this technique's detection section below, is the mitigation Microsoft actually recommends over trying to detect every roast attempt. Because nothing here is a bug, Kerberos is doing exactly what the ticket-granting exchange was specified to do, the only real fix is making the password underneath the key uncrackable in the first place, either AES-only encryption or a Group Managed Service Account's long, random, automatically rotated password.
 
+That RC4 key isn't a Kerberos-only concept, either. It's the exact same value NTLM authentication uses, which is worth seeing directly rather than taking on faith.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 130" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A single-row diagram of NTLM's third message: the client sends an AUTHENTICATE_MESSAGE to the server containing a response computed as HMAC-MD5 of the account's NTLM hash, a server challenge, and a client challenge. That NTLM hash is the exact same value an RC4-encrypted Kerberos service ticket is encrypted with, which is why cracking a Kerberoasted RC4 ticket recovers material usable against both protocols.">
+    <rect x="10" y="35" width="130" height="44" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="75" y="61" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Client</text>
+    <rect x="480" y="35" width="150" height="44" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="61" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Server</text>
+    <line x1="140" y1="57" x2="480" y2="57" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adNtlmMiniA)" />
+    <text x="315" y="49" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">AUTHENTICATE_MESSAGE: HMAC-MD5(NTLM hash, challenges)</text>
+    <rect x="180" y="90" width="280" height="30" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="109" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">same NTLM hash an RC4 ticket above is encrypted with</text>
+    <defs>
+      <marker id="adNtlmMiniA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Cracking a Kerberoasted RC4 ticket doesn't just recover a Kerberos-specific secret, it recovers the account's password, and from it, the same NTLM hash this exact message uses. The full three-message NTLM exchange, plus how pass-the-hash and NTLM relay each abuse it differently, is covered in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids).</p>
+</div>
+
 **Requirements:** any valid domain credential (or a valid TGT already in hand), and at least one account in the domain with a registered SPN, which in most environments is nearly guaranteed since any service account running under a domain identity typically has one.
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>

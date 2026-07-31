@@ -108,15 +108,20 @@ Every technique from Parts 3 through 6, rolled up by which layer actually catche
 | Timeroasting (3) | No dedicated audit event (MS-SNTP, UDP 123) | timeroast.py / netexec -M timeroast command-line patterns |
 | Targeted Kerberoasting (3) | Event 5136, transient SPN write | targetedKerberoast.py command line |
 | Unconstrained delegation abuse (3) | Event 4738/5136; MDI coercion alerts | Rubeus/Mimikatz TGT-dump patterns |
+| Constrained delegation (KCD) abuse (3) | No write event; review msDS-AllowedToDelegateTo | Rubeus `s4u` / Impacket `getST.py` command line |
 | RBCD abuse (3) | Event 5136, 4741 | Impacket rbcd.py / addcomputer.py patterns |
+| Coercion relayed to RBCD (3) | MDI coercion alerts; event 5136 on coerced machine | `ntlmrelayx.py --delegate-access` command line |
 | DnsAdmins ServerLevelPluginDll (3) | DNS Server event 770; event 4657, 7036 | `dnscmd.exe`/`sc.exe` command-line patterns; child process off dns.exe |
 | Shadow Credentials (3) | Event 5136, 4768 cert preauth | Whisker/pywhisker/Certipy shadow command lines |
 | AD CS ESC1 (3) | CA events 4886/4887 | Certipy request patterns to enrollment endpoints |
+| NoPac (3) | Event 4741/4781/4743 sequence; KB5008380 rejects unpatched | noPac.py command line |
+| Zerologon (3) | Event 5829 on unpatched DCs; patch status is the real control | `zerologon_tester.py`/`cve-2020-1472-exploit.py` command line |
 | DCSync / Golden Ticket (3) | Event 4662; MDI DCSync alert | secretsdump.py `-just-dc`; Mimikatz `lsadump::dcsync` |
 | PowerShell Remoting (4) | Event 4624 | wsmprovhost.exe parent process; events 4103/4104 |
 | LSASS extraction (4) | n/a (endpoint-only) | ASR LSASS rule; event 4656; Sysmon event 10 |
 | SAM/SECURITY hive dump (4) | n/a (endpoint-only) | `reg.exe save` sequence; event 4657 |
 | DPAPI backup key theft (4) | LSA API auditing (DSInternals) | `lsadump::backupkeys`/SharpDPAPI patterns |
+| AD Connect sync account extraction (4) | Event 4624 for MSOL_* from an unexpected source | `Get-AADIntSyncCredentials`/`DumpAADSyncCreds` command line |
 | Over-Pass-the-Hash (4) | Event 4768, RC4 in AES environment | Rubeus `asktgt` command line |
 | Silver / Diamond / Sapphire Ticket (5) | Absent 4768/4769 (Silver); PAC/AD mismatch (Diamond); missing Requestor/Attributes PAC structures (Sapphire, patched DCs only) | Rubeus `silver`/`diamond` command line; Impacket `ticketer.py -request -impersonate` |
 | SID History Injection (5) | Non-empty sIDHistory outside a documented migration; event 5136/7036 | Mimikatz `sid::patch`/`sid::add`; DSInternals `Add-ADDBSidHistory`; pySIDHistory command line |

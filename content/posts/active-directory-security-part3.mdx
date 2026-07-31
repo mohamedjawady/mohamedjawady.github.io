@@ -389,6 +389,8 @@ Setup is two writes, not a protocol exchange: create (or reuse) an attacker-cont
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>S4U2Self and S4U2Proxy are legitimate Kerberos extensions built for exactly this kind of delegated request. Nothing here is a protocol bug: the KDC does exactly what the delegation attribute told it to trust.</p>
 </div>
 
+Walked through in order: the attacker's controlled computer account first asks the KDC for a ticket to itself while naming the user it wants to impersonate (**S4U2Self**), and gets one back marked forwardable, simply because the requesting account is an ordinary delegation-capable computer account, nothing about this step checks the target computer's attribute at all. That forwardable ticket is then presented back to the KDC as evidence in a second request, asking for a service ticket to the actual target computer (**S4U2Proxy**). Only this second step checks `msDS-AllowedToActOnBehalfOfOtherIdentity`, sees the attacker's account listed there, and issues a real service ticket impersonating the target user. The setup, writing that attribute, is the only place the attacker's actual access mattered; the four-message exchange above is the KDC doing exactly what a legitimate delegation request looks like, because at the protocol level, that's all it is.
+
 ```bash
 # create an attacker-controlled computer account, using machine account quota
 addcomputer.py -computer-name 'ATTACKERPC$' -computer-pass 'Passw0rd!' $DOMAIN/$USER:$PASSWORD

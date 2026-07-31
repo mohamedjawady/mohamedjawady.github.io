@@ -13,7 +13,7 @@ seriesOrder: 5
 
 > **Series Focus:** Parts 3 and 4 covered getting in and moving around. This part covers staying in after the specific hole that let an attacker in gets patched, which is a different problem: persistence in Active Directory usually doesn't mean malware on a box, it means a forged credential, a patched authentication path, or a permission nobody remembered to look for.
 
-**TL;DR:** A <Term concept="golden-ticket">Golden Ticket</Term> forged from the krbtgt hash survives until that hash is rotated twice, covered fully in Part 3. A <Term concept="silver-ticket">Silver Ticket</Term> is quieter but narrower: forged from one service account's hash, it never touches a domain controller at all. A <Term concept="diamond-ticket">Diamond Ticket</Term> starts from a real ticket and edits it, evading the detections built for tickets forged entirely from scratch. The <Term concept="skeleton-key">Skeleton Key</Term> patches a domain controller's LSASS in memory so every account authenticates with its real password or one attacker-chosen master password, until the DC reboots. <Term concept="dsrm">DSRM</Term> abuse turns a rarely-rotated local account on every DC into a backdoor that survives a full domain password reset. A <Term concept="custom-ssp">custom SSP</Term> sits inside LSASS logging every credential that authenticates through it, in plaintext, indefinitely. And ACL-based persistence through <Term concept="adminsdholder">AdminSDHolder</Term> means a permission an admin already removed can come back on its own, every hour, until the actual backdoor is found.
+**TL;DR:** A <Term concept="golden-ticket">Golden Ticket</Term> forged from the krbtgt hash survives until that hash is rotated twice, covered fully in Part 3. A <Term concept="silver-ticket">Silver Ticket</Term> is quieter but narrower: forged from one service account's hash, it never touches a domain controller at all. A <Term concept="diamond-ticket">Diamond Ticket</Term> starts from a real ticket and edits it, evading the detections built for tickets forged entirely from scratch. A <Term concept="sapphire-ticket">Sapphire Ticket</Term> goes one step further: instead of editing a PAC, it transplants an already-legitimate one lifted from a privileged account via S4U2Self and U2U, evading even PAC-versus-directory correlation checks, at least until a fully patched domain controller notices the transplanted PAC is missing structures only a real TGT should have. The <Term concept="skeleton-key">Skeleton Key</Term> patches a domain controller's LSASS in memory so every account authenticates with its real password or one attacker-chosen master password, until the DC reboots. <Term concept="dsrm">DSRM</Term> abuse turns a rarely-rotated local account on every DC into a backdoor that survives a full domain password reset. A <Term concept="custom-ssp">custom SSP</Term> sits inside LSASS logging every credential that authenticates through it, in plaintext, indefinitely. And ACL-based persistence through <Term concept="adminsdholder">AdminSDHolder</Term> means a permission an admin already removed can come back on its own, every hour, until the actual backdoor is found.
 
 ## Introduction
 
@@ -21,7 +21,7 @@ Getting Domain Admin once is, per Part 3, mostly a matter of finding the right m
 
 Same rules as the rest of this series: every technique explained from what it actually does, a diagram wherever the mechanism isn't obvious from a sentence, and a real detection signal for each one rather than a vague "monitor for anomalies."
 
-## Golden, Silver, and Diamond Tickets: Three Ways to Forge Kerberos
+## Golden, Silver, Diamond, and Sapphire Tickets: Four Ways to Forge Kerberos
 
 The <Term concept="golden-ticket">Golden Ticket</Term> is Part 3's endgame and won't be re-explained here: forge a TGT entirely offline from the krbtgt hash, valid for any username and any group membership, until krbtgt is rotated twice. What's worth adding here is the other two members of the family, because they trade the Golden Ticket's domain-wide reach for properties that matter specifically for staying hidden.
 
@@ -85,7 +85,36 @@ A <Term concept="diamond-ticket">Diamond Ticket</Term> solves a different proble
   <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The first step is the only one that touches a domain controller, and it's a completely ordinary authentication, indistinguishable from any other logon.</p>
 </div>
 
-**Requirements:** a Silver Ticket needs only the target service account's password hash, not krbtgt, and never needs Domain Admin if that one hash is already in hand. A Diamond Ticket needs krbtgt's hash plus a valid account to request the initial real TGT from, the same prerequisite as a Golden Ticket.
+The `/ldap` and `/opsec` flags on the newer `diamond` implementation are specifically built to match real Windows AS-REQ/AS-REP behavior and pull realistic PAC values, closing the gap that made earlier diamond tickets detectable too.
+
+Diamond Tickets still have one tell left: editing a PAC's group memberships by hand can drift from what the directory actually says about that account, and a detector correlating ticket contents against AD catches exactly that drift. A <Term concept="sapphire-ticket">Sapphire Ticket</Term> removes the hand-editing step entirely. Instead of writing a privileged group SID into a PAC, it borrows one that's already legitimate: the attacker runs an S4U2Self request as a service the attacker controls, immediately followed by a U2U (User-to-User) exchange, targeting a genuinely privileged account, which yields a real service ticket carrying that privileged account's real PAC. That PAC, exactly as issued by the KDC, is then spliced into a low-privileged user's own real TGT and re-encrypted with the krbtgt hash. Nothing in the resulting ticket was hand-edited, so there's no drift between the PAC and the directory to correlate against, only a PAC that belongs to a different account than the ticket claims to.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A four-step vertical chain for a Sapphire Ticket. Step one, the attacker runs an S4U2Self request as a service it controls, targeting a genuinely privileged account. Step two, a U2U exchange against that same request yields a real service ticket carrying the privileged account's real PAC. Step three, the attacker extracts that PAC and splices it into a low-privileged user's own real TGT. Step four, the spliced ticket is re-encrypted with the krbtgt hash, producing a ticket whose PAC was never hand-edited, only transplanted from a different, genuinely issued ticket.">
+    <rect x="70" y="10" width="500" height="38" rx="6" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="320" y="34" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">1. S4U2Self as a controlled service, impersonating a genuinely privileged account</text>
+    <rect x="70" y="64" width="500" height="38" rx="6" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="320" y="88" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">2. U2U exchange: yields a real service ticket carrying that account's real PAC</text>
+    <rect x="70" y="118" width="500" height="38" rx="6" fill="#a855f7" fillOpacity="0.1" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="142" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">3. Extract that PAC, splice it into a low-privileged user's own real TGT</text>
+    <rect x="70" y="172" width="500" height="38" rx="6" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="320" y="196" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">4. Re-encrypt with the krbtgt hash: no field was ever hand-edited</text>
+    <rect x="120" y="226" width="400" height="28" rx="6" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="245" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">missing: the Requestor / Attributes PAC structures a real TGT carries</text>
+    <line x1="320" y1="48" x2="320" y2="64" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adSapphire)" />
+    <line x1="320" y1="102" x2="320" y2="118" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adSapphire)" />
+    <line x1="320" y1="156" x2="320" y2="172" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adSapphire)" />
+    <line x1="320" y1="210" x2="320" y2="226" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adSapphire)" />
+    <defs>
+      <marker id="adSapphire" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The PAC itself is never hand-edited, which is exactly what defeats Diamond Ticket detection. But it's a service-ticket PAC wearing a TGT's clothes, and that mismatch is its own tell on a patched DC.</p>
+</div>
+
+**Requirements:** a Silver Ticket needs only the target service account's password hash, not krbtgt, and never needs Domain Admin if that one hash is already in hand. A Diamond Ticket needs krbtgt's hash plus a valid account to request the initial real TGT from, the same prerequisite as a Golden Ticket. A Sapphire Ticket needs krbtgt's hash or AES key, control of an account with an SPN to run the S4U2Self request from, and knowledge of a genuinely privileged account to target for its PAC.
 
 ```bash
 # Silver Ticket: forge a TGS directly from a service account's hash, no KDC involved
@@ -93,11 +122,12 @@ Rubeus.exe silver /service:cifs/fileserver.$DOMAIN /rc4:$SERVICE_HASH /user:anyu
 
 # Diamond Ticket: starts from a real TGT, edits it, re-encrypts with krbtgt's hash
 Rubeus.exe diamond /tgtdeleg /ticketuser:anyuser /ticketuserid:1234 /groups:512 /krbkey:$KRBTGT_HASH /domain:$DOMAIN /dc:$TARGET_DC /opsec /ptt
+
+# Sapphire Ticket: Impacket's ticketer.py, transplanting a privileged account's real PAC
+ticketer.py -request -impersonate administrator -domain-sid $DOMAIN_SID -domain $DOMAIN -aesKey $KRBTGT_AES_KEY -user-id 1104 lowpriv-user
 ```
 
-The `/ldap` and `/opsec` flags on the newer `diamond` implementation are specifically built to match real Windows AS-REQ/AS-REP behavior and pull realistic PAC values, closing the gap that made earlier diamond tickets detectable too.
-
-**Detection.** Silver Tickets are the hardest of the three by default, precisely because no KDC event exists to alert on; the one server-side control that catches them is setting `ValidateKdcPacSignature` to require domain controllers to validate the PAC signature on presented tickets, which a forged Silver Ticket won't have. Diamond Tickets are caught the same way Golden Tickets sometimes aren't: since the initial TGT request is completely ordinary, detection has to focus on what happens after, unexpected group membership appearing in a ticket's PAC relative to what the account actually holds in AD, which requires correlating ticket contents against the directory rather than looking for anomalies in the ticket request itself.
+**Detection.** Silver Tickets are the hardest of the three older variants by default, precisely because no KDC event exists to alert on; the one server-side control that catches them is setting `ValidateKdcPacSignature` to require domain controllers to validate the PAC signature on presented tickets, which a forged Silver Ticket won't have. Diamond Tickets are caught the same way Golden Tickets sometimes aren't: since the initial TGT request is completely ordinary, detection has to focus on what happens after, unexpected group membership appearing in a ticket's PAC relative to what the account actually holds in AD, which requires correlating ticket contents against the directory rather than looking for anomalies in the ticket request itself. Sapphire Tickets are built specifically to survive that correlation check, since the PAC really does belong to the privileged account it claims, which is exactly why Microsoft's October 2022 patch (KB5008380, issued alongside the fix for CVE-2021-42287) added two PAC structures, Requestor and Attributes, that only ever appear in a genuinely issued TGT: a transplanted service-ticket PAC doesn't have them, and a fully patched domain controller rejects the ticket with `KDC_ERR_TGT_REVOKED` on presentation. On a domain that hasn't applied that patch, a Sapphire Ticket has no reliable detection at all.
 
 ## The Skeleton Key: One Password, Every Account
 
@@ -288,6 +318,7 @@ The ACE rides SDProp onto every protected group's members on the next cycle, wit
 |---|---|---|
 | Silver Ticket | No corresponding KDC request for an accessed service | Absence of 4768/4769; ValidateKdcPacSignature enforcement |
 | Diamond Ticket | PAC group membership inconsistent with AD | Correlate ticket contents against the directory, not the request itself |
+| Sapphire Ticket | Transplanted PAC missing Requestor/Attributes structures | KDC_ERR_TGT_REVOKED on a DC patched per KB5008380; otherwise no reliable signal |
 | Skeleton Key | Code injection / unsigned module in lsass.exe on a DC | LSASS Image File Execution Options auditing; authentication with a non-current password |
 | DSRM backdoor | DsrmAdminLogonBehavior set to 1 or 2 | Registry auditing; event 4624 for the DSRM account name |
 | Custom SSP | Unexpected entry in Security Packages; unsigned DLL in lsass.exe | Event 4657; Sysmon event 7 (ImageLoad) |
@@ -323,3 +354,9 @@ None of these techniques need to be re-discovered to be re-used. That's the actu
 	The full Golden Ticket and DCSync mechanics this post builds on rather than repeating.
 12. The Hacker Recipes, "Active Directory: Persistence." [https://www.thehacker.recipes/ad/persistence/](https://www.thehacker.recipes/ad/persistence/)
 	A command-level reference for AD persistence techniques, used as a structural model for the requirements lines and command blocks added throughout this post.
+13. The Hacker Recipes, "Sapphire Ticket." [https://www.thehacker.recipes/ad/movement/kerberos/forged-tickets/sapphire](https://www.thehacker.recipes/ad/movement/kerberos/forged-tickets/sapphire)
+	The source for the Sapphire Ticket mechanics, the S4U2Self-plus-U2U PAC transplant, and the ticketer.py command referenced in this section.
+14. Microsoft Security Response Center, KB5008380, "Authentication updates (CVE-2021-42287)." [https://support.microsoft.com/en-gb/topic/kb5008380-authentication-updates-cve-2021-42287-9dafac11-e0d0-4cb8-959a-143bd0201041](https://support.microsoft.com/en-gb/topic/kb5008380-authentication-updates-cve-2021-42287-9dafac11-e0d0-4cb8-959a-143bd0201041)
+	The patch that added the Requestor and Attributes PAC structures a transplanted Sapphire Ticket PAC lacks, referenced in the Detection subsection.
+15. Fortra, Impacket. [https://github.com/fortra/impacket](https://github.com/fortra/impacket)
+	The source of ticketer.py, referenced in the Sapphire Ticket command block.

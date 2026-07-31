@@ -105,6 +105,7 @@ Every technique from Parts 3 through 6, rolled up by which layer actually catche
 |---|---|---|
 | Kerberoasting (3) | Event 4769, RC4 burst; MDI | Rubeus/NetExec command-line patterns |
 | AS-REP Roasting (3) | Event 4768, no preauth; MDI | Same tooling patterns as Kerberoasting |
+| Timeroasting (3) | No dedicated audit event (MS-SNTP, UDP 123) | timeroast.py / netexec -M timeroast command-line patterns |
 | Targeted Kerberoasting (3) | Event 5136, transient SPN write | targetedKerberoast.py command line |
 | Unconstrained delegation abuse (3) | Event 4738/5136; MDI coercion alerts | Rubeus/Mimikatz TGT-dump patterns |
 | RBCD abuse (3) | Event 5136, 4741 | Impacket rbcd.py / addcomputer.py patterns |
@@ -118,10 +119,12 @@ Every technique from Parts 3 through 6, rolled up by which layer actually catche
 | DPAPI backup key theft (4) | LSA API auditing (DSInternals) | `lsadump::backupkeys`/SharpDPAPI patterns |
 | Over-Pass-the-Hash (4) | Event 4768, RC4 in AES environment | Rubeus `asktgt` command line |
 | Silver / Diamond / Sapphire Ticket (5) | Absent 4768/4769 (Silver); PAC/AD mismatch (Diamond); missing Requestor/Attributes PAC structures (Sapphire, patched DCs only) | Rubeus `silver`/`diamond` command line; Impacket `ticketer.py -request -impersonate` |
+| SID History Injection (5) | Non-empty sIDHistory outside a documented migration; event 5136/7036 | Mimikatz `sid::patch`/`sid::add`; DSInternals `Add-ADDBSidHistory`; pySIDHistory command line |
 | Skeleton Key (5) | n/a (endpoint-only) | LSASS Image File Execution Options auditing |
 | DSRM backdoor (5) | Event 4624 for DSRM account | Registry write to DsrmAdminLogonBehavior |
 | Custom SSP (5) | n/a (endpoint-only) | Event 4657; Sysmon event 7 (ImageLoad) |
 | AdminSDHolder abuse (5) | Event 5136 on AdminSDHolder | Scheduled BloodHound ACL review |
+| DCShadow (5) | No equivalent of event 5136; new Configuration\Sites server object | `lsadump::dcshadow` command line; MDI-style DRSReplicaAdd/DRSGetNCChanges source-IP monitoring |
 | Trust key theft (6) | Event 4662 on TDO | `lsadump::trust` command line |
 | SID History injection (6) | Non-empty sIDHistory outside migration | Rubeus `/sids` command line |
 

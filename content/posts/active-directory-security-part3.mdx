@@ -13,7 +13,7 @@ seriesOrder: 3
 
 > **Series Focus:** Part 1 mapped the architecture. Part 2 walked through enumerating it from an ordinary authenticated user's seat, and pointed out that the ACLs and delegation flags enumeration turns up form a connected graph rather than a list of findings. This part walks that graph: the specific techniques that turn one compromised low-privilege account into Domain Admin, explained assuming no prior exposure to any of them, using the tools actually current in 2026 rather than whatever a course written five years ago still teaches.
 
-**TL;DR:** Privilege escalation in Active Directory is rarely a vulnerability, it is a series of design decisions being used exactly as designed, aimed at a target they weren't meant for. <Term concept="kerberoasting">Kerberoasting</Term> and <Term concept="asrep-roasting">AS-REP Roasting</Term> abuse Kerberos itself to get crackable material with no interaction. <Term concept="unconstrained-delegation">Unconstrained delegation</Term> and <Term concept="rbcd">Resource-Based Constrained Delegation</Term> abuse the mechanism built to let one service act on a user's behalf. <Term concept="dnsadmins">DnsAdmins</Term> membership, a group that sounds like DNS record delegation, actually grants a DLL-loading feature on the DNS service that turns into SYSTEM on a domain controller with one restart. <Term concept="shadow-credentials">Shadow Credentials</Term> abuses the same attribute Windows Hello for Business uses to store a passwordless credential. <Term concept="esc1">AD CS ESC1</Term> abuses a certificate template that never checked who it was actually issuing a certificate to. <Term concept="dcsync">DCSync</Term> abuses the replication protocol domain controllers use to trust each other, to walk out with the one hash, <Term concept="krbtgt">krbtgt</Term>'s, that ends the game via a <Term concept="golden-ticket">Golden Ticket</Term>. Every technique below gets the same treatment: what it actually does, a diagram where the chain has more than two steps, the current tool for it (<Term concept="rubeus">Rubeus</Term>, <Term concept="netexec">NetExec</Term>, <Term concept="certipy">Certipy</Term>), and the event ID or signal that catches it.
+**TL;DR:** Privilege escalation in Active Directory is rarely a vulnerability, it is a series of design decisions being used exactly as designed, aimed at a target they weren't meant for. <Term concept="kerberoasting">Kerberoasting</Term> and <Term concept="asrep-roasting">AS-REP Roasting</Term> abuse Kerberos itself to get crackable material with no interaction, and <Term concept="timeroasting">Timeroasting</Term> gets the same crackable material from computer accounts through a completely different protocol, MS-SNTP, needing no credential at all. <Term concept="unconstrained-delegation">Unconstrained delegation</Term> and <Term concept="rbcd">Resource-Based Constrained Delegation</Term> abuse the mechanism built to let one service act on a user's behalf. <Term concept="dnsadmins">DnsAdmins</Term> membership, a group that sounds like DNS record delegation, actually grants a DLL-loading feature on the DNS service that turns into SYSTEM on a domain controller with one restart. <Term concept="shadow-credentials">Shadow Credentials</Term> abuses the same attribute Windows Hello for Business uses to store a passwordless credential. <Term concept="esc1">AD CS ESC1</Term> abuses a certificate template that never checked who it was actually issuing a certificate to. <Term concept="dcsync">DCSync</Term> abuses the replication protocol domain controllers use to trust each other, to walk out with the one hash, <Term concept="krbtgt">krbtgt</Term>'s, that ends the game via a <Term concept="golden-ticket">Golden Ticket</Term>. Every technique below gets the same treatment: what it actually does, a diagram where the chain has more than two steps, the current tool for it (<Term concept="rubeus">Rubeus</Term>, <Term concept="netexec">NetExec</Term>, <Term concept="certipy">Certipy</Term>), and the event ID or signal that catches it.
 
 ## Introduction
 
@@ -223,6 +223,53 @@ hashcat -m 18200 hashes.asrep rockyou.txt
 ```
 
 **Detection.** Both techniques leave a specific fingerprint in the encryption type and volume of Kerberos requests, not in any single request looking wrong. Kerberoasting shows up as a burst of **event 4769** (service ticket requested) for many distinct SPNs from one account in a short window, especially when the encryption type field shows RC4 (`0x17`) instead of AES on an environment that otherwise uses AES, since RC4 is what most cracking tooling still requests by default. AS-REP Roasting shows up as **event 4768** (TGT requested) for an account, with no corresponding pre-authentication success pattern and, again, frequently RC4. Neither is loud on its own; both are exactly the kind of query-volume anomaly Microsoft Defender for Identity is built to baseline and alert on, covered in Part 1's collection points table.
+
+## Timeroasting: The Same Idea, a Different Protocol
+
+<Term concept="timeroasting">Timeroasting</Term> gets the "-roasting" name by resemblance, not by mechanism: it doesn't touch Kerberos at all. Domain-joined computers keep their clocks synchronized against a domain controller using MS-SNTP, Microsoft's authenticated extension to NTP, and that authentication works by having the client include its own computer account's RID in the request; the DC responds with a Message Authentication Code computed using a key derived from that computer account's NTLM hash. Nothing about that request has to be authenticated first. Anyone who can reach UDP 123 on a DC can supply any RID they want and get back a MAC keyed to whatever computer account that RID belongs to, with no domain credential of any kind, not even a valid username the way AS-REP Roasting still requires.
+
+**Requirements:** network reachability to a domain controller's NTP service (UDP 123), nothing else. Cracking is the same story as any other roast: it only works against a computer account whose password isn't the strong, randomly generated, auto-rotated one Windows assigns by default, which in practice means legacy provisioning, manually set computer passwords, or accounts created through `net computer` rather than normal domain join.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of the Timeroasting exchange. An attacker with no credential of any kind sends an MS-SNTP time request to a domain controller's NTP service, naming an arbitrary computer account by RID. The domain controller, which never checks whether the requester is authenticated at all, returns a response containing a Message Authentication Code computed using that computer account's NTLM hash. The attacker takes that MAC offline and cracks it with hashcat.">
+    <rect x="10" y="45" width="150" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="85" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Attacker</text>
+    <text x="85" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">(no credential at all)</text>
+    <rect x="480" y="45" width="150" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="555" y="67" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">DC (NTP, UDP 123)</text>
+    <text x="555" y="80" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">no auth check at all</text>
+    <line x1="160" y1="58" x2="480" y2="58" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.2" markerEnd="url(#adTimeA)" />
+    <text x="320" y="50" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">MS-SNTP request naming an arbitrary computer account by RID</text>
+    <line x1="480" y1="82" x2="160" y2="82" stroke="#ef4444" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adTimeB)" />
+    <text x="320" y="100" textAnchor="middle" fill="#ef4444" fontSize="8" opacity="0.9">response: MAC computed with that account's NTLM hash</text>
+    <rect x="230" y="115" width="180" height="30" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="134" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">cracked offline, zero credential ever spent</text>
+    <defs>
+      <marker id="adTimeA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adTimeB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.85" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Compare this to the Kerberoasting exchange above: same offline-cracking payoff, but MS-SNTP never asks for a TGT, or anything else, before it answers.</p>
+</div>
+
+```bash
+# unauthenticated, no credential needed at all: sweep every RID and collect MACs
+python3 timeroast.py $DC_IP
+
+# NetExec's equivalent, same zero-credential requirement
+netexec smb $DC_IP -M timeroast
+
+# offline cracking, hashcat mode 31300 (requires hashcat 7.0+), --username since RIDs stand in for usernames
+hashcat -m 31300 -a 0 -O hashes.txt rockyou.txt --username
+```
+
+Timeroasting only returns a RID, not a hostname, since MS-SNTP never asked who's asking. With a valid domain credential in hand, `Invoke-AuthenticatedTimeRoast` resolves every RID to its computer name automatically and, per Secura's own research, cracks roughly ten times faster than an equivalent Kerberos TGS-REP because the SNTP MAC involves a lighter computation than Kerberos's etype 23 encryption. Neither variant makes a properly randomized machine password crackable; what both variants are actually good at is finding the small number of computer accounts in a domain that never got one.
+
+**Detection.** This is the uncomfortable one: NTP traffic to a domain controller is constant, expected, and essentially unmonitored in most environments, so Timeroasting generates close to no distinguishing signal by design, which is exactly why current tradecraft favors it over adapting Kerberoasting to target computer accounts. There is no dedicated MS-SNTP audit event to point to. The realistic mitigation is upstream of detection entirely: audit for computer accounts with `PASSWORD_EXPIRED` unset for unusually long periods or provisioned outside normal domain join, since those are the accounts a randomized-password default was supposed to protect and Timeroasting is specifically good at finding the ones that slipped through.
 
 ## Delegation Abuse: Unconstrained Delegation and Resource-Based Constrained Delegation
 
@@ -570,6 +617,7 @@ Every technique above gets its own signal, but seeing them side by side is what 
 |---|---|---|
 | Kerberoasting | TGS-REQ burst for many SPNs from one account, often RC4 | Event 4769 on the DC; MDI |
 | AS-REP Roasting | AS-REQ for a no-preauth account, no proof of password | Event 4768 on the DC; MDI |
+| Timeroasting | MS-SNTP request for an arbitrary RID, no authentication | No dedicated audit event; monitor for weak/legacy computer passwords upstream |
 | Unconstrained delegation abuse | TRUSTED_FOR_DELEGATION set on a computer; coercion attempts | Event 4738 / 5136; MDI coercion alerts |
 | RBCD abuse | Write to msDS-AllowedToActOnBehalfOfOtherIdentity; computer account creation burst | Event 5136 (if SACL set); event 4741 |
 | DnsAdmins ServerLevelPluginDll | Plugin DLL loaded from a UNC path; unscheduled DNS service restart | DNS Server event 770; event 4657 (if SACL set); event 7036 |
@@ -580,7 +628,7 @@ Every technique above gets its own signal, but seeing them side by side is what 
 
 ## Conclusion
 
-Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting and AS-REP Roasting use Kerberos exactly as specified. Unconstrained delegation and RBCD use delegation exactly as designed. DnsAdmins uses a DNS server management feature exactly as documented, on a group whose name just doesn't advertise what that feature actually reaches. Shadow Credentials uses the same key-trust mechanism Windows Hello for Business relies on. ESC1 uses certificate enrollment exactly as the template configured it to work. DCSync uses the replication protocol every domain controller depends on. The common thread across all seven is that AD's permission model decides, object by object and attribute by attribute, which of these design features an account is actually allowed to reach, and privilege escalation is what happens when that permission model has drifted from what anyone intended, which per Part 1 is the security descriptor's job in the first place. Enumeration, Part 2's subject, is how that drift gets found before an attacker finds it first, and detecting the techniques in this post, which is what most of it has been about, is the layer that catches the drift nobody found in time.
+Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting and AS-REP Roasting use Kerberos exactly as specified, and Timeroasting gets the same result from a protocol, MS-SNTP, that was never asked to authenticate anything in the first place. Unconstrained delegation and RBCD use delegation exactly as designed. DnsAdmins uses a DNS server management feature exactly as documented, on a group whose name just doesn't advertise what that feature actually reaches. Shadow Credentials uses the same key-trust mechanism Windows Hello for Business relies on. ESC1 uses certificate enrollment exactly as the template configured it to work. DCSync uses the replication protocol every domain controller depends on. The common thread across all eight is that AD's permission model, or in Timeroasting's case, the complete absence of one at the protocol level, decides which of these design features an account is actually allowed to reach, and privilege escalation is what happens when that permission model has drifted from what anyone intended, which per Part 1 is the security descriptor's job in the first place. Enumeration, Part 2's subject, is how that drift gets found before an attacker finds it first, and detecting the techniques in this post, which is what most of it has been about, is the layer that catches the drift nobody found in time.
 
 ## References & Further Reading
 
@@ -612,7 +660,7 @@ Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting a
 	The MS-EFSRPC coercion tool referenced in the unconstrained delegation section's exchange diagram.
 14. Fortra, Impacket. [https://github.com/fortra/impacket](https://github.com/fortra/impacket)
 	The source of `GetUserSPNs.py`, `GetNPUsers.py`, `addcomputer.py`, `rbcd.py`, `getST.py`, and `secretsdump.py`, referenced throughout this post's command blocks.
-15. The Hacker Recipes, "Active Directory." [https://www.thehacker.recipes/ad/](https://www.thehacker.recipes/ad/)
+15. The Hacker Recipes, "Active Directory: Movement." [https://www.thehacker.recipes/ad/movement/](https://www.thehacker.recipes/ad/movement/)
 	A command-level reference for these and other AD attack techniques, used as a structural model for the requirements lines and command blocks added throughout this post.
 16. Shay Ber, "Abusing DNSAdmins Privilege for Escalation in Active Directory" (Lab of a Penetration Tester, 2017). [http://www.labofapenetrationtester.com/2017/05/abusing-dnsadmins-privilege-for-escalation-in-active-directory.html](http://www.labofapenetrationtester.com/2017/05/abusing-dnsadmins-privilege-for-escalation-in-active-directory.html)
 	The original research behind the DnsAdmins section, including the ServerLevelPluginDll mechanism and the required DLL exports.
@@ -620,3 +668,9 @@ Nothing in this post exploited a vulnerability in the CVE sense. Kerberoasting a
 	The CVE tracking this feature, referenced in the DnsAdmins section despite the underlying behavior predating and outliving the patch.
 18. Benjamin Delpy, mimilib. [https://github.com/gentilkiwi/mimikatz/tree/master/mimilib](https://github.com/gentilkiwi/mimikatz/tree/master/mimilib)
 	The DLL referenced in the DnsAdmins command block, exporting the three functions the DNS service requires of a plugin.
+19. The Hacker Recipes, "Timeroasting." [https://www.thehacker.recipes/ad/movement/kerberos/roasting/timeroast](https://www.thehacker.recipes/ad/movement/kerberos/roasting/timeroast)
+	The source for the Timeroasting mechanics, the unauthenticated and authenticated variants, and the tooling referenced in this section.
+20. Tom Tervoort, Secura, "Timeroasting, Trustroasting and Computer Spraying." [https://cybersecurity.bureauveritas.com/uploads/whitepapers/Secura-WP-Timeroasting-v3.pdf](https://cybersecurity.bureauveritas.com/uploads/whitepapers/Secura-WP-Timeroasting-v3.pdf)
+	The original disclosure of Timeroasting, including the MS-SNTP mechanics and the performance comparison against Kerberos TGS-REP cracking.
+21. SecuraBV, Timeroast. [https://github.com/SecuraBV/Timeroast](https://github.com/SecuraBV/Timeroast)
+	The reference implementation behind the timeroast.py command referenced in this section.

@@ -1,0 +1,332 @@
+---
+title: "Visibility for Defenders: Collection Points, Blind Spots, and the Attacks That Live Between Them"
+description: "A cross-layer survey of where defensive telemetry actually comes from, network, endpoint, identity, cloud, and email, paired with six concrete attack scenarios showing exactly which collection point catches each step, and which quietly doesn't."
+date: "2026-07-24"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "detection-engineering", "visibility", "network-security", "endpoint-security", "cloud-security", "web-security", "soc"]
+banner: "/banners/posts/network-architecture-blue-team.jpg"
+bannerAlt: "A layered network diagram evoking the different vantage points a defender collects telemetry from"
+visibility: "public"
+---
+
+> **Blue Team Focus:** Visibility is not a product you buy, it's a property of where you decided to look. This post maps the actual collection points across a modern environment, then walks six real attack shapes through them to show exactly where each one lights up, and where it doesn't.
+
+**TL;DR:** Every collection point sees a specific slice of an attack and is structurally blind to the rest, network sensors see the wire and not the process, endpoint sensors see the process and not what's already inside an established session, identity logs see authentication and not what happens after. No single layer is a visibility strategy by itself. The six scenarios below, three identity-and-cloud, three web application, all make the same point from a different angle: the collection point that would have actually caught the attack is very often the one nobody turned on, not the one nobody bought.
+
+## Introduction
+
+Ask most security teams whether they have visibility and the answer is almost always yes, in the sense that a dashboard somewhere is green. Ask them whether they'd have caught a specific attack chain and the answer gets a lot less certain, because "visibility" as a checkbox and visibility as "the specific telemetry that would have shown this specific behavior" are different claims, and the gap between them is where most real intrusions actually live.
+
+This post is a map, not a product review. It covers where defensive telemetry actually gets generated across a typical enterprise, organized by the layer that generates it, what each layer structurally can and cannot see, and then six scenarios, three built around identity and cloud infrastructure, three built around web application attacks, that make the abstract argument concrete: here is exactly which collection point lit up, and here is exactly which one stayed dark and why.
+
+## The Collection Point Taxonomy
+
+Five layers generate the overwhelming majority of defensive telemetry in a modern environment. None of them is optional, and none of them is sufficient alone.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 320" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A five-band stacked diagram of collection point layers: network at the bottom, then endpoint, then identity, then cloud and SaaS, then email at the top, each band labeled with example sources: network with NetFlow, packet capture, DNS logs, and proxy logs; endpoint with EDR, Sysmon, and native OS auditing; identity with domain controller and Entra sign-in logs; cloud and SaaS with API audit logs and SaaS activity logs; email with gateway logs and attachment detonation. A note states that no single band covers the full height of the diagram, meaning no single layer sees an entire attack chain.">
+    <rect x="20" y="270" width="600" height="40" rx="6" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="35" y="294" fill="currentColor" fontSize="10.5" fontWeight="bold">Network</text>
+    <text x="320" y="294" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">NetFlow, full packet capture, DNS logs, proxy/firewall logs</text>
+
+    <rect x="20" y="220" width="600" height="40" rx="6" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.2" />
+    <text x="35" y="244" fill="currentColor" fontSize="10.5" fontWeight="bold">Endpoint</text>
+    <text x="320" y="244" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">EDR, Sysmon, native OS auditing, ASR rules</text>
+
+    <rect x="20" y="170" width="600" height="40" rx="6" fill="#a855f7" fillOpacity="0.14" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="35" y="194" fill="currentColor" fontSize="10.5" fontWeight="bold">Identity</text>
+    <text x="320" y="194" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">DC security logs, Entra sign-in logs, Conditional Access</text>
+
+    <rect x="20" y="120" width="600" height="40" rx="6" fill="#f59e0b" fillOpacity="0.14" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="35" y="144" fill="currentColor" fontSize="10.5" fontWeight="bold">Cloud / SaaS</text>
+    <text x="320" y="144" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">API audit logs, SaaS activity logs, OAuth grant history</text>
+
+    <rect x="20" y="70" width="600" height="40" rx="6" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="35" y="94" fill="currentColor" fontSize="10.5" fontWeight="bold">Email</text>
+    <text x="320" y="94" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">Gateway logs, message headers, attachment detonation</text>
+
+    <text x="320" y="30" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold" opacity="0.8">No single band spans the full height of a real attack chain</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Five layers, five different vantage points. The scenarios later in this post are all variations on the same fact: an attack chain crosses bands, and coverage that stops at one band stops seeing the attack at exactly that point.</p>
+</div>
+
+### Network
+
+Network telemetry sees what crosses the wire: NetFlow and full packet capture for traffic patterns and payloads, DNS logs for resolution requests, proxy and firewall logs for what left the perimeter and where it went. This is the layer covered in depth by the Network Architecture and Security Onion posts on this blog, and it remains the only layer that reliably sees lateral movement between two hosts neither of which has an agent installed, a gap that shows up constantly in segmented or legacy environments.
+
+What it structurally cannot see: anything inside encrypted traffic without TLS interception, and nothing at all about what a process is actually doing on a host, only that the host talked to something.
+
+| Source | What it sees | What it can't | Retention reality |
+|---|---|---|---|
+| NetFlow | Connection metadata: who talked to whom, when, how much | Payload content | Often kept for months, it's cheap |
+| Full packet capture | Payload content, protocol detail | Encrypted payloads without inspection; storage cost limits retention | Frequently days, sometimes hours |
+| DNS logs | Every resolution request, a proxy for "what did this host try to reach" | Traffic that skips DNS (direct IP, DNS-over-HTTPS to an uncontrolled resolver) | Usually good, DNS logs are cheap to keep |
+| Proxy / firewall logs | Perimeter crossings, URL categories, blocked/allowed decisions | East-west traffic that never crosses the perimeter | Varies widely by vendor |
+
+### Endpoint
+
+Endpoint telemetry sees what a process does: EDR agents, <Term concept="sysmon">Sysmon</Term>, native OS auditing, and Attack Surface Reduction rules, covered for the Windows-specific case in Part 7 of the Active Directory series. This is the only layer that reliably sees process ancestry, command-line arguments, and in-memory behavior like LSASS access.
+
+What it structurally cannot see: anything that happens before an agent is installed or after it's been disabled or evaded, and by definition nothing on a host the organization doesn't own, which matters more than it sounds once SaaS and BYOD are involved.
+
+### Identity
+
+Identity telemetry sees authentication and authorization decisions: domain controller security logs (event 4768/4769/4624 and the rest, covered throughout the AD series and in the dedicated Kerberos/NTLM post), Entra sign-in logs, and Conditional Access evaluation logs. This is the layer that catches Kerberoasting, AS-REP Roasting, and DCSync, all covered in Part 3 of the AD series, often before any endpoint or network signal exists at all, because the abuse is entirely a protocol-level request that never touches a process the way a normal attack does.
+
+What it structurally cannot see: anything that happens after a session is already established. A successful authentication event says someone got in; it says nothing about what they did once they were inside, which is exactly why identity logs alone are never the whole picture even for identity-centric attacks.
+
+### Cloud / SaaS
+
+Cloud and SaaS telemetry, API audit logs (the AWS CloudTrail/Azure Activity Log shape), SaaS platform activity logs, and OAuth grant history, is the newest of the five layers and the one most environments underinvest in relative to how much of the actual attack surface now lives there. It's also structurally separate from on-prem identity and endpoint visibility: a compromised OAuth token or a malicious third-party app grant can operate entirely within a SaaS platform's own API surface and never generate a single on-prem log line, which is exactly Scenario 3 below.
+
+### Email
+
+Email telemetry, gateway logs, message headers, and attachment detonation sandboxes, sees the initial access vector for most intrusions that don't start with an exposed application. It answers "did this org receive the lure" and "what did the attachment actually do when detonated," which is a narrower but still essential question than any of the other four layers ask.
+
+## The Blind Spot Principle
+
+The pattern across all five layers is the same one, stated once so the scenarios below don't have to repeat it: **every collection point's blind spot is shaped by where it physically or logically sits relative to the attack.** A sensor on the wire cannot see inside a process. A sensor on a process cannot see what already happened inside an encrypted session it wasn't running during. A log of authentication decisions cannot describe behavior after the decision was made. This isn't a maturity problem that better tooling eventually solves, it's a structural property of what each collection point was built to observe, and it is exactly why "we have an EDR" or "we have a SIEM" answers a much smaller question than most people asking it think it does.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 220" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A diagram of a five-step attack chain running left to right: initial access, execution, credential access, lateral movement, and objective. Below it, four colored bands representing network, endpoint, identity, and cloud visibility, each covering only part of the chain's width, illustrating that no single collection point's field of view spans the entire attack.">
+    <rect x="10" y="10" width="110" height="34" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="65" y="31" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Initial access</text>
+    <rect x="135" y="10" width="110" height="34" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="190" y="31" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Execution</text>
+    <rect x="260" y="10" width="110" height="34" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="315" y="31" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Credential access</text>
+    <rect x="385" y="10" width="120" height="34" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="445" y="31" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Lateral movement</text>
+    <rect x="515" y="10" width="115" height="34" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="572" y="31" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Objective</text>
+
+    <rect x="10" y="60" width="235" height="28" rx="5" fill="#ef4444" fillOpacity="0.15" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="127" y="79" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Email: sees initial access only</text>
+
+    <rect x="135" y="98" width="235" height="28" rx="5" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="1.1" />
+    <text x="252" y="117" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Endpoint: execution + credential access</text>
+
+    <rect x="260" y="136" width="245" height="28" rx="5" fill="#a855f7" fillOpacity="0.15" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="382" y="155" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Identity: credential access + lateral movement</text>
+
+    <rect x="385" y="174" width="245" height="28" rx="5" fill="#0ea5e9" fillOpacity="0.15" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="507" y="193" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Network: lateral movement + objective</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Each band covers a contiguous slice, and the slices overlap at the seams, which is exactly where correlation across layers catches what any single layer would have missed.</p>
+</div>
+
+## Six Scenarios
+
+Each scenario below is short by design, the underlying techniques already have full treatments elsewhere on this blog. The point here is narrower and more specific: which collection point actually produced the signal, and which one a defender might reasonably have assumed would, but didn't.
+
+### Scenario 1: Kerberoasting, Caught by One Layer, If It's Configured
+
+Covered in full in [Part 3 of the Active Directory series](/posts/active-directory-security-part3). An attacker with any valid domain credential requests a Kerberos service ticket for an account with a registered SPN and cracks it offline. No malware runs. No network connection leaves the environment. No endpoint agent has anything to alert on, because nothing happened on any endpoint, the whole attack is a single, protocol-legitimate request to a domain controller.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of four collection point layers reacting to a Kerberoasting attack: network shows no signal, endpoint shows no signal, cloud and SaaS shows no signal, and identity alone lights up with event 4769, a service ticket request, provided Kerberos service ticket auditing was actually enabled on the domain controller.">
+    <rect x="10" y="20" width="145" height="40" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="82" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Network: nothing</text>
+    <rect x="165" y="20" width="145" height="40" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="237" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Endpoint: nothing</text>
+    <rect x="320" y="20" width="145" height="40" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="392" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Cloud/SaaS: nothing</text>
+    <rect x="475" y="20" width="150" height="40" rx="6" fill="#a855f7" fillOpacity="0.18" stroke="#a855f7" strokeWidth="1.4" />
+    <text x="550" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Identity: event 4769</text>
+    <rect x="120" y="90" width="400" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="320" y="112" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">One layer catches this, and only if</text>
+    <text x="320" y="128" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Kerberos service ticket auditing is enabled</text>
+    <line x1="550" y1="60" x2="450" y2="90" stroke="#a855f7" strokeOpacity="0.6" strokeWidth="1.2" markerEnd="url(#adVisA)" />
+    <defs>
+      <marker id="adVisA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#a855f7" opacity="0.7" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Three layers are structurally incapable of seeing this attack at all. The fourth can see it perfectly, but Kerberos auditing isn't on by default, so "we have identity logging" and "we would have caught this" are not the same claim.</p>
+</div>
+
+### Scenario 2: Coercion Relayed to RBCD, No Single Layer Sees the Whole Chain
+
+Covered in full in [Part 3 of the Active Directory series](/posts/active-directory-security-part3#rbcd-without-the-ace-coercion-relayed-straight-to-ldap). An attacker coerces a machine into authenticating outward, relays that authentication to LDAP, writes a delegation attribute, then runs an S4U2Self/S4U2Proxy chain to impersonate a privileged user. This one is deliberately the middle scenario in this post because it's the clearest counterexample to "just watch the identity layer": the chain touches three different layers, and each one sees a different, incomplete piece.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 200" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A diagram of the coercion to RBCD relay chain split across three layers. Step one, the coercion attempt, an RPC call over MS-EFSRPC or similar, is visible at the identity layer as a Microsoft Defender for Identity coercion alert. Step two, the relayed NTLM authentication to LDAP, is visible at the network layer as an authentication from an unexpected source. Step three, the resulting write to the delegation attribute, is visible again at the identity layer as event 5136, but only if a SACL was configured on that specific attribute. No layer sees all three steps.">
+    <rect x="10" y="15" width="190" height="50" rx="7" fill="#a855f7" fillOpacity="0.14" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="105" y="37" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">1. Coercion attempt</text>
+    <text x="105" y="51" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">Identity layer: MDI coercion alert</text>
+    <rect x="225" y="15" width="190" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="320" y="37" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">2. Relayed LDAP bind</text>
+    <text x="320" y="51" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">Network layer: auth from unexpected source</text>
+    <rect x="440" y="15" width="190" height="50" rx="7" fill="#a855f7" fillOpacity="0.14" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="535" y="37" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">3. Attribute write</text>
+    <text x="535" y="51" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">Identity layer: event 5136, if SACL is set</text>
+    <line x1="200" y1="40" x2="225" y2="40" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adVisB)" />
+    <line x1="415" y1="40" x2="440" y2="40" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adVisB)" />
+    <rect x="80" y="95" width="480" height="60" rx="8" fill="#ef4444" fillOpacity="0.08" stroke="#ef4444" strokeWidth="1.2" strokeDasharray="4 3" />
+    <text x="320" y="120" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">No single layer's log ever shows the full three-step chain</text>
+    <text x="320" y="138" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.75">Only correlation across identity and network reconstructs it as one attack</text>
+    <defs>
+      <marker id="adVisB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Steps 1 and 3 both happen to be visible at the identity layer, which can make it look like "identity logging covers this," but step 2 in between is invisible there entirely, and is the step that actually explains why steps 1 and 3 are related.</p>
+</div>
+
+### Scenario 3: OAuth Token Theft, Invisible On-Prem by Design
+
+A phishing page tricks a user into approving a malicious OAuth application's request for mailbox and file access scopes against their Microsoft 365 or Google Workspace account. From that point forward, the attacker authenticates using the token that grant produced, directly against the SaaS platform's own API. No domain controller is ever contacted. No endpoint agent sees anything, since the entire session happens between the attacker's own infrastructure and the SaaS provider's API, with the victim's device not even involved after the initial click.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 160" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram of four collection point layers reacting to an OAuth token theft attack: network shows no signal since the attacker never touches the corporate network, endpoint shows no signal since the victim device isn't involved after the initial approval, identity shows no further signal since the token grant already happened and every subsequent request is API-to-API, and cloud and SaaS alone shows the OAuth grant and every subsequent API call made with the stolen token.">
+    <rect x="10" y="20" width="145" height="40" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="82" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Network: nothing</text>
+    <rect x="165" y="20" width="145" height="40" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="237" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Endpoint: nothing</text>
+    <rect x="320" y="20" width="145" height="40" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="392" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Identity: nothing further</text>
+    <rect x="475" y="20" width="150" height="40" rx="6" fill="#f59e0b" fillOpacity="0.18" stroke="#f59e0b" strokeWidth="1.4" />
+    <text x="550" y="44" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Cloud/SaaS: grant + API calls</text>
+    <rect x="100" y="90" width="440" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="320" y="112" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">The attacker never touches anything the other</text>
+    <text x="320" y="128" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">three layers were ever built to watch</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>This is the scenario that makes "we have EDR and a SIEM ingesting DC logs" an incomplete answer on its own: neither one has a vantage point inside this attack at all.</p>
+</div>
+
+### Scenario 4: SQL Injection, the Collection Point That Proves It Is Usually Off
+
+An attacker submits a crafted input to a web form, extracting data through a classic SQL injection against the backend database. The <Term concept="waf">WAF</Term> or application log, if either exists, typically records that a request matching an injection pattern arrived and was blocked or allowed, a useful but shallow signal: it says "something suspicious happened here," not what the resulting query actually returned. The record that would actually prove impact, the database's own query or audit log showing the exact statement executed and what it returned, is disabled by default in most database engines specifically because full query logging carries a real performance cost at scale.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A two-box contrast diagram for SQL injection. The WAF and application log box shows it records that a suspicious request pattern arrived, a shallow signal confirming an attempt but not its result. The database audit log box shows it would record the exact query executed and the data returned, the signal that actually proves impact, but is disabled by default in most database engines for performance reasons.">
+    <rect x="20" y="30" width="270" height="70" rx="8" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="155" y="55" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">WAF / Application Log</text>
+    <text x="155" y="72" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">"a suspicious request arrived"</text>
+    <text x="155" y="87" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.6">confirms an attempt, not the result</text>
+    <rect x="350" y="30" width="270" height="70" rx="8" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="485" y="55" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Database Audit Log</text>
+    <text x="485" y="72" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">the exact query, and what it returned</text>
+    <text x="485" y="87" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.6">off by default in most engines</text>
+    <rect x="120" y="120" width="400" height="34" rx="6" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="141" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">The signal that proves impact is usually the one nobody enabled</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Turning on query auditing for high-value databases, even scoped to specific sensitive tables rather than every query, closes a gap most teams don't realize they're carrying until an incident forces the question of what data actually left.</p>
+</div>
+
+### Scenario 5: SSTI, the Request and the Damage Are in Different Layers
+
+Server-Side Template Injection happens when user input gets evaluated by a server-side templating engine instead of just being inserted into it, and on a vulnerable engine that evaluation can escalate all the way to arbitrary code execution. What makes this scenario worth including specifically: the request that triggers it looks, at the application and WAF layer, like an unusually formatted but otherwise ordinary web request. The actual damage, a spawned process, a written file, an outbound connection initiated by the web server process itself, shows up entirely at the endpoint layer, on a host most web-layer monitoring was never watching in the first place.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A two-stage diagram for Server-Side Template Injection. Stage one, the malicious request, is visible at the application and WAF layer as an unusually formatted but not obviously dangerous web request. Stage two, template evaluation escalating to code execution, is visible only at the endpoint layer as a process spawned by the web server, a signal that requires the web server host itself to be monitored, which application-layer logging alone never covers." >
+    <rect x="20" y="35" width="260" height="55" rx="8" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="150" y="58" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Stage 1: the request</text>
+    <text x="150" y="74" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">App/WAF layer: unusual but not obviously dangerous</text>
+    <rect x="350" y="35" width="270" height="55" rx="8" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="485" y="58" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Stage 2: the execution</text>
+    <text x="485" y="74" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">Endpoint layer only: process spawned by the web server</text>
+    <line x1="280" y1="62" x2="350" y2="62" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.3" markerEnd="url(#adVisC)" />
+    <text x="315" y="52" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">template renders</text>
+    <text x="320" y="120" textAnchor="middle" fill="currentColor" fontSize="9" opacity="0.7">Watching the request without watching the web server's own process tree misses stage 2 entirely</text>
+    <defs>
+      <marker id="adVisC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Application servers are production hosts, and production hosts need endpoint monitoring exactly as much as workstations do, a point that gets skipped surprisingly often because "it's a server, not an endpoint" sounds like a meaningful distinction and isn't one.</p>
+</div>
+
+### Scenario 6: SSRF, Where the Only Real Witness Is the Metadata Endpoint
+
+Server-Side Request Forgery tricks a server into making a request on the attacker's behalf, most valuably toward internal-only targets the attacker couldn't otherwise reach, including a cloud provider's instance metadata service, which on both AWS and Azure by default answers unauthenticated requests from the instance itself with the credentials that instance's role is allowed to use. At the network layer, this outbound request from the application server looks identical to any other outbound request the application makes constantly; nothing about its shape flags it as abnormal.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram for SSRF. The application server, tricked by attacker-controlled input, sends a request that looks, at the network layer, identical to its normal outbound traffic. That request actually targets the cloud instance metadata endpoint, which responds with credentials, an event the network layer never distinguishes from routine traffic. The only collection point that reveals this specifically is metadata endpoint access logging on the cloud platform itself, a source most teams don't think of as web attack telemetry at all.">
+    <rect x="10" y="20" width="180" height="46" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="100" y="42" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Network layer</text>
+    <text x="100" y="57" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">looks like routine outbound traffic</text>
+    <rect x="230" y="20" width="180" height="46" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
+    <text x="320" y="42" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">App server</text>
+    <text x="320" y="57" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">tricked into requesting the metadata IP</text>
+    <rect x="450" y="20" width="180" height="46" rx="7" fill="#f59e0b" fillOpacity="0.18" stroke="#f59e0b" strokeWidth="1.4" />
+    <text x="540" y="42" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Metadata endpoint log</text>
+    <text x="540" y="57" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">the only source that names this specifically</text>
+    <line x1="190" y1="43" x2="230" y2="43" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adVisD)" />
+    <line x1="410" y1="43" x2="450" y2="43" stroke="#f59e0b" strokeOpacity="0.75" strokeWidth="1.3" markerEnd="url(#adVisE)" />
+    <rect x="100" y="95" width="440" height="50" rx="7" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="320" y="117" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Nobody watching "web attacks" was watching</text>
+    <text x="320" y="133" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">a cloud platform log for this at all</text>
+    <defs>
+      <marker id="adVisD" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.55" />
+      </marker>
+      <marker id="adVisE" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" opacity="0.85" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>SSRF is a web application bug with a cloud-layer detection story, not a network-layer one, which is exactly the kind of cross-category mismatch that falls through the gap between the team that owns WAF rules and the team that owns cloud logging.</p>
+</div>
+
+## Building a Coverage Map
+
+Six scenarios are illustrations, not an inventory. The actual exercise worth running is systematic: take the techniques most relevant to your environment, ideally sourced from MITRE ATT&CK's own data source mappings, and for each one, mark which of the five layers above would actually produce a signal, whether that source is currently collected at all, and whether it's retained long enough to matter by the time an investigation needs it.
+
+<CollapsibleCode title="Collection Coverage Map Template" language="markdown">
+
+```markdown
+TECHNIQUE: [name, ATT&CK ID if applicable]
+
+| Layer | Would produce a signal? | Currently collected? | Retention |
+|---|---|---|---|
+| Network | Yes/No/Partial | Yes/No | [duration] |
+| Endpoint | Yes/No/Partial | Yes/No | [duration] |
+| Identity | Yes/No/Partial | Yes/No | [duration] |
+| Cloud/SaaS | Yes/No/Partial | Yes/No | [duration] |
+| Email | Yes/No/Partial | Yes/No | [duration] |
+
+GAP: [which "Yes" rows are actually "No" in practice]
+COST TO CLOSE: [what turning this on requires: license, storage, engineering time]
+PRIORITY: [is this technique likely enough against this environment to justify it]
+```
+
+</CollapsibleCode>
+
+This is the same discipline the Collection Management Framework post on this blog covers in depth for an intelligence program specifically, sources, coverage, gaps, and a documented price tag for closing each one. The version here is the same idea applied one layer down: not "what can our intelligence program answer," but "what would our own logs actually show if this exact technique happened tomorrow."
+
+## Conclusion
+
+None of the six scenarios above involved a novel technique. Every one of them is well documented, several are covered in full elsewhere on this blog, and none require a defender to predict something nobody has seen before. What they require is knowing, in advance and specifically, which collection point was ever going to see which step, because by the time an incident is underway is the most expensive possible moment to discover that the layer that would have caught it was never turned on. Visibility isn't a line item. It's a map, and the map is only useful if someone actually checked where the lines don't reach.
+
+## References & Further Reading
+
+1. MITRE ATT&CK, "Data Sources." [https://attack.mitre.org/datasources/](https://attack.mitre.org/datasources/)
+	The framework's own mapping of techniques to the data sources that detect them, referenced in the Coverage Map section as the systematic starting point for a real inventory.
+2. OWASP, "SQL Injection." [https://owasp.org/www-community/attacks/SQL_Injection](https://owasp.org/www-community/attacks/SQL_Injection)
+	The mechanics referenced in Scenario 4.
+3. PortSwigger Web Security Academy, "Server-Side Template Injection." [https://portswigger.net/web-security/server-side-template-injection](https://portswigger.net/web-security/server-side-template-injection)
+	The mechanics referenced in Scenario 5, including how template evaluation escalates to code execution.
+4. OWASP, "Server Side Request Forgery." [https://owasp.org/www-community/attacks/Server_Side_Request_Forgery](https://owasp.org/www-community/attacks/Server_Side_Request_Forgery)
+	The mechanics referenced in Scenario 6.
+5. AWS, "Use IMDSv2." [https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html)
+	The instance metadata service referenced in Scenario 6, including AWS's own mitigation guidance.
+6. Microsoft, "Azure Instance Metadata Service." [https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service](https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service)
+	The Azure equivalent of the metadata endpoint referenced in Scenario 6.
+7. Zeek. [https://zeek.org/](https://zeek.org/)
+	An open-source network security monitoring engine referenced in the Network layer section.
+8. Suricata. [https://suricata.io/](https://suricata.io/)
+	A signature and anomaly-based network IDS/IPS engine referenced in the Network layer section.
+9. "Security Onion Fundamentals: Network Security Monitoring and Threat Hunting" (this blog). [/posts/security-onion-fundamentals](/posts/security-onion-fundamentals)
+	The full treatment of a pre-integrated network monitoring stack this post's Network layer section links out to rather than repeating.
+10. "Enterprise Network Architecture for Blue Team Operations" (this blog). [/posts/network-architecture-blue-team-fundamentals](/posts/network-architecture-blue-team-fundamentals)
+	The full treatment of network-layer visibility and segmentation this post's Network layer section links out to rather than repeating.
+11. "You Can't Answer That: Collection Management and the Questions Your Data Can Actually Support" (this blog). [/posts/collection-management-framework](/posts/collection-management-framework)
+	The program-level discipline (source mapping, retention, documented gaps) the Coverage Map section applies at the technique level.
+12. "Active Directory Series: Part 3 - From Enumeration to Privilege Escalation" (this blog). [/posts/active-directory-security-part3](/posts/active-directory-security-part3)
+	The full technical treatment of Kerberoasting and the coercion-to-RBCD relay chain referenced in Scenarios 1 and 2.
+13. "Kerberos, NTLM, and the Event IDs That Actually Matter" (this blog). [/posts/kerberos-ntlm-windows-event-ids](/posts/kerberos-ntlm-windows-event-ids)
+	The identity-layer event ID mapping referenced throughout the Identity layer section.

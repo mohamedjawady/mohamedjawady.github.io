@@ -122,6 +122,8 @@ Get-DomainUser -Properties samaccountname,description,useraccountcontrol
 
 **Groups, especially nested membership.** Direct membership in Domain Admins is the obvious thing to check, and also the thing most environments have already learned to watch. Nested membership is the part naive enumeration misses: a user in a group that is itself a member of Domain Admins is a Domain Admin in every way that matters, and a simple, non-recursive membership query will not show that relationship at all. Native `net group "domain admins" /domain` and `Get-ADGroupMember -Identity "Domain Admins" -Recursive` both resolve nesting correctly; PowerView's `Get-DomainGroupMember -Recurse` does the same and is usually what public writeups actually run.
 
+The group list worth checking membership of is longer than the obviously-privileged three. <Term concept="dnsadmins">DnsAdmins</Term> reads like a DNS record delegation group and is routinely left wide open as a result, but it grants management rights over the DNS server itself, covered in full in Part 3. Enumerating its membership (`Get-ADGroupMember -Identity "DnsAdmins"`) belongs in the same pass as Domain Admins, not as an afterthought.
+
 ```bash
 net group "domain admins" /domain
 Get-ADGroupMember -Identity "Domain Admins" -Recursive
@@ -140,14 +142,18 @@ dsacls "OU=Finance,DC=corp,DC=com" /a
 Get-DomainObjectAcl -SearchBase "OU=Finance,DC=corp,DC=com" -ResolveGUIDs
 ```
 
-**Computers and their delegation flags.** Operating system and patch level identify easy targets directly. Far more valuable is the `userAccountControl` bit for unconstrained delegation: a computer trusted for unconstrained delegation caches a copy of the Kerberos TGT of any user who authenticates to it, so compromising that one machine can mean harvesting the credentials of everyone who ever logs into it, print servers and file servers being the classic, frequently-overlooked example.
+**Computers and their delegation flags.** Operating system and patch level identify easy targets directly. Far more valuable are the delegation settings, and there are two distinct ones worth telling apart. The `userAccountControl` bit for unconstrained delegation means a computer caches a full copy of the Kerberos TGT of any user who authenticates to it, so compromising that one machine can mean harvesting the credentials of everyone who ever logs into it, print servers and file servers being the classic, frequently-overlooked example. A populated `msDS-AllowedToDelegateTo` attribute means the account is configured for classic constrained delegation instead, narrower in scope but requiring no attribute write to abuse if the account is already compromised, covered alongside unconstrained and resource-based delegation in Part 3.
 
 ```bash
-# native: every computer, with OS and delegation-relevant flags
+# native: every computer, with OS and both delegation-relevant flags
 Get-ADComputer -Filter * -Properties OperatingSystem,TrustedForDelegation,msDS-AllowedToDelegateTo
 
 # PowerView: computers specifically trusted for unconstrained delegation
 Get-DomainComputer -Unconstrained -Properties dnshostname
+
+# PowerView: accounts configured for classic constrained delegation, and to what
+Get-DomainUser -TrustedToAuth -Properties samaccountname,msds-allowedtodelegateto
+Get-DomainComputer -TrustedToAuth -Properties samaccountname,msds-allowedtodelegateto
 ```
 
 **Service Principal Names.** Any account with an <Term concept="spn">SPN</Term> registered, almost always a service account, can have a Kerberos service ticket requested for it by any authenticated user and cracked offline, no interaction with the target account required. Enumerating every SPN in the domain is enumerating every Kerberoasting candidate in the domain in one pass, a technique covered protocol-first, including the SPN format itself, in [Kerberos, NTLM, and the Event IDs That Actually Matter](/posts/kerberos-ntlm-windows-event-ids), with the full cracking workflow in [Part 3](/posts/active-directory-security-part3).

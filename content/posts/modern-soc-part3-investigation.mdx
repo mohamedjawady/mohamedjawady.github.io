@@ -1,0 +1,232 @@
+---
+title: "The Modern SOC, Part 3: Incident Investigation Across Cloud, Identity, and Endpoints"
+description: "A step-by-step investigation methodology for a cloud-native intrusion, walked through a complete phishing-to-exfiltration attack chain across Google Workspace, Twingate, AWS, and endpoint evidence, with the evidence, hypotheses, and common mistakes at every hop."
+date: "2026-08-04"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "soc", "incident-response", "cloud-security", "identity-security", "modern-soc-series"]
+banner: "https://images.unsplash.com/photo-1516382799247-87df95d790b7?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0"
+bannerAlt: "A magnifying glass held near a laptop keyboard, evoking the investigative process of tracing an intrusion across log sources"
+visibility: "public"
+series: "The Modern SOC"
+seriesOrder: 3
+---
+
+> **Series Focus:** [Part 2](/posts/modern-soc-part2-detection-engineering) covered how a detection fires. This part covers what happens next: an analyst has one alert, or one suspicious report, and has to turn it into a complete, defensible account of what actually happened, across five architectural layers that each keep their own, incomplete record.
+
+**TL;DR:** Investigation is the discipline of building an accurate timeline from incomplete, distributed evidence, then using that timeline to scope, contain, and recover, without ever assuming a single data source tells the whole story. This post covers the methodology, triage, timeline construction, scoping, root cause analysis, pivoting between data sources, containment, and recovery, and then walks a complete, realistic attack chain end to end: phishing, identity compromise, Zero Trust access, cloud console access, privilege escalation, data access, and exfiltration. Each step covers the evidence available, the logs that produce it, the hypotheses an analyst should be testing, the actual investigation process, and the mistake analysts most commonly make at that specific step.
+
+## Introduction
+
+An alert tells you that something happened. It almost never tells you what actually happened, how far it went, or whether it's still happening. The gap between those two things is investigation, and in a cloud-native environment that gap is wider than it used to be, because the evidence for a single attack chain is now scattered across identity logs, a ZTNA provider's access logs, a cloud provider's audit trail, and whatever endpoint telemetry exists, four systems that were never designed to be correlated together and that a defender has to stitch into one coherent account by hand, or with tooling built specifically for that purpose.
+
+This post covers the methodology first, then makes it concrete with a full attack chain that touches every layer from Part 1's architecture. The technologies named throughout, Google Workspace, AWS, Cloudflare, Twingate, Windows/macOS, and an EDR platform, are the evidence sources, not the point; the point is the investigation process that works regardless of which specific products an environment happens to run.
+
+## Investigation Methodology
+
+**Triage** is the first filter: given an alert or report, is this worth a full investigation, and if so, at what priority. Bad triage kills investigations two ways, dismissing something real because it looked routine, or burning hours on something that turns out to be benign because nobody checked the cheap, fast signals first (does this user's location match their typical pattern, does this device have a known-compliant posture, has this specific alert type had a high false-positive rate historically).
+
+**Building a timeline** is the core activity of everything that follows. A timeline is not a log dump in chronological order, it's a curated sequence of events, from multiple sources, normalized to a single timezone and a single narrative, where each entry is tied back to the raw evidence that supports it. The discipline that makes a timeline useful rather than just long is ruthlessly excluding anything that doesn't advance or test a specific hypothesis.
+
+**Scoping** answers "how far did this go." Every investigation has a natural tendency to under-scope, stopping at the first system where an analyst got clean logs, when the actual compromise crossed into a system with worse logging. Scoping means actively looking for evidence the attacker moved beyond what's already been confirmed, not just documenting the parts that were easy to find.
+
+**Root cause analysis** answers "how did this actually start," which is a different question from "what's the first event in our timeline." The first event you can see and the actual root cause are not always the same thing, an analyst who starts an investigation at the first alert-worthy event risks missing an earlier, quieter initial access step that never tripped a detection at all.
+
+**Pivoting between data sources** is the mechanical skill underneath all of the above: taking one confirmed artifact, an IP address, a session ID, a device fingerprint, a timestamp, and using it as the join key to find related activity in a completely different system that has no native awareness of the first. This is the single most valuable skill in cloud-native investigation, because no one system in the five-layer architecture from Part 1 was built to talk to the others.
+
+**Containment** stops the bleeding, disabling a compromised identity, revoking active sessions and OAuth tokens, isolating a host, without necessarily waiting for the investigation to be complete. **Recovery** restores normal operation once containment is confirmed effective and root cause is understood well enough to be confident the same path won't just get walked again immediately.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A diagram showing four separate log sources, identity, ZTNA, cloud provider, and endpoint, each as an isolated box with its own timestamp format and no native awareness of the others. A single artifact, a session ID, is shown as a thread connecting an entry in each box into one unified timeline below." >
+    <rect x="10" y="15" width="140" height="45" rx="7" fill="#a855f7" fillOpacity="0.13" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="80" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Identity logs</text>
+    <rect x="175" y="15" width="140" height="45" rx="7" fill="#0ea5e9" fillOpacity="0.13" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="245" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">ZTNA access logs</text>
+    <rect x="340" y="15" width="140" height="45" rx="7" fill="#ef4444" fillOpacity="0.13" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="410" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Cloud provider logs</text>
+    <rect x="505" y="15" width="125" height="45" rx="7" fill="#10b981" fillOpacity="0.13" stroke="#10b981" strokeWidth="1.1" />
+    <text x="567" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Endpoint / EDR</text>
+    <text x="320" y="85" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">None of these four systems is aware the others exist</text>
+    <rect x="60" y="105" width="520" height="50" rx="8" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="126" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Pivoting on a shared artifact (session ID, IP, device fingerprint,</text>
+    <text x="320" y="142" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">timestamp window) is what turns four logs into one timeline</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The scenario below walks exactly this kind of pivot, step by step, through a full attack chain.</p>
+</div>
+
+## Example Investigation: A Complete Attack Chain
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 300" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A seven-step vertical attack chain: phishing email, identity compromise, Zero Trust access, cloud console, privilege escalation, data access, exfiltration, each connected by a downward arrow." >
+    <rect x="220" y="10" width="200" height="30" rx="6" fill="#ef4444" fillOpacity="0.15" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="320" y="30" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">1. Phishing Email</text>
+    <line x1="320" y1="40" x2="320" y2="52" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socC1)" />
+    <rect x="220" y="52" width="200" height="30" rx="6" fill="#a855f7" fillOpacity="0.15" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="320" y="72" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">2. Identity Compromise</text>
+    <line x1="320" y1="82" x2="320" y2="94" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socC1)" />
+    <rect x="220" y="94" width="200" height="30" rx="6" fill="#0ea5e9" fillOpacity="0.15" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="320" y="114" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">3. Zero Trust Access</text>
+    <line x1="320" y1="124" x2="320" y2="136" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socC1)" />
+    <rect x="220" y="136" width="200" height="30" rx="6" fill="#f59e0b" fillOpacity="0.15" stroke="#f59e0b" strokeWidth="1.1" />
+    <text x="320" y="156" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">4. Cloud Console</text>
+    <line x1="320" y1="166" x2="320" y2="178" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socC1)" />
+    <rect x="220" y="178" width="200" height="30" rx="6" fill="#ef4444" fillOpacity="0.15" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="320" y="198" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">5. Privilege Escalation</text>
+    <line x1="320" y1="208" x2="320" y2="220" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socC1)" />
+    <rect x="220" y="220" width="200" height="30" rx="6" fill="#a855f7" fillOpacity="0.15" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="320" y="240" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">6. Data Access</text>
+    <line x1="320" y1="250" x2="320" y2="262" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socC1)" />
+    <rect x="220" y="262" width="200" height="30" rx="6" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="1.1" />
+    <text x="320" y="282" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">7. Exfiltration</text>
+    <defs>
+      <marker id="socC1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Every step below crosses into a different one of Part 1's five architectural layers, and produces evidence in a different system. The walkthrough that follows treats each arrow as a pivot point, not just a transition.</p>
+</div>
+
+### 1. Phishing Email
+
+**Evidence available:** The email itself (headers, sender infrastructure, links or attachments), and whether the target interacted with it (clicked, entered credentials, opened an attachment).
+
+**Logs:** Email security gateway logs (delivery, any URL rewriting/click-time verdict), and if the lure led to a credential-harvesting page, the resulting sign-in attempt shows up one layer over, in identity logs.
+
+**Hypotheses:** Was this a targeted lure or a mass campaign that happened to land. Did the user actually interact with it, or was it reported/blocked before any interaction. If credentials were entered, were they entered into a page that could also have captured an MFA code or session token (an adversary-in-the-middle phishing kit, not just a static credential-harvesting page).
+
+**Investigation process:** Pull the full message with headers, check sender authentication (SPF/DKIM/DMARC results), check the destination URL/domain against passive DNS and certificate transparency (the same pivoting techniques covered in this blog's CTI Foundations series) to establish whether the infrastructure is known-bad or freshly registered. Confirm click-through via the gateway's click-time log, not just delivery.
+
+**Common mistakes:** Stopping at "the email was blocked" without confirming no earlier, unblocked copy of the same campaign reached the same or another user first. Treating "user says they didn't click it" as sufficient without checking the actual click-time telemetry, self-reporting is a hypothesis, not evidence.
+
+### 2. Identity Compromise
+
+**Evidence available:** A sign-in event using the phished credential, from infrastructure that doesn't match the user's normal pattern.
+
+**Logs:** Identity provider sign-in logs (Google Workspace or Microsoft Entra ID), specifically IP, geolocation, device fingerprint, user agent, and the Conditional Access or risk-scoring decision made at sign-in time.
+
+**Hypotheses:** Was only a password captured, or was a live session/MFA token also stolen (<Term concept="aitm">adversary-in-the-middle</Term>). Is this the first sign-in from this device/location for this identity, ever, or does it match a pattern the user has shown before (e.g., they actually do travel).
+
+**Investigation process:** Pivot from the phishing infrastructure's IP or the click-time window to sign-in events in that same window. Check whether MFA was satisfied and how (a push approval is a very different finding than a token replay with no fresh MFA prompt at all). This is the first of several pivots in this chain, joining on a time window and, where available, a shared IP.
+
+**Common mistakes:** Assuming a successful MFA challenge means the session is legitimate. An AiTM phishing kit captures a valid, fully-authenticated session token, MFA having been satisfied is not evidence the sign-in was the real user, it's only evidence the credential-and-token theft was complete.
+
+### 3. Zero Trust Access
+
+**Evidence available:** The compromised identity being used to authenticate through the ZTNA layer (Twingate, Cloudflare Access) to reach an internal application or the cloud console itself.
+
+**Logs:** ZTNA provider access logs: which application was accessed, from what device, whether device posture checks passed.
+
+**Hypotheses:** Did the ZTNA layer's device posture check catch what identity alone didn't (an unmanaged or non-compliant device attempting access with a valid but stolen identity token). Which specific application or resource was the actual target of this access, narrowing scope from "the identity is compromised" to "here's what they actually went after."
+
+**Investigation process:** Pivot on the identity and the approximate timestamp from step 2 into the ZTNA provider's access log. This is frequently where an investigation gets its first real scoping signal: the specific application accessed here defines what has to be checked in every subsequent layer.
+
+**Common mistakes:** Treating ZTNA access logs as secondary to identity logs and skipping them. In a properly deployed Zero Trust architecture this is often the layer with the most granular, least noisy record of exactly what the attacker actually touched, more useful for scoping than the identity provider's own logs.
+
+### 4. Cloud Console
+
+**Evidence available:** Authenticated access to the cloud provider's management console or API, using either the same compromised identity (if federated) or credentials obtained via that access.
+
+**Logs:** AWS CloudTrail (or the Azure/GCP equivalent): console sign-in events, and every subsequent API call made in the session.
+
+**Hypotheses:** Is this a federated sign-in using the same compromised corporate identity, or did the attacker obtain separate, standing cloud credentials (an access key found in a repository, a credential in a configuration file) that now need to be treated as a second compromised secret, not just a continuation of the first.
+
+**Investigation process:** Pivot on session start time and, if available, the source IP carried over from the ZTNA layer. Establish the full list of API calls made in this console session as the spine of everything from here forward, this is the CloudTrail equivalent of the timeline itself.
+
+**Common mistakes:** Scoping the investigation to only the actions that look obviously malicious and skipping the mundane-looking ones in between. Reconnaissance calls (`iam:ListRoles`, `s3:ListBuckets`) are easy to skim past in a long CloudTrail session but are exactly the evidence that establishes intent and full scope.
+
+### 5. Privilege Escalation
+
+**Evidence available:** An AssumeRole call, an IAM policy modification, or the creation of new credentials that grant the attacker more access than the identity they started with had.
+
+**Logs:** CloudTrail events for `AssumeRole`, `CreateAccessKey`, `AttachUserPolicy`, `PutUserPolicy`, and similar IAM-modifying calls, covered as Detection Example 4 in Part 2.
+
+**Hypotheses:** What was the actual privilege delta, what could the attacker do after this step that they couldn't before. Was this escalation achieved through a legitimate but overly permissive existing policy (a design flaw) or through actively modifying IAM (a more aggressive, noisier action).
+
+**Investigation process:** Diff the permission set before and after the suspicious IAM event. This is the step where root cause analysis and timeline-building diverge slightly in focus: the timeline needs the "what happened," root cause analysis needs the answer to "why was this identity able to do this at all," which is usually an overly broad IAM policy that predates the incident entirely.
+
+**Common mistakes:** Fixing the specific escalation path used without auditing for other, unused paths to the same privilege level. An attacker who used one overprivileged role rarely means that was the only overprivileged role in the environment.
+
+### 6. Data Access
+
+**Evidence available:** Access to the specific data the attacker was actually after, an S3 bucket, a database, a set of documents, generally the point where the investigation's stakes become concrete.
+
+**Logs:** S3 access logs or CloudTrail data events (which have to be explicitly enabled and frequently aren't, a gap worth checking for before assuming this evidence exists at all), plus application-level access logs if the data lived behind an application rather than raw storage.
+
+**Hypotheses:** What specifically was accessed, and does that match a known-sensitive data classification. Was this bulk access (consistent with staging for exfiltration) or a narrow, specific query (consistent with a targeted objective rather than opportunistic data grabbing).
+
+**Investigation process:** Enumerate every object or record touched in this session, not just confirm that access occurred. The difference between "they could have accessed the customer database" and "they queried these 40,000 specific records" is the entire difference in incident severity and notification obligations.
+
+**Common mistakes:** Reporting access at the resource level ("the S3 bucket was accessed") when regulatory and customer-notification obligations require object-level or record-level specificity, forcing a second, more painful investigation pass later to answer a question that should have been answered the first time.
+
+### 7. Exfiltration
+
+**Evidence available:** Data leaving the environment, network egress from cloud infrastructure, an unusual download volume, or an unfamiliar destination.
+
+**Logs:** VPC flow logs or the cloud provider's network flow equivalent, CloudTrail `GetObject` volume and timing, and DNS logs for the destination if the exfiltration channel used DNS or a proxy rather than a direct connection.
+
+**Hypotheses:** Did the data actually leave, or was it only accessed (an important distinction for both severity and legal notification, and one that's easy to get wrong under time pressure). What was the destination, and does it match known attacker infrastructure from earlier in the chain (closing the loop back to step 1's phishing infrastructure, if the same actor controlled both).
+
+**Investigation process:** Correlate the volume and timing of data access from step 6 against network egress logs in the same window. This is the last pivot in the chain and often the hardest, because egress logging is one of the coverage gaps this blog's Visibility for Defenders post calls out directly: it's frequently not retained at the granularity needed to answer this question after the fact.
+
+**Common mistakes:** Concluding "no evidence of exfiltration" from an absence of egress logs, when the actual finding is "no egress logging existed to check." Those are very different statements, and only one of them is defensible in an incident report.
+
+## Where Google Workspace, AWS, Cloudflare, Twingate, and Endpoint Evidence Sit
+
+The named technologies in this walkthrough map directly onto the pivots above: **Google Workspace** (or Entra ID) sign-in logs anchor steps 1-2, **Twingate** or **Cloudflare Access** logs anchor step 3, **AWS** CloudTrail anchors steps 4-6, and **Windows/macOS** endpoint telemetry from an **EDR** platform provides a parallel, device-side account of steps 2-3 if the attacker ever operated directly from the compromised user's machine rather than purely through stolen session tokens. None of these products are the subject of this post, they're the four places the evidence for this exact chain actually lives.
+
+## Lab: Reconstruct the Timeline from Synthetic Logs
+
+<CollapsibleCode title="Synthetic Log Set: Reconstruct the Attack Timeline" language="text">
+
+```text
+# Four unrelated-looking log excerpts. Build one timeline. Identify the
+# join key between each pair of sources, and flag the single log entry
+# that would have let a SOC catch this before step 6.
+
+## Source A: Email Security Gateway
+2026-07-14T09:12:03Z  delivered  to=j.alvarez@fintrail.io  from=billing@fintrail-invoices.net  subject="Overdue Invoice #4471"  url_rewrite=true
+2026-07-14T09:14:51Z  click      user=j.alvarez@fintrail.io  url=https://fintrail-invoices.net/sso  verdict=unknown
+
+## Source B: Google Workspace Sign-In Log
+2026-07-14T09:15:22Z  login_success  user=j.alvarez@fintrail.io  ip=185.220.101.47  device=unknown  mfa=satisfied  mfa_type=push
+2026-07-14T09:16:05Z  login_success  user=j.alvarez@fintrail.io  ip=185.220.101.47  device=unknown  session_type=oauth_token_reuse
+
+## Source C: Twingate Access Log
+2026-07-14T09:19:44Z  connect  user=j.alvarez@fintrail.io  resource=aws-console-prod  device_posture=unknown  src_ip=185.220.101.47
+
+## Source D: AWS CloudTrail
+2026-07-14T09:20:10Z  ConsoleLogin      principal=j.alvarez@fintrail.io  sourceIP=185.220.101.47  mfaUsed=false
+2026-07-14T09:21:03Z  ListBuckets       principal=j.alvarez@fintrail.io  sourceIP=185.220.101.47
+2026-07-14T09:21:47Z  ListRoles         principal=j.alvarez@fintrail.io  sourceIP=185.220.101.47
+2026-07-14T09:24:12Z  AssumeRole        principal=j.alvarez@fintrail.io  roleArn=arn:aws:iam::.../DataPipelineAdmin  sourceIP=185.220.101.47
+2026-07-14T09:26:30Z  GetObject (x340)  principal=DataPipelineAdmin-session  bucket=fintrail-customer-exports  sourceIP=185.220.101.47
+
+TASKS:
+1. Build a single chronological timeline joining all four sources.
+2. Name the join key used between each consecutive pair of sources.
+3. At which single log line would a well-tuned detection (see Part 2)
+   have fired, and which detection example from Part 2 is it?
+4. "mfa=satisfied" appears in Source B. Explain why this does NOT mean
+   the sign-in was performed by the real j.alvarez.
+```
+
+</CollapsibleCode>
+
+## What's Next
+
+Part 4 moves from reactive investigation to proactive threat hunting: how a SOC goes looking for the version of this exact chain that never generated an alert at all, using behavioral baselines, hypothesis-driven hunts, and CTI-derived TTPs instead of waiting for a detection to fire first.
+
+## References & Further Reading
+
+1. Microsoft, "Detect and Remediate Illicit Consent Grants" (adversary-in-the-middle / token theft context). [https://learn.microsoft.com/en-us/microsoft-365/security/office-365-security/detect-and-remediate-illicit-consent-grants](https://learn.microsoft.com/en-us/microsoft-365/security/office-365-security/detect-and-remediate-illicit-consent-grants)
+	Referenced in Step 2's discussion of MFA satisfaction not proving session legitimacy.
+2. CISA, "Phishing-Resistant MFA is Key to Peace of Mind." [https://www.cisa.gov/news-events/news/phishing-resistant-mfa-key-peace-mind](https://www.cisa.gov/news-events/news/phishing-resistant-mfa-key-peace-mind)
+	Background on adversary-in-the-middle phishing kits referenced across Steps 1-2.
+3. AWS, "Enabling CloudTrail Data Events for S3." [https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudtrail-logging-s3-info.html](https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudtrail-logging-s3-info.html)
+	The often-disabled-by-default data-event logging referenced in Step 6.
+4. "Visibility for Defenders: Collection Points, Blind Spots, and the Attacks That Live Between Them" (this blog). [/posts/visibility-for-defenders-collection-points-and-blind-spots](/posts/visibility-for-defenders-collection-points-and-blind-spots)
+	The egress-logging coverage gap referenced directly in Step 7.
+5. "CTI Foundations Part 3: Passive OSINT and Infrastructure Pivoting" (this blog). [/posts/cti-foundations-passive-osint-and-infrastructure-pivoting](/posts/cti-foundations-passive-osint-and-infrastructure-pivoting)
+	The passive-DNS and certificate-transparency pivoting techniques referenced in Step 1's investigation process.
+6. "The Modern SOC, Part 2: Detection Engineering in Modern SOCs" (this blog). [/posts/modern-soc-part2-detection-engineering](/posts/modern-soc-part2-detection-engineering)
+	The suspicious-AssumeRole and cloud-resource-discovery detections referenced in Steps 4-5 and the lab's Task 3.

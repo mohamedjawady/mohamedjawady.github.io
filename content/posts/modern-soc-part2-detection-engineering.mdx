@@ -1,0 +1,239 @@
+---
+title: "The Modern SOC, Part 2: Detection Engineering in Modern SOCs"
+description: "How the telemetry produced by a cloud-native architecture, CloudTrail, Google Workspace audit logs, Cloudflare WAF logs, identity and endpoint events, gets turned into detection logic that actually fires on real attacker behavior instead of drowning a SOC in noise."
+date: "2026-08-04"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "soc", "detection-engineering", "cloud-security", "siem", "modern-soc-series"]
+banner: "https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0"
+bannerAlt: "A close-up, shallow-focus photograph of lines of code on a monitor, evoking the detection logic built from raw telemetry"
+visibility: "public"
+series: "The Modern SOC"
+seriesOrder: 2
+---
+
+> **Series Focus:** [Part 1](/posts/modern-soc-part1-architecture) mapped the five-layer architecture a modern SOC defends: identity, device trust, network edge, SaaS, and cloud infrastructure. This part is about turning the telemetry each of those layers produces into detection logic that actually catches something, and doesn't catch everything else along with it.
+
+**TL;DR:** Detection engineering is the discipline of converting a specific, testable claim about attacker behavior into logic that fires reliably on that behavior and rarely on anything else. It starts from telemetry, <Term concept="mitre-att-ck">MITRE ATT&CK</Term>-mapped threat modeling decides what's worth building a detection for, and it ends in a tuned, correlated rule with a documented false-positive rate, not a one-off query someone wrote during an incident and never touched again. This post covers the lifecycle, the telemetry sources a cloud-native org actually has (CloudTrail, Google Workspace audit logs, Cloudflare WAF logs, DNS, auth logs, EDR events), eight concrete detection examples, and a lab that has you write real Sigma rules and explain the logic behind each one.
+
+## Introduction
+
+An alert and a detection are not the same thing, and conflating them is where a lot of SOC maturity problems start. A detection is engineered: it starts from a specific behavior worth catching, gets built against real telemetry, gets tested against both attack and benign traffic, and gets tuned over time based on what it actually produces in production. An alert is just whatever came out the other end, useful or not. A SOC that treats every alert as if it were a validated detection ends up with an inbox full of noise and, eventually, an analyst corps that stops trusting any of it, which is the exact failure mode that let real intrusions sit unnoticed next to a thousand ignored false positives.
+
+This post is about doing detection engineering properly against the architecture Part 1 described: not "what does our SIEM support," but "given that identity, device trust, network edge, SaaS, and cloud infrastructure are five separate control planes, what does a detection need to look like to catch behavior that crosses between them."
+
+## The Detection Engineering Lifecycle
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 200" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A six-stage circular lifecycle diagram: threat modeling, telemetry mapping, rule development, testing, deployment and tuning, and measurement, with an arrow from measurement back to threat modeling to show the loop repeats.">
+    <rect x="10" y="70" width="90" height="42" rx="6" fill="#a855f7" fillOpacity="0.15" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="55" y="96" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Threat modeling</text>
+    <rect x="115" y="70" width="90" height="42" rx="6" fill="#0ea5e9" fillOpacity="0.15" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="160" y="96" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Telemetry mapping</text>
+    <rect x="220" y="70" width="90" height="42" rx="6" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="1.2" />
+    <text x="265" y="96" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Rule development</text>
+    <rect x="325" y="70" width="90" height="42" rx="6" fill="#f59e0b" fillOpacity="0.15" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="370" y="90" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Testing</text>
+    <text x="370" y="102" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">attack + benign data</text>
+    <rect x="430" y="70" width="100" height="42" rx="6" fill="#ef4444" fillOpacity="0.15" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="480" y="90" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Deploy + tune</text>
+    <text x="480" y="102" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">correlation, thresholds</text>
+    <rect x="540" y="70" width="90" height="42" rx="6" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1" strokeOpacity="0.4" />
+    <text x="585" y="96" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Measurement</text>
+    <path d="M 585 112 C 585 160, 55 160, 55 112" fill="none" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socB1)" />
+    <text x="320" y="152" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">Measured precision/recall feeds back into what gets modeled next</text>
+    <defs>
+      <marker id="socB1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A one-off query written during an incident skips straight to rule development and never comes back around the loop, which is exactly why it tends to either misfire constantly or quietly stop firing at all once the environment changes.</p>
+</div>
+
+**Threat modeling** decides what's worth a detection at all, ideally anchored to <Term concept="mitre-att-ck">MITRE ATT&CK</Term> so the choice is traceable to real adversary behavior rather than whatever seemed interesting that week. **Telemetry mapping** asks, for the chosen technique, which of the five architectural layers would actually produce a signal, the same discipline this blog's Visibility for Defenders post applies as a coverage map. **Rule development** is where the actual logic gets written. **Testing** against both real attack data (or a credible simulation of it) and a representative sample of benign traffic is the step most skipped under time pressure, and the one whose absence explains most bad detections in production. **Deploy and tune** covers correlation and risk-based alerting, both covered below. **Measurement** closes the loop: a detection without a tracked false-positive rate and a tracked true-positive count isn't actually being managed, it's just running.
+
+### Detection vs. Alert, and Why False Positives Aren't a Rounding Error
+
+A **detection** is the engineered logic. An **alert** is one instance of that logic firing. The distinction matters because a detection can be well-engineered and still generate mostly false positives if it's watching for something that's also common in legitimate use, impossible travel being the clearest example below: the logic is simple and correct, and it still needs tuning against how your specific organization's travel patterns actually look, or it drowns real signal in noise from VPN exit-node hopping and airline WiFi.
+
+<Term concept="correlation">Correlation</Term> and <Term concept="risk-based-alerting">risk-based alerting</Term> are the two main levers for taming that noise without just turning the detection off. Correlation raises confidence by requiring multiple, independently weak signals to co-occur (a new-country sign-in alone is weak, a new-country sign-in immediately followed by an MFA registration change is not). Risk-based alerting scores each signal instead of treating every rule as a binary fire/don't-fire, so a SOC can triage a stack of moderate-confidence signals on one identity as a single elevated-priority case instead of ten separate low-priority tickets nobody has time for.
+
+## Telemetry Sources
+
+The detections below are only as good as what's actually being collected, which is the same caveat the Visibility for Defenders post makes at the collection-point level, applied here specifically to a cloud-native stack.
+
+| Source | Layer (from Part 1) | What it captures | Example event fields |
+|---|---|---|---|
+| AWS CloudTrail (and Azure Activity Log / GCP Audit Logs) | Cloud infrastructure | Every API call against the cloud control plane: who, what action, what resource, from where | `eventName`, `sourceIPAddress`, `userIdentity`, `requestParameters` |
+| Google Workspace audit logs | SaaS / Identity | Admin actions, OAuth grants, sign-ins, sharing changes across the Workspace suite | `events.name`, `actor.email`, `ipAddress`, `parameters` |
+| Cloudflare WAF logs | Network edge | Request-level matches against WAF rules for public-facing applications | `Action`, `RuleID`, `ClientIP`, `ClientRequestURI` |
+| DNS logs | Network edge | Every resolution request, useful for both C2 detection and shadow-IT discovery | `query_name`, `query_type`, `response`, `client_ip` |
+| Identity / authentication logs | Identity | Sign-ins, MFA challenges and results, Conditional Access decisions | `status`, `location`, `deviceDetail`, `conditionalAccessStatus` |
+| EDR events | Endpoint | Process creation, network connections, and behavioral flags from the host itself | `process_name`, `command_line`, `parent_process`, `hash` |
+
+## Eight Detection Examples
+
+Each of these follows the same shape: what the behavior actually is, which telemetry source(s) it needs, and where it tends to produce false positives if the logic is too naive.
+
+**1. Impossible travel.** Two sign-ins from the same identity, from geographically distant locations, in a window of time shorter than physical travel would allow. Needs identity sign-in logs with geolocation. False-positive risk is significant: VPN exit nodes, corporate proxies, and legitimately fast travel all trigger naive versions of this rule, which is why most mature implementations correlate it with a change in device fingerprint or a new, never-seen-before ASN rather than firing on geolocation delta alone.
+
+**2. OAuth abuse.** A user approves a malicious or over-scoped third-party application's OAuth consent request, the exact mechanism behind Scenario 3 in this blog's Visibility for Defenders post. Needs Google Workspace or Microsoft 365 OAuth grant audit events. Detection logic typically flags grants requesting high-risk scopes (mail read, full drive access) to applications outside an approved publisher allowlist.
+
+**3. MFA fatigue.** A high volume of MFA push notifications sent to one user in a short window, the pattern behind several well-documented real-world breaches where a user eventually approved a prompt just to make it stop. Needs identity authentication logs with per-challenge granularity. Detection logic counts distinct MFA denials or repeated prompts to the same user within a short window, not just the eventual approval.
+
+**4. Suspicious AssumeRole.** An AWS <Term concept="assume-role">AssumeRole</Term> call from an unusual source (a principal or IP that has never assumed that role before, or an assumption immediately followed by unusually broad API activity). Needs CloudTrail. This is the cloud-infrastructure-layer equivalent of lateral movement, and one of the clearest illustrations of why identity telemetry alone doesn't cover a cloud-native environment, the interesting behavior happens entirely inside the cloud provider's own control plane.
+
+**5. New administrator creation.** A new user is granted an administrative role in Google Workspace, Microsoft 365, or a cloud provider's IAM. Needs the relevant platform's admin audit log. Low false-positive rate by design (admin creation should be rare and always intentional), which makes it a good candidate for a low-threshold, high-priority alert rather than a correlated one.
+
+**6. Impossible API activity.** A service account or programmatic identity suddenly calling APIs it has never called before, or at a volume far outside its historical baseline. Needs CloudTrail or equivalent plus a behavioral baseline (see NDR's baselining approach, covered in the Visibility for Defenders tools table, for the same underlying idea applied to network traffic instead of API calls).
+
+**7. Credential stuffing.** A burst of failed authentication attempts against many different usernames from the same source, or the same username from many different sources, distinguishable from ordinary brute-forcing by its scale and its use of previously breached credential lists. Needs identity authentication logs, ideally with a threat-intel feed cross-reference against known-breached credentials.
+
+**8. Cloud resource discovery.** A principal enumerating IAM roles, S3 buckets, or EC2 instances in a pattern consistent with `aws iam list-*` / `s3 ls` reconnaissance rather than normal operational activity, often the first thing an attacker with a stolen cloud credential does. Needs CloudTrail. This is the cloud-infrastructure equivalent of the AD enumeration behaviors covered elsewhere on this blog: high-volume, read-only, broad-scope API calls in a short window from a principal that doesn't normally make them.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 190" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-step diagram of a suspicious AssumeRole chain: a phished or leaked IAM credential calls AssumeRole against a role it has never used before, from an unfamiliar source IP; the resulting temporary credentials are then used to call IAM list and S3 list operations in rapid succession; CloudTrail records every step; and the detection fires on the combination of a first-time role assumption immediately followed by broad enumeration, rather than on either signal alone." >
+    <rect x="10" y="20" width="140" height="46" rx="7" fill="#ef4444" fillOpacity="0.13" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="80" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Stolen credential</text>
+    <text x="80" y="53" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">calls AssumeRole,</text>
+    <text x="80" y="63" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">first time for this role</text>
+    <rect x="175" y="20" width="140" height="46" rx="7" fill="#f59e0b" fillOpacity="0.13" stroke="#f59e0b" strokeWidth="1.1" />
+    <text x="245" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Temp credentials</text>
+    <text x="245" y="53" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">issued by STS,</text>
+    <text x="245" y="63" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">valid session</text>
+    <rect x="340" y="20" width="140" height="46" rx="7" fill="#0ea5e9" fillOpacity="0.13" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="410" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Rapid enumeration</text>
+    <text x="410" y="53" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">iam:List*, s3:List*</text>
+    <text x="410" y="63" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">in seconds, not hours</text>
+    <rect x="505" y="20" width="125" height="46" rx="7" fill="#10b981" fillOpacity="0.13" stroke="#10b981" strokeWidth="1.1" />
+    <text x="567" y="40" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">CloudTrail</text>
+    <text x="567" y="53" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">records every</text>
+    <text x="567" y="63" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">one of these calls</text>
+    <line x1="150" y1="43" x2="175" y2="43" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socB2)" />
+    <line x1="315" y1="43" x2="340" y2="43" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socB2)" />
+    <line x1="480" y1="43" x2="505" y2="43" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socB2)" />
+    <rect x="90" y="100" width="460" height="55" rx="8" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="122" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">The detection fires on the combination:</text>
+    <text x="320" y="140" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">first-time role assumption + immediate broad enumeration</text>
+    <defs>
+      <marker id="socB2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Neither a first-time AssumeRole nor rapid IAM/S3 enumeration is suspicious alone, engineers do both routinely. The correlation between them, on the same session, in a short window, is what separates a real detection from a rule that pages someone every day.</p>
+</div>
+
+## Lab: Write Sigma Rules for Three of the Detections Above
+
+<CollapsibleCode title="Sigma Rules: Suspicious AssumeRole, MFA Fatigue, New Admin Creation" language="yaml">
+
+```yaml
+title: Suspicious AssumeRole Followed by Rapid Enumeration
+id: 8f2a1c3e-0000-4000-8000-000000000001
+status: experimental
+description: >
+  Detects an IAM principal assuming a role it has not assumed in the prior
+  30 days, followed within 5 minutes by a burst of read-only list/describe
+  API calls, consistent with post-compromise cloud reconnaissance.
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  assume_role:
+    eventName: AssumeRole
+  enumeration:
+    eventName|startswith:
+      - 'List'
+      - 'Describe'
+  timeframe: 5m
+  condition: assume_role followed by enumeration | count(enumeration) by requestParameters.roleArn > 10
+falsepositives:
+  - Legitimate automation/CI roles performing routine inventory scans
+  - New engineers assuming a role for the first time as part of onboarding
+level: high
+# Reasoning: neither event alone is a reliable signal (engineers assume
+# roles and list resources constantly). The rule requires BOTH a
+# first-time-in-30-days assumption AND a high-volume enumeration burst
+# in the same short session, which is the combination Scenario 8 above
+# is built around. The 30-day "first time" baseline has to be maintained
+# separately (a lookup table updated daily), Sigma alone can't express it.
+
+---
+title: MFA Push Fatigue
+id: 8f2a1c3e-0000-4000-8000-000000000002
+status: experimental
+description: >
+  Detects an unusually high number of MFA challenges sent to a single
+  user in a short window, consistent with an MFA fatigue / push-bombing
+  attempt rather than normal sign-in friction.
+logsource:
+  product: azure
+  service: signinlogs
+detection:
+  mfa_challenge:
+    ResultType: '500121'   # MFA denied / not satisfied
+  timeframe: 10m
+  condition: mfa_challenge | count() by UserPrincipalName > 5
+falsepositives:
+  - A user genuinely struggling with a flaky authenticator app
+  - Shared/service accounts with unusually high legitimate sign-in volume
+level: medium
+# Reasoning: threshold is deliberately in the "medium" tier rather than
+# "high" because the false-positive source (a user just having a bad
+# authenticator day) is common enough that this should feed a
+# correlation with a subsequent successful sign-in from a new device
+# before it becomes a high-priority page, not fire standalone.
+
+---
+title: New Administrator Role Granted
+id: 8f2a1c3e-0000-4000-8000-000000000003
+status: experimental
+description: >
+  Detects a principal being granted an administrative role in Google
+  Workspace, Microsoft 365, or a cloud IAM system.
+logsource:
+  product: googleworkspace
+  service: admin
+detection:
+  role_grant:
+    events.name: 'ASSIGN_ROLE'
+    parameters.ROLE_NAME|contains: 'Admin'
+  condition: role_grant
+falsepositives:
+  - Planned, ticketed administrative onboarding (correlate against a
+    change-management reference before treating as benign, don't just
+    suppress the rule)
+level: high
+# Reasoning: unlike the other two rules, this one intentionally has NO
+# volume or correlation threshold. Admin grants should be rare enough
+# that every single one deserves a look; the tuning lever here is a
+# change-management lookup for suppression, not a statistical threshold.
+```
+
+</CollapsibleCode>
+
+The comments in each rule matter as much as the logic: a Sigma rule without a documented reason for its threshold and a documented false-positive source is exactly the kind of detection that becomes unmaintainable noise six months after whoever wrote it moves to a different team.
+
+## What's Next
+
+Part 3 picks up where alerting leaves off: once one of these detections fires, or a SOC otherwise suspects something is wrong, how does an analyst actually investigate across identity, ZTNA, cloud console, and endpoint evidence to build a full timeline. It walks a complete attack chain, phishing through to exfiltration, step by step.
+
+## References & Further Reading
+
+1. MITRE ATT&CK, "Cloud Matrix." [https://attack.mitre.org/matrices/enterprise/cloud/](https://attack.mitre.org/matrices/enterprise/cloud/)
+	The cloud-specific technique set referenced throughout the threat-modeling and detection-example sections.
+2. Sigma (SigmaHQ), "Sigma Specification." [https://github.com/SigmaHQ/sigma-specification](https://github.com/SigmaHQ/sigma-specification)
+	The rule format used in this post's lab.
+3. AWS, "Logging IAM and AWS STS API calls with AWS CloudTrail." [https://docs.aws.amazon.com/IAM/latest/UserGuide/cloudtrail-integration.html](https://docs.aws.amazon.com/IAM/latest/UserGuide/cloudtrail-integration.html)
+	The AssumeRole/STS logging mechanics referenced in Detection Example 4 and the lab's first rule.
+4. Google, "Investigate users with security issues" (Workspace Admin Help, audit log reference). [https://support.google.com/a/answer/9448204](https://support.google.com/a/answer/9448204)
+	The Google Workspace audit log fields referenced in the Telemetry Sources table.
+5. Microsoft, "Sign-in logs in Microsoft Entra ID." [https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-sign-ins](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/concept-sign-ins)
+	The identity/authentication log fields referenced in the Telemetry Sources table and the MFA fatigue Sigma rule.
+6. CISA, "Iranian Cyber Actors' Brute Force and Credential Access Activity Compromises Critical Infrastructure Organizations" (AA24-290A). [https://www.cisa.gov/news-events/cybersecurity-advisories/aa24-290a](https://www.cisa.gov/news-events/cybersecurity-advisories/aa24-290a)
+	Joint advisory documenting real-world MFA push-bombing tradecraft, referenced in Detection Example 3.
+7. "Active Directory Series: Part 2" (this blog). [/posts/active-directory-security-part2](/posts/active-directory-security-part2)
+	The on-premises enumeration behaviors referenced as the conceptual parallel to cloud resource discovery in Detection Example 8.
+8. "Visibility for Defenders: Collection Points, Blind Spots, and the Attacks That Live Between Them" (this blog). [/posts/visibility-for-defenders-collection-points-and-blind-spots](/posts/visibility-for-defenders-collection-points-and-blind-spots)
+	The collection-point coverage-map discipline this post's Telemetry Sources section applies to a cloud-native stack specifically.

@@ -1,0 +1,207 @@
+---
+title: "The Modern SOC, Part 1: Modern SOC Architecture, The New Perimeter Is Identity"
+description: "How security operations moved from watching a network edge to watching identities, devices, and SaaS APIs that never touch a corporate network at all, and the architecture that has to exist before detection or investigation can work."
+date: "2026-08-04"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "soc", "cloud-security", "identity-security", "zero-trust", "modern-soc-series"]
+banner: "https://images.unsplash.com/photo-1601926495045-d066ccae8085?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0"
+bannerAlt: "A glass office building reflecting clouds, evoking the shift from a physical network perimeter to identity and cloud infrastructure as the real security boundary"
+visibility: "public"
+series: "The Modern SOC"
+seriesOrder: 1
+---
+
+> **Series Focus:** A modern SOC doesn't watch a network edge anymore, because for most organizations that edge stopped being where the attacks happen. This series walks the workflow of a mature cloud-first SOC in order: this part covers the architecture being defended, Part 2 covers how detections get built against it, Part 3 covers investigating an incident across it, and Part 4 covers hunting through it before an alert ever fires.
+
+**TL;DR:** The security perimeter used to be a physical boundary, a firewall between "inside" and "outside" that VPNs punched a controlled hole through. That model assumed users, devices, and applications all lived inside the boundary most of the time, an assumption that remote work and SaaS adoption broke completely. What replaced it isn't a new wall, it's a set of five layers, identity, device trust, network edge, SaaS, and cloud infrastructure, each independently verifying every request instead of trusting anything by virtue of location. This post maps that architecture layer by layer, with the named products that typically occupy each one, so the next three posts in this series have a concrete environment to build detections, investigations, and hunts against.
+
+## Introduction
+
+If you ask a SOC analyst from 2012 to draw the network they were defending, you'd get a fairly consistent picture: a corporate LAN, a DMZ, a firewall, and a VPN concentrator for the small fraction of users working remotely. Everything that mattered lived inside a boundary you could point to on a diagram, and the entire security model was organized around defending that boundary and watching what crossed it.
+
+Ask the same question of an analyst defending a SaaS-first company today and the diagram falls apart. There is no LAN in the old sense, employees work from home networks, coffee shops, and airports as the default rather than the exception. The applications they use, email, file storage, CRM, code repositories, mostly aren't hosted on anything the company owns; they're SaaS platforms reached directly over the internet. The servers that do exist are virtual machines and managed services running in someone else's data center. None of this is a hypothetical future state, it's the default architecture for most organizations founded in the last decade and the destination most older organizations are migrating toward.
+
+This post is about what replaced the old perimeter, not as an abstract trend but as a concrete set of layers with real products sitting in each one, because Part 2 through Part 4 of this series build directly on this map: you can't design a detection, run an investigation, or hunt effectively through an architecture you haven't first understood.
+
+## The Evolution: On-Premises, Hybrid, Cloud-Native
+
+Three architectural eras coexist across the industry right now, and most SOCs are defending some mix of all three rather than a clean transition from one to the next.
+
+**On-premises** is the model the industry built its security tooling around for two decades: a physical network boundary, Active Directory as the identity source, a SIEM ingesting firewall and Windows event logs, and a security team that could reasonably assume "on the corporate network" and "trusted" were close enough to the same thing. <Term concept="active-directory">Active Directory</Term>, covered in depth elsewhere on this blog, is still the identity backbone for a large share of the enterprise world, and a lot of what a SOC does in this model is genuinely still relevant.
+
+**Hybrid** is where most established organizations actually sit: on-prem AD synchronized to a cloud identity provider (Entra ID via Entra Connect being the most common pairing), some workloads still in a data center, others migrated to AWS, Azure, or GCP, and a growing share of day-to-day work happening in SaaS applications the security team doesn't run infrastructure for at all. This is architecturally the hardest era to defend well, because it inherits the attack surface of both models simultaneously without fully getting the tooling maturity of either.
+
+**Cloud-native** is the model this series focuses on: no on-premises Active Directory, no traditional network perimeter, identity provided entirely by a cloud IdP, infrastructure entirely in one or more cloud providers, and a workforce that authenticates to individual applications directly over the internet rather than tunneling into a private network first. This is the fastest-growing category and the one existing SOC playbooks, largely written for the on-premises era, cover the least.
+
+## Why the Perimeter Disappeared
+
+Two forces did this, and they compounded each other.
+
+**Remote work** removed the assumption that most users, most of the time, were physically inside a network boundary. A VPN can extend that boundary to a remote user, but it does so by giving a remote laptop the same network-level trust a machine on the office LAN would have had, which is a worse security property than it sounds: a compromised remote laptop with an active VPN tunnel has the same lateral movement options a compromised office machine would.
+
+**SaaS adoption** removed the assumption that the applications users need live inside that boundary at all. When email, file storage, and core business applications are all reached directly over the public internet, "the network perimeter" stops being the place where most access decisions actually get made. The access decision moved to the identity layer, whether or not the security architecture moved with it.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 260" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A before-and-after diagram. Before: a single dashed boundary line around a corporate network containing users, devices, and applications, labeled network perimeter, trust decided by location. After: the boundary line is gone, replaced by five separate small padlock icons attached individually to identity, device, network edge, SaaS, and cloud infrastructure, labeled identity as the perimeter, trust decided per request.">
+    <text x="160" y="24" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">Before: one boundary</text>
+    <rect x="30" y="40" width="260" height="120" rx="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="6 4" strokeOpacity="0.6" />
+    <rect x="50" y="60" width="70" height="30" rx="5" fill="#0ea5e9" fillOpacity="0.15" stroke="#0ea5e9" strokeWidth="1" />
+    <text x="85" y="79" textAnchor="middle" fill="currentColor" fontSize="8">Users</text>
+    <rect x="140" y="60" width="70" height="30" rx="5" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="1" />
+    <text x="175" y="79" textAnchor="middle" fill="currentColor" fontSize="8">Devices</text>
+    <rect x="230" y="60" width="40" height="30" rx="5" fill="#a855f7" fillOpacity="0.15" stroke="#a855f7" strokeWidth="1" />
+    <text x="250" y="79" textAnchor="middle" fill="currentColor" fontSize="7">Apps</text>
+    <text x="160" y="130" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">trust decided by</text>
+    <text x="160" y="145" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">network location</text>
+
+    <text x="480" y="24" textAnchor="middle" fill="currentColor" fontSize="11" fontWeight="bold">After: five separate checks</text>
+    <rect x="350" y="50" width="70" height="28" rx="5" fill="#a855f7" fillOpacity="0.18" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="385" y="68" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Identity</text>
+    <rect x="430" y="50" width="70" height="28" rx="5" fill="#10b981" fillOpacity="0.18" stroke="#10b981" strokeWidth="1.2" />
+    <text x="465" y="68" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Device</text>
+    <rect x="510" y="50" width="80" height="28" rx="5" fill="#0ea5e9" fillOpacity="0.18" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="550" y="68" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Network edge</text>
+    <rect x="350" y="90" width="70" height="28" rx="5" fill="#f59e0b" fillOpacity="0.18" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="385" y="108" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">SaaS</text>
+    <rect x="430" y="90" width="160" height="28" rx="5" fill="#ef4444" fillOpacity="0.18" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="510" y="108" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Cloud infrastructure</text>
+    <text x="480" y="145" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">trust decided per request,</text>
+    <text x="480" y="160" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.7">independently at each layer</text>
+
+    <line x1="300" y1="100" x2="335" y2="100" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.3" markerEnd="url(#socA1)" />
+    <defs>
+      <marker id="socA1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+    <rect x="60" y="195" width="520" height="45" rx="7" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+    <text x="320" y="213" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">A compromised credential now has to clear five independent checks</text>
+    <text x="320" y="228" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">instead of one, but only if all five are actually configured</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The old model had one perimeter to defend and one to attack. The new model has five, which is more resilient in theory and only in theory if every layer is actually turned on, the same caveat this blog's Visibility for Defenders post makes about collection points.</p>
+</div>
+
+## Zero Trust: The Principle Behind the Architecture
+
+<Term concept="zero-trust">Zero Trust</Term> is often described as a product category, and vendors are happy to let that confusion persist, but it's a principle: never trust a request by default, verify it explicitly every time, regardless of where it originates, and grant the least access necessary for that specific request. In practice this means a request from a laptop already sitting on the corporate network gets exactly as much scrutiny as one from a coffee shop, because network location stopped being a meaningful trust signal once both are equally reachable over the internet and equally capable of being a compromised device.
+
+The practical consequence for architecture is that trust now gets established independently at each of the five layers below, rather than once at a network boundary and implicitly extended everywhere after. That independence is precisely what makes cross-layer correlation, the subject of Parts 2 through 4, both necessary and difficult: an attacker who clears one layer's check hasn't cleared the rest, but a SOC that only monitors one layer can't tell the difference between "cleared all five" and "cleared the one we're watching."
+
+## The Five-Layer Stack
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 320" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A five-band stacked diagram: identity at the top, then device trust, then network edge, then SaaS, then cloud infrastructure at the bottom, each band labeled with representative products: identity with Microsoft Entra ID and Google Workspace; device trust with endpoint management and posture checks feeding Twingate and Cloudflare Access; network edge with Cloudflare WAF and Zero Trust access; SaaS with the productivity and collaboration platforms themselves; cloud infrastructure with AWS, Azure, and GCP.">
+    <rect x="20" y="20" width="600" height="42" rx="6" fill="#a855f7" fillOpacity="0.14" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="35" y="38" fill="currentColor" fontSize="10.5" fontWeight="bold">Identity</text>
+    <text x="35" y="53" fill="currentColor" fontSize="8.5" opacity="0.7">Microsoft Entra ID, Google Workspace, Okta</text>
+
+    <rect x="20" y="74" width="600" height="42" rx="6" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.2" />
+    <text x="35" y="92" fill="currentColor" fontSize="10.5" fontWeight="bold">Device Trust</text>
+    <text x="35" y="107" fill="currentColor" fontSize="8.5" opacity="0.7">Endpoint management + posture checks (Intune, Jamf) feeding access decisions</text>
+
+    <rect x="20" y="128" width="600" height="42" rx="6" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="35" y="146" fill="currentColor" fontSize="10.5" fontWeight="bold">Network Edge / ZTNA</text>
+    <text x="35" y="161" fill="currentColor" fontSize="8.5" opacity="0.7">Twingate, Cloudflare Access, Cloudflare WAF</text>
+
+    <rect x="20" y="182" width="600" height="42" rx="6" fill="#f59e0b" fillOpacity="0.14" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="35" y="200" fill="currentColor" fontSize="10.5" fontWeight="bold">SaaS</text>
+    <text x="35" y="215" fill="currentColor" fontSize="8.5" opacity="0.7">The applications themselves: email, file storage, CRM, code hosting</text>
+
+    <rect x="20" y="236" width="600" height="42" rx="6" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="35" y="254" fill="currentColor" fontSize="10.5" fontWeight="bold">Cloud Infrastructure</text>
+    <text x="35" y="269" fill="currentColor" fontSize="8.5" opacity="0.7">AWS, Azure, GCP: compute, storage, managed services</text>
+
+    <text x="320" y="298" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold" opacity="0.75">Each layer is a separate control plane, with its own logs, its own admins, and its own way of being misconfigured</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The layer order roughly follows an access request's path: identity is checked first, then the device it's coming from, then the network path in, before it ever reaches a SaaS app or a cloud resource. Part 3's investigation walkthrough follows an attack down through exactly this stack.</p>
+</div>
+
+### Identity
+
+Identity is the layer every other layer now defers to. **Microsoft Entra ID** (formerly Azure AD) and **Google Workspace** are the two identity providers most cloud-first organizations build around, with **Okta** common as a dedicated IdP layered in front of both when an organization needs a single identity plane across a mixed SaaS estate. This layer owns authentication, <Term concept="mfa">multi-factor authentication</Term> enforcement, and <Term concept="conditional-access">Conditional Access</Term> policies, the rules that decide whether a specific sign-in, from a specific device, in a specific location, gets allowed, challenged, or blocked. It's also the layer that generates the sign-in and audit logs Part 2 builds detections against.
+
+### Device Trust
+
+A verified identity on an unmanaged, unpatched, or already-compromised device is not actually a trustworthy request, which is why device posture, managed via **Microsoft Intune** or **Jamf** for macOS, feeds into the access decisions made at the identity and network-edge layers rather than standing alone. A Conditional Access policy that says "require MFA" and one that says "require MFA and a compliant, managed device" are very different security postures, and the difference is exactly this layer.
+
+### Network Edge / ZTNA
+
+This is where the VPN used to sit, and where <Term concept="ztna">ZTNA</Term> (Zero Trust Network Access) now sits instead. **Twingate** and **Cloudflare Access** are the two products named in this post's brief as representative examples: both replace "connect to the corporate network, then reach internal resources" with "authenticate per application, per request, with no broad network-level tunnel granted at all." The practical security difference from a VPN is significant: a compromised ZTNA session can reach the one application it was authorized for, not every host reachable on a flat internal network. **Cloudflare WAF** sits at the same conceptual layer for public-facing web applications specifically, filtering requests before they reach the application (the same WAF role covered from the application-security side in this blog's Visibility for Defenders post).
+
+### SaaS
+
+The application layer itself, email, file storage and collaboration (Google Workspace, Microsoft 365), CRM, code hosting, and the dozens of smaller SaaS tools a typical org accumulates. Each of these is its own control plane with its own admin roles, its own audit log format, and its own OAuth grant mechanism, which is exactly the fragmentation this blog's Visibility for Defenders post covered under Cloud/SaaS collection and CASB/SSPM tooling.
+
+### Cloud Infrastructure
+
+**AWS**, **Azure**, and **GCP** host the compute, storage, and managed services an organization actually runs, as opposed to consumes as SaaS. IAM policies, security groups, and each provider's own audit trail (**AWS CloudTrail** being the canonical example, referenced again in Part 2) live here. This is also where the modern attack surface below gets most concrete: a misconfigured storage bucket or an over-permissioned IAM role is a cloud-infrastructure-layer problem with consequences that can cross every other layer above it.
+
+## The Modern Attack Surface
+
+Mapping the five layers onto attack surface makes the shift concrete: an attacker no longer needs to breach a network boundary at all. A phished credential against Entra ID or Google Workspace, an OAuth grant approved by a tricked user, or a leaked AWS access key are all complete initial-access vectors that never touch anything resembling the old perimeter. Part 3 of this series walks exactly this kind of chain, phishing straight through identity, ZTNA, and cloud console access to data exfiltration, step by step.
+
+This is also why endpoint visibility hasn't become less important, it's become one layer among five rather than the primary one. **Windows and macOS endpoints**, monitored by whatever EDR platform an org runs (this blog's Visibility for Defenders post names several), still matter enormously, they're just no longer the only place an attack chain can be observed, and in a cloud-native org, often not even the first place.
+
+## Example Technologies by Layer
+
+| Layer | Representative products | What they primarily provide |
+|---|---|---|
+| Identity | Microsoft Entra ID, Google Workspace, Okta | Authentication, MFA, Conditional Access, identity audit logs |
+| Device Trust | Microsoft Intune, Jamf | Device enrollment, compliance/posture checks feeding access decisions |
+| Network Edge / ZTNA | Twingate, Cloudflare Access, Cloudflare WAF | Per-application access instead of network-level VPN trust; edge request filtering |
+| SaaS | Google Workspace, Microsoft 365, and the broader SaaS estate | The applications themselves, each with its own admin roles and audit logs |
+| Cloud Infrastructure | AWS, Azure, GCP | Compute, storage, managed services, IAM, and platform audit trails (CloudTrail and equivalents) |
+
+## Lab: Design a Fictional SaaS Company's Architecture
+
+<CollapsibleCode title="SaaS Company Architecture Worksheet" language="markdown">
+
+```markdown
+SCENARIO: "Fintrail", a 200-person B2B SaaS company.
+- No on-premises servers or Active Directory.
+- Engineering runs production on AWS; internal tooling on GCP.
+- Workforce identity: Google Workspace.
+- Remote-first, no office network to speak of.
+- Handles customer financial data (PII + payment metadata).
+
+FOR EACH LAYER BELOW, ANSWER:
+1. What product would you place here, and why (not "just because it's popular")?
+2. What's the single riskiest misconfiguration at this layer for THIS company specifically?
+3. What log source would prove that misconfiguration was exploited?
+
+| Layer | Product choice | Riskiest misconfiguration | Proof-of-exploitation log source |
+|---|---|---|---|
+| Identity | | | |
+| Device Trust | | | |
+| Network Edge / ZTNA | | | |
+| SaaS | | | |
+| Cloud Infrastructure | | | |
+
+STRETCH: Fintrail's engineers occasionally SSH directly into a small
+number of legacy EC2 instances that predate the ZTNA rollout. Where
+does that access path fit in the five-layer model above, and what
+does its existence do to every other layer's threat model?
+```
+
+</CollapsibleCode>
+
+There's no single correct answer key here, the point of the exercise is that a real environment always has at least one layer that doesn't cleanly fit the model (the SSH stretch question is deliberately that layer), and finding it before an attacker does is the actual job.
+
+## What's Next
+
+Part 2 moves from architecture to detection: how a SOC turns the telemetry this stack produces, CloudTrail events, Google Workspace audit logs, Cloudflare WAF logs, identity sign-in logs, into actual detection logic, with worked examples like impossible travel, OAuth abuse, MFA fatigue, and suspicious AssumeRole activity, plus several real Sigma rules built from scratch.
+
+## References & Further Reading
+
+1. NIST, "Zero Trust Architecture" (SP 800-207). [https://csrc.nist.gov/pubs/sp/800/207/final](https://csrc.nist.gov/pubs/sp/800/207/final)
+	The formal definition of Zero Trust referenced in this post's Zero Trust section.
+2. Cloudflare, "What is Zero Trust Network Access (ZTNA)?" [https://www.cloudflare.com/learning/access-management/what-is-ztna/](https://www.cloudflare.com/learning/access-management/what-is-ztna/)
+	The ZTNA-vs-VPN distinction referenced in the Network Edge layer section.
+3. Microsoft, "What is Conditional Access?" [https://learn.microsoft.com/en-us/entra/identity/conditional-access/overview](https://learn.microsoft.com/en-us/entra/identity/conditional-access/overview)
+	The Conditional Access mechanism referenced in the Identity layer section.
+4. AWS, "AWS CloudTrail User Guide." [https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html)
+	The cloud audit trail referenced in the Cloud Infrastructure layer section, built on further in Part 2.
+5. "Visibility for Defenders: Collection Points, Blind Spots, and the Attacks That Live Between Them" (this blog). [/posts/visibility-for-defenders-collection-points-and-blind-spots](/posts/visibility-for-defenders-collection-points-and-blind-spots)
+	The collection-point taxonomy and named-tool mapping (WAF, CASB/SSPM, EDR) this post builds the architectural context for.
+6. "Active Directory Series: Part 1 - What Active Directory Actually Is" (this blog). [/posts/active-directory-security-part1](/posts/active-directory-security-part1)
+	The on-premises identity model referenced in the Evolution section, for organizations still running or hybrid with AD.

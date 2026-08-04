@@ -20,6 +20,9 @@ export function getBaseUrl(): string {
  * Get the canonical URL for a given path
  */
 export function getCanonicalUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
   const baseUrl = getBaseUrl()
   return `${baseUrl}${path.startsWith('/') ? path : `${path}`}`
 }

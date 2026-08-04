@@ -1,0 +1,180 @@
+---
+title: "The Modern SOC, Part 4: Threat Hunting in Cloud-Native Environments"
+description: "How a mature SOC goes looking for the intrusion that never triggered an alert, using hypothesis-driven hunting, behavioral baselines, and CTI-derived tradecraft across identity, SaaS, and cloud infrastructure, closing the series with a hunt playbook built from a real, publicly documented campaign."
+date: "2026-08-04"
+author: "Mohamed Habib Jaouadi"
+tags: ["blue-team", "soc", "threat-hunting", "cloud-security", "cti", "modern-soc-series"]
+banner: "https://images.unsplash.com/photo-1750969185331-e03829f72c7d?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0"
+bannerAlt: "An abstract network of glowing blue lines and dots on a dark background, evoking the connections a threat hunter traces through data"
+visibility: "public"
+series: "The Modern SOC"
+seriesOrder: 4
+---
+
+> **Series Focus:** [Part 3](/posts/modern-soc-part3-investigation) covered investigating an incident once something triggers it. This closing part covers the opposite discipline: going looking for the intrusion that never triggered anything, before it becomes an incident at all.
+
+**TL;DR:** <Term concept="threat-hunting">Threat hunting</Term> starts from a hypothesis, not an alert, an analyst asserts "if technique X were happening in our environment, here's what evidence it would leave," then goes and checks, whether or not anything paged. This post covers the methodology (intelligence-driven hunting, hypothesis creation, behavioral baselines, continuous improvement), nine concrete hunts across identity, SaaS, and cloud infrastructure, how to turn CTI into a hunt program using MITRE ATT&CK, and closes with a lab building a hunt playbook from Scattered Spider (UNC3944), a real, extensively documented threat actor whose entire playbook is built around exactly the architecture this series has covered.
+
+## Introduction
+
+Detection engineering, the subject of Part 2, is reactive by design: a detection fires when a known pattern occurs. That's necessary and it's also structurally limited, a detection can only catch behavior someone already thought to write logic for. Threat hunting exists for everything on the other side of that boundary: novel techniques, known techniques executed just differently enough to dodge existing detections, and the slow, quiet activity that never crosses a threshold high enough to alert on but is still, on inspection, clearly malicious.
+
+The distinction that matters for a cloud-native SOC specifically: a hunt through identity, SaaS, and cloud infrastructure logs is looking for the same kind of low-and-slow, blend-in behavior that on-premises hunting has always looked for, dormant accounts, unusual but not extreme API usage, living-off-the-land activity, just expressed through a completely different set of data sources than the Windows-event-log-centric hunting playbooks most of the industry still defaults to.
+
+## Threat Hunting Methodology
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 210" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A five-stage threat hunting loop: intelligence-driven input, hypothesis creation, data collection and baseline comparison, investigation of anomalies, and documented findings that feed back into both intelligence and, when a repeatable pattern is found, into a new detection rule for Part 2's pipeline.">
+    <rect x="10" y="70" width="110" height="45" rx="7" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="65" y="90" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">CTI / actor</text>
+    <text x="65" y="102" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">tradecraft</text>
+    <rect x="135" y="70" width="110" height="45" rx="7" fill="#a855f7" fillOpacity="0.14" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="190" y="90" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Hypothesis</text>
+    <text x="190" y="102" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">creation</text>
+    <rect x="260" y="70" width="110" height="45" rx="7" fill="#0ea5e9" fillOpacity="0.14" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="315" y="90" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Baseline</text>
+    <text x="315" y="102" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">comparison</text>
+    <rect x="385" y="70" width="110" height="45" rx="7" fill="#f59e0b" fillOpacity="0.14" stroke="#f59e0b" strokeWidth="1.1" />
+    <text x="440" y="90" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Investigate</text>
+    <text x="440" y="102" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">anomalies</text>
+    <rect x="510" y="70" width="120" height="45" rx="7" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.1" />
+    <text x="570" y="90" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Document +</text>
+    <text x="570" y="102" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">feed back</text>
+    <line x1="120" y1="92" x2="135" y2="92" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#socD1)" />
+    <line x1="245" y1="92" x2="260" y2="92" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#socD1)" />
+    <line x1="370" y1="92" x2="385" y2="92" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#socD1)" />
+    <line x1="495" y1="92" x2="510" y2="92" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#socD1)" />
+    <path d="M 570 115 C 570 165, 190 165, 190 115" fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.1" strokeDasharray="4 3" markerEnd="url(#socD1)" />
+    <text x="380" y="185" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">A hunt that finds a repeatable pattern becomes a Part 2 detection; one that finds nothing still updates the baseline</text>
+    <defs>
+      <marker id="socD1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A hunt program that never produces a new detection isn't failing, most hunts should come back clean, but a hunt program that never produces one even after dozens of hunts probably isn't asking hard enough questions.</p>
+</div>
+
+**Intelligence-driven hunting** starts from what real adversaries are known to do, not from whatever data happens to be handy. **Hypothesis creation** turns that intelligence into a specific, falsifiable claim, "if a Scattered Spider-style actor is in our environment, we'd expect to see a recently registered MFA method on an account that hadn't touched MFA settings in months," not the vague, unfalsifiable "let's look for anything weird." **Behavioral analytics and baselines** are what make an anomaly visible at all; without a documented normal, "unusual" has no meaning, which is why baselining, covered from the NDR angle in this blog's Visibility for Defenders tools table, is foundational to hunting generally, not just network hunting specifically. **Threat actor tradecraft** is the intelligence layer that decides which hypotheses are worth the analyst-hours a hunt costs. **Continuous improvement** closes the loop: every hunt, successful or not, should update either the detection backlog (Part 2) or the baseline itself.
+
+## Nine Hunts
+
+Each hunt below states the hypothesis, the data source it needs, and what a genuine finding looks like as distinct from noise.
+
+**1. Dormant account activation.** Hypothesis: an account that hasn't authenticated in 60+ days suddenly signs in, often the reactivation of a compromised former-employee or service account. Data source: identity sign-in logs joined against an HR or account-lifecycle system to distinguish "genuinely dormant" from "just an infrequent user." A real finding shows activation immediately followed by permission or password changes, not just a one-off sign-in.
+
+**2. Impossible travel.** Same underlying signal as Part 2's detection example, but hunted manually against a longer lookback window and without the volume threshold a production detection needs to stay quiet, useful for catching a single, low-confidence instance a tuned detection would have suppressed as noise.
+
+**3. Suspicious OAuth grants.** Hypothesis: a third-party application with high-risk scopes (mail read, broad Drive/file access) was granted consent by a small number of users in a short window, consistent with a targeted consent-phishing campaign rather than organic adoption. Data source: Google Workspace or Microsoft 365 OAuth grant history.
+
+**4. New cloud administrators.** A hunt-side complement to Part 2's detection: rather than alerting on every grant, periodically review the full list of current administrators across every cloud and SaaS platform against a maintained, approved list, catching a grant that happened, wasn't obviously malicious at the time, and was never revoked.
+
+**5. Unusual API usage.** Hypothesis: a service account or automation identity is calling APIs outside its historical baseline, in volume, in variety, or in time-of-day pattern. Data source: CloudTrail (or equivalent) plus a maintained per-identity baseline, this is the same underlying idea as Part 2's Detection Example 6, hunted proactively across the full identity inventory rather than reactively on one flagged identity.
+
+**6. Cloud resource enumeration.** Hypothesis: a credential is being used to systematically enumerate IAM roles, storage, and compute inventory at a pace or breadth inconsistent with normal engineering work. Data source: CloudTrail read-only API call volume per identity, hunted specifically for the ones just under whatever threshold Part 2's Detection Example 8 uses.
+
+**7. S3 or storage exfiltration.** Hypothesis: an identity is retrieving an unusually large volume or unusually broad set of objects from cloud storage relative to its own history. Data source: S3 access logs or CloudTrail data events (again, contingent on that logging actually being enabled, the same gap flagged in Part 3's Step 6).
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="A simple before-and-after bar comparison for the storage exfiltration hunt: a baseline bar showing a small, steady daily object-retrieval volume for one identity over the past 30 days, next to a spike bar showing the same identity retrieving many times that volume in a single session, which is the anomaly the hunt is built to surface." >
+    <text x="160" y="24" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">30-day baseline (per identity)</text>
+    <rect x="40" y="80" width="18" height="30" fill="#0ea5e9" fillOpacity="0.5" />
+    <rect x="65" y="85" width="18" height="25" fill="#0ea5e9" fillOpacity="0.5" />
+    <rect x="90" y="78" width="18" height="32" fill="#0ea5e9" fillOpacity="0.5" />
+    <rect x="115" y="82" width="18" height="28" fill="#0ea5e9" fillOpacity="0.5" />
+    <rect x="140" y="88" width="18" height="22" fill="#0ea5e9" fillOpacity="0.5" />
+    <rect x="165" y="80" width="18" height="30" fill="#0ea5e9" fillOpacity="0.5" />
+    <rect x="190" y="84" width="18" height="26" fill="#0ea5e9" fillOpacity="0.5" />
+    <line x1="30" y1="110" x2="220" y2="110" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" />
+    <text x="480" y="24" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Session under hunt</text>
+    <rect x="460" y="30" width="30" height="80" fill="#ef4444" fillOpacity="0.55" />
+    <line x1="440" y1="110" x2="590" y2="110" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" />
+    <text x="475" y="128" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.75">~12x the daily norm, single session</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The hunt isn't "did they access storage," every legitimate workload does. It's "does this specific session's volume fall outside this specific identity's own established pattern."</p>
+</div>
+
+**8. WAF reconnaissance and bot campaigns.** Hypothesis: pre-attack reconnaissance against a public application (parameter fuzzing, endpoint enumeration, credential-stuffing bursts) is present in WAF logs below whatever blocking threshold is configured, useful signal for what's being probed even when nothing was actually let through. Data source: Cloudflare WAF logs, correlated against source IP reputation and request pattern.
+
+**9. Living-off-the-land activity.** Hypothesis: an attacker is using legitimate, built-in tools (cloud CLI utilities, native scripting, admin consoles) rather than custom malware specifically to blend into normal administrative activity, the cloud-native equivalent of the on-prem <Term concept="living-off-the-land">living-off-the-land</Term> techniques covered elsewhere on this blog. Data source: a combination of CloudTrail user-agent strings (CLI usage from an unexpected source) and EDR process telemetry for any on-host component of the same session.
+
+## Integrating CTI Into the Hunt Program
+
+A hunt program that isn't anchored to real threat intelligence degrades into hunting for whatever seems interesting, which doesn't scale and doesn't prioritize well. **Turning threat intelligence into hunts** means taking a specific reported technique from a specific campaign, not a generic "attackers use phishing" observation, and converting it directly into one of the falsifiable hypotheses above. **Mapping TTPs to detections** closes the loop the other direction: every hunt that confirms a gap should result in either a new Part 2-style detection or an explicit, documented decision not to build one yet. **Using ATT&CK for hunt development** gives the whole program a shared vocabulary and a way to track coverage systematically, the same Cloud Matrix referenced in Part 2. **Measuring hunt effectiveness** means tracking, per hunt, whether it found something, how long it took, and whether the finding led to a new detection, a documented gap, or a dead end, the same rigor this blog's Collection Management Framework post applies to intelligence collection generally, applied here to the hunts built on top of it.
+
+## Lab: Build a Hunt Playbook from a Real Campaign
+
+**Scattered Spider** (also tracked as UNC3944), documented extensively by CISA, the FBI, and multiple incident response vendors, is a useful campaign to build a playbook from precisely because its tradecraft maps almost one-to-one onto the architecture this series has covered: social engineering against IT help desks to reset MFA, SIM-swapping, phishing for credentials via lookalike SSO pages, and once inside, systematic abuse of legitimate cloud and identity administration tools rather than custom malware.
+
+<CollapsibleCode title="Hunt Playbook: Scattered Spider (UNC3944) Tradecraft" language="markdown">
+
+```markdown
+CAMPAIGN: Scattered Spider / UNC3944
+SOURCE: CISA Advisory AA23-320A, "#StopRansomware: Scattered Spider"
+
+REPORTED TRADECRAFT -> HYPOTHESIS -> DATA SOURCE -> HUNT QUERY SHAPE
+
+1. Help-desk social engineering to reset MFA / register a new device
+   HYPOTHESIS: An MFA method was registered or reset for an account
+   shortly before a sign-in from a new device/location.
+   DATA SOURCE: Identity provider MFA registration events + sign-in logs.
+   QUERY SHAPE: MFA registration event, followed within 1 hour by a
+   sign-in from a device fingerprint never seen on that account before.
+
+2. Lookalike SSO phishing pages harvesting credentials + tokens
+   HYPOTHESIS: A sign-in exists from infrastructure matching known
+   typosquat/lookalike domain patterns for this org's SSO branding.
+   DATA SOURCE: Sign-in logs (referrer/redirect chain) + passive DNS
+   and certificate transparency for the org's SSO domain variants.
+   QUERY SHAPE: Sign-in success where the pre-auth redirect chain
+   includes a domain registered in the last 30 days.
+
+3. Living-off-the-land: legitimate RMM tools and cloud CLI for access
+   HYPOTHESIS: A remote monitoring/management tool not on the approved
+   software list is present, or cloud CLI usage appears from a source
+   or account that has never used the CLI before.
+   DATA SOURCE: EDR process telemetry + CloudTrail user-agent field.
+   QUERY SHAPE: EDR process-creation events for known RMM tool binaries
+   NOT matching the org's approved RMM inventory; CloudTrail events
+   with userAgent matching aws-cli/azure-cli from a principal whose
+   prior 90-day history shows console-only access.
+
+4. Targeting of cloud/identity admin consoles directly, not just data
+   HYPOTHESIS: Administrative console access (IAM, identity admin
+   portal) occurred from a session that also matches hypothesis 1 or 2.
+   DATA SOURCE: Cross-reference cloud console CloudTrail ConsoleLogin
+   events and identity admin portal access against the accounts
+   flagged in hunts 1-2 above.
+   QUERY SHAPE: This is a correlation hunt, not a standalone query,
+   run it last, against the output of the first three.
+
+DELIVERABLE: For each hunt above that returns a hit, escalate to the
+Part 3 investigation methodology. For each hunt that returns nothing
+across a full 90-day lookback, document the negative result, that's
+still a measured outcome, not a wasted hunt.
+```
+
+</CollapsibleCode>
+
+Building a playbook this way, straight from a named advisory's reported tradecraft rather than from generic "things attackers do," is what separates a hunt program from a very expensive form of curiosity. It's also directly falsifiable: every row above either finds something or it doesn't, and either outcome is a real result.
+
+## Closing the Series
+
+Four posts, one workflow: Part 1 mapped what a modern SOC defends, Part 2 covered how it decides something is wrong, Part 3 covered what happens once it does, and this part covers going looking before anything decides that for you. None of the four stand alone particularly well, a detection program without an architecture to design against, an investigation methodology without detections to trigger it, or a hunt program without CTI to prioritize it are all weaker than the same piece embedded in the full loop. That loop, not any single tool named across these four posts, is what "a mature SOC" actually refers to.
+
+## References & Further Reading
+
+1. CISA, FBI, "#StopRansomware: Scattered Spider" (AA23-320A). [https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-320a](https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-320a)
+	The joint advisory the Lab section's hunt playbook is built directly from.
+2. MITRE ATT&CK, "Scattered Spider (G1015)." [https://attack.mitre.org/groups/G1015/](https://attack.mitre.org/groups/G1015/)
+	The ATT&CK group profile mapping Scattered Spider's tradecraft to specific techniques, referenced in the Integrating CTI section's approach to TTP mapping.
+3. MITRE ATT&CK, "Cloud Matrix." [https://attack.mitre.org/matrices/enterprise/cloud/](https://attack.mitre.org/matrices/enterprise/cloud/)
+	The same technique matrix referenced in Part 2, used here for hunt-coverage tracking.
+4. "You Can't Answer That: Collection Management and the Questions Your Data Can Actually Support" (this blog). [/posts/collection-management-framework](/posts/collection-management-framework)
+	The measurement discipline the "Measuring Hunt Effectiveness" section applies to the hunt program specifically.
+5. "Visibility for Defenders: Collection Points, Blind Spots, and the Attacks That Live Between Them" (this blog). [/posts/visibility-for-defenders-collection-points-and-blind-spots](/posts/visibility-for-defenders-collection-points-and-blind-spots)
+	The NDR baselining concept referenced in the Methodology section, and the storage/egress logging gaps referenced in Hunts 5 and 7.
+6. "The Modern SOC, Part 2: Detection Engineering in Modern SOCs" (this blog). [/posts/modern-soc-part2-detection-engineering](/posts/modern-soc-part2-detection-engineering)
+	The detections referenced throughout the Nine Hunts section as the reactive counterpart to each proactive hunt.
+7. "The Modern SOC, Part 3: Incident Investigation Across Cloud, Identity, and Endpoints" (this blog). [/posts/modern-soc-part3-investigation](/posts/modern-soc-part3-investigation)
+	The investigation methodology referenced as the escalation path for any hunt in this post's Lab that returns a hit.

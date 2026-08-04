@@ -1,7 +1,7 @@
 ---
 title: "The Modern SOC, Part 3: Incident Investigation Across Cloud, Identity, and Endpoints"
-description: "A step-by-step investigation methodology for a cloud-native intrusion, walked through a complete phishing-to-exfiltration attack chain across Google Workspace, Twingate, AWS, and endpoint evidence, with the evidence, hypotheses, and common mistakes at every hop."
-date: "2026-08-04"
+description: "A step-by-step investigation methodology for a cloud-native intrusion, walked through a complete phishing-to-exfiltration attack chain across Google Workspace, Zscaler Private Access, AWS, and endpoint evidence, with the evidence, hypotheses, and common mistakes at every hop."
+date: "2026-04-08"
 author: "Mohamed Habib Jaouadi"
 tags: ["blue-team", "soc", "incident-response", "cloud-security", "identity-security", "modern-soc-series"]
 banner: "https://images.unsplash.com/photo-1516382799247-87df95d790b7?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0"
@@ -19,7 +19,7 @@ seriesOrder: 3
 
 An alert tells you that something happened. It almost never tells you what actually happened, how far it went, or whether it's still happening. The gap between those two things is investigation, and in a cloud-native environment that gap is wider than it used to be, because the evidence for a single attack chain is now scattered across identity logs, a ZTNA provider's access logs, a cloud provider's audit trail, and whatever endpoint telemetry exists, four systems that were never designed to be correlated together and that a defender has to stitch into one coherent account by hand, or with tooling built specifically for that purpose.
 
-This post covers the methodology first, then makes it concrete with a full attack chain that touches every layer from Part 1's architecture. The technologies named throughout, Google Workspace, AWS, Cloudflare, Twingate, Windows/macOS, and an EDR platform, are the evidence sources, not the point; the point is the investigation process that works regardless of which specific products an environment happens to run.
+This post covers the methodology first, then makes it concrete with a full attack chain that touches every layer from Part 1's architecture. The technologies named throughout, Google Workspace, AWS, Cloudflare, Zscaler Private Access, Windows/macOS, and an EDR platform, are the evidence sources, not the point; the point is the investigation process that works regardless of which specific products an environment happens to run.
 
 ## Investigation Methodology
 
@@ -27,9 +27,9 @@ This post covers the methodology first, then makes it concrete with a full attac
 
 **Building a timeline** is the core activity of everything that follows. A timeline is not a log dump in chronological order, it's a curated sequence of events, from multiple sources, normalized to a single timezone and a single narrative, where each entry is tied back to the raw evidence that supports it. The discipline that makes a timeline useful rather than just long is ruthlessly excluding anything that doesn't advance or test a specific hypothesis.
 
-**Scoping** answers "how far did this go." Every investigation has a natural tendency to under-scope, stopping at the first system where an analyst got clean logs, when the actual compromise crossed into a system with worse logging. Scoping means actively looking for evidence the attacker moved beyond what's already been confirmed, not just documenting the parts that were easy to find.
+**Scoping** answers "how far did this go." Every investigation has a natural tendency to under-scope, stopping at the first system where an analyst got clean logs, when the actual compromise crossed into a system with worse logging. Scoping means actively looking for evidence the attacker moved beyond what's already been confirmed, not just documenting the parts that were easy to find. Concretely: confirming one compromised identity accessed one S3 bucket is not the same as confirming that identity's session didn't also touch the three other buckets its role happened to have read access to, under-scoping is usually a story of "we checked the bucket we already knew about," not a story of missing data.
 
-**Root cause analysis** answers "how did this actually start," which is a different question from "what's the first event in our timeline." The first event you can see and the actual root cause are not always the same thing, an analyst who starts an investigation at the first alert-worthy event risks missing an earlier, quieter initial access step that never tripped a detection at all.
+**Root cause analysis** answers "how did this actually start," which is a different question from "what's the first event in our timeline." The first event you can see and the actual root cause are not always the same thing, an analyst who starts an investigation at the first alert-worthy event risks missing an earlier, quieter initial access step that never tripped a detection at all. In the chain below, the alert that opens the case is likely to be Step 5's privilege escalation or Step 6's data access, both of which are loud. The root cause is Step 1, a phishing email delivered four to five steps earlier that generated no alert of its own, and an investigation that starts its timeline at Step 5 will produce an accurate account of what happened without ever explaining why it was possible.
 
 **Pivoting between data sources** is the mechanical skill underneath all of the above: taking one confirmed artifact, an IP address, a session ID, a device fingerprint, a timestamp, and using it as the join key to find related activity in a completely different system that has no native awareness of the first. This is the single most valuable skill in cloud-native investigation, because no one system in the five-layer architecture from Part 1 was built to talk to the others.
 
@@ -112,7 +112,7 @@ This post covers the methodology first, then makes it concrete with a full attac
 
 ### 3. Zero Trust Access
 
-**Evidence available:** The compromised identity being used to authenticate through the ZTNA layer (Twingate, Cloudflare Access) to reach an internal application or the cloud console itself.
+**Evidence available:** The compromised identity being used to authenticate through the ZTNA layer (Zscaler Private Access, Cloudflare Access) to reach an internal application or the cloud console itself.
 
 **Logs:** ZTNA provider access logs: which application was accessed, from what device, whether device posture checks passed.
 
@@ -146,6 +146,31 @@ This post covers the methodology first, then makes it concrete with a full attac
 
 **Common mistakes:** Fixing the specific escalation path used without auditing for other, unused paths to the same privilege level. An attacker who used one overprivileged role rarely means that was the only overprivileged role in the environment.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="A before-and-after IAM permission diff. Before the AssumeRole call, the compromised identity j.alvarez has read-only access to a small set of resources. After the AssumeRole call, the session holds the DataPipelineAdmin role, with read and write access to all customer export buckets and the ability to modify IAM policies. The diff itself, not just the single AssumeRole event, is what an investigation needs to record." >
+    <rect x="20" y="20" width="260" height="90" rx="8" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="150" y="40" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Before: j.alvarez</text>
+    <text x="150" y="58" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">s3:GetObject (2 buckets, read-only)</text>
+    <text x="150" y="72" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">iam:ListRoles</text>
+    <text x="150" y="86" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">no write, no policy access</text>
+    <rect x="360" y="20" width="260" height="90" rx="8" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="490" y="40" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">After: DataPipelineAdmin</text>
+    <text x="490" y="58" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">s3:GetObject / PutObject (all export buckets)</text>
+    <text x="490" y="72" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">iam:AttachUserPolicy</text>
+    <text x="490" y="86" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">read + write + policy modification</text>
+    <line x1="280" y1="65" x2="360" y2="65" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.3" markerEnd="url(#socC2)" />
+    <text x="320" y="55" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.7">AssumeRole</text>
+    <rect x="90" y="130" width="460" height="30" rx="6" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="150" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">The diff is the evidence, not the single AssumeRole line by itself</text>
+    <defs>
+      <marker id="socC2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Writing down "AssumeRole to DataPipelineAdmin occurred at 09:24" without writing down what that role could actually do leaves the report's reader unable to judge severity on their own.</p>
+</div>
+
 ### 6. Data Access
 
 **Evidence available:** Access to the specific data the attacker was actually after, an S3 bucket, a database, a set of documents, generally the point where the investigation's stakes become concrete.
@@ -170,9 +195,25 @@ This post covers the methodology first, then makes it concrete with a full attac
 
 **Common mistakes:** Concluding "no evidence of exfiltration" from an absence of egress logs, when the actual finding is "no egress logging existed to check." Those are very different statements, and only one of them is defensible in an incident report.
 
-## Where Google Workspace, AWS, Cloudflare, Twingate, and Endpoint Evidence Sit
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 160" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="A timeline correlating two signals in the same short window: a spike in GetObject calls against the customer-exports bucket at 09:26, and a corresponding spike in outbound network egress volume at 09:27, one minute later. The alignment of these two independent signals, from two different log sources, is what confirms data actually left the environment rather than merely being accessed." >
+    <line x1="40" y1="90" x2="600" y2="90" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    <rect x="280" y="55" width="50" height="35" rx="4" fill="#a855f7" fillOpacity="0.4" stroke="#a855f7" strokeWidth="1" />
+    <text x="305" y="45" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">09:26</text>
+    <text x="305" y="105" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.75">GetObject x340</text>
+    <rect x="345" y="50" width="50" height="40" rx="4" fill="#ef4444" fillOpacity="0.4" stroke="#ef4444" strokeWidth="1" />
+    <text x="370" y="40" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">09:27</text>
+    <text x="370" y="105" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.75">Egress spike</text>
+    <text x="337" y="70" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.6">~1 min</text>
+    <rect x="70" y="120" width="500" height="30" rx="6" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="140" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Two independent sources agreeing is what proves exfiltration, not access alone</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>If the egress spike wasn't logged at all, the GetObject burst alone still proves access, but on its own it can't distinguish "downloaded and left the environment" from "downloaded and stayed inside it," which is exactly the gap Step 7's common mistake describes.</p>
+</div>
 
-The named technologies in this walkthrough map directly onto the pivots above: **Google Workspace** (or Entra ID) sign-in logs anchor steps 1-2, **Twingate** or **Cloudflare Access** logs anchor step 3, **AWS** CloudTrail anchors steps 4-6, and **Windows/macOS** endpoint telemetry from an **EDR** platform provides a parallel, device-side account of steps 2-3 if the attacker ever operated directly from the compromised user's machine rather than purely through stolen session tokens. None of these products are the subject of this post, they're the four places the evidence for this exact chain actually lives.
+## Where Google Workspace, AWS, Cloudflare, Zscaler Private Access, and Endpoint Evidence Sit
+
+The named technologies in this walkthrough map directly onto the pivots above: **Google Workspace** (or Entra ID) sign-in logs anchor steps 1-2, **Zscaler Private Access** or **Cloudflare Access** logs anchor step 3, **AWS** CloudTrail anchors steps 4-6, and **Windows/macOS** endpoint telemetry from an **EDR** platform provides a parallel, device-side account of steps 2-3 if the attacker ever operated directly from the compromised user's machine rather than purely through stolen session tokens. None of these products are the subject of this post, they're the four places the evidence for this exact chain actually lives.
 
 ## Lab: Reconstruct the Timeline from Synthetic Logs
 
@@ -191,7 +232,7 @@ The named technologies in this walkthrough map directly onto the pivots above: *
 2026-07-14T09:15:22Z  login_success  user=j.alvarez@fintrail.io  ip=185.220.101.47  device=unknown  mfa=satisfied  mfa_type=push
 2026-07-14T09:16:05Z  login_success  user=j.alvarez@fintrail.io  ip=185.220.101.47  device=unknown  session_type=oauth_token_reuse
 
-## Source C: Twingate Access Log
+## Source C: ZPA (Zscaler Private Access) Log
 2026-07-14T09:19:44Z  connect  user=j.alvarez@fintrail.io  resource=aws-console-prod  device_posture=unknown  src_ip=185.220.101.47
 
 ## Source D: AWS CloudTrail

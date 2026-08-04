@@ -1,7 +1,7 @@
 ---
 title: "The Modern SOC, Part 4: Threat Hunting in Cloud-Native Environments"
 description: "How a mature SOC goes looking for the intrusion that never triggered an alert, using hypothesis-driven hunting, behavioral baselines, and CTI-derived tradecraft across identity, SaaS, and cloud infrastructure, closing the series with a hunt playbook built from a real, publicly documented campaign."
-date: "2026-08-04"
+date: "2026-04-09"
 author: "Mohamed Habib Jaouadi"
 tags: ["blue-team", "soc", "threat-hunting", "cloud-security", "cti", "modern-soc-series"]
 banner: "https://images.unsplash.com/photo-1750969185331-e03829f72c7d?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0"
@@ -63,6 +63,26 @@ Each hunt below states the hypothesis, the data source it needs, and what a genu
 
 **1. Dormant account activation.** Hypothesis: an account that hasn't authenticated in 60+ days suddenly signs in, often the reactivation of a compromised former-employee or service account. Data source: identity sign-in logs joined against an HR or account-lifecycle system to distinguish "genuinely dormant" from "just an infrequent user." A real finding shows activation immediately followed by permission or password changes, not just a one-off sign-in.
 
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="A timeline showing an account with no sign-in activity for 62 days, then a sudden sign-in, followed within minutes by a password reset and an MFA method registration. The gap alone is not suspicious, dormant accounts exist for legitimate reasons, but the immediate follow-on changes after 62 days of silence are what turn this from a routine reactivation into a genuine hunt finding." >
+    <line x1="30" y1="70" x2="610" y2="70" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    <circle cx="60" cy="70" r="4" fill="currentColor" fillOpacity="0.4" />
+    <text x="60" y="55" textAnchor="middle" fill="currentColor" fontSize="7.5">last sign-in</text>
+    <rect x="90" y="63" width="330" height="14" rx="4" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="0.8" strokeOpacity="0.3" />
+    <text x="255" y="97" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">62 days silent</text>
+    <circle cx="440" cy="70" r="5" fill="#a855f7" />
+    <text x="440" y="55" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">sign-in resumes</text>
+    <circle cx="500" cy="70" r="5" fill="#ef4444" />
+    <text x="500" y="55" textAnchor="middle" fill="currentColor" fontSize="7.5">password reset</text>
+    <circle cx="560" cy="70" r="5" fill="#ef4444" />
+    <text x="560" y="55" textAnchor="middle" fill="currentColor" fontSize="7.5">new MFA method</text>
+    <text x="500" y="97" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">within minutes of reactivation</text>
+    <rect x="70" y="115" width="500" height="28" rx="6" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="4 3" />
+    <text x="320" y="133" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">The gap alone is routine; the gap plus what happens right after it is the finding</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A returning employee reactivates an account too, but rarely resets their password and re-registers MFA in the same few minutes, that combination is what separates a real finding from a false positive here.</p>
+</div>
+
 **2. Impossible travel.** Same underlying signal as Part 2's detection example, but hunted manually against a longer lookback window and without the volume threshold a production detection needs to stay quiet, useful for catching a single, low-confidence instance a tuned detection would have suppressed as noise.
 
 **3. Suspicious OAuth grants.** Hypothesis: a third-party application with high-risk scopes (mail read, broad Drive/file access) was granted consent by a small number of users in a short window, consistent with a targeted consent-phishing campaign rather than organic adoption. Data source: Google Workspace or Microsoft 365 OAuth grant history.
@@ -101,6 +121,36 @@ Each hunt below states the hypothesis, the data source it needs, and what a genu
 ## Integrating CTI Into the Hunt Program
 
 A hunt program that isn't anchored to real threat intelligence degrades into hunting for whatever seems interesting, which doesn't scale and doesn't prioritize well. **Turning threat intelligence into hunts** means taking a specific reported technique from a specific campaign, not a generic "attackers use phishing" observation, and converting it directly into one of the falsifiable hypotheses above. **Mapping TTPs to detections** closes the loop the other direction: every hunt that confirms a gap should result in either a new Part 2-style detection or an explicit, documented decision not to build one yet. **Using ATT&CK for hunt development** gives the whole program a shared vocabulary and a way to track coverage systematically, the same Cloud Matrix referenced in Part 2. **Measuring hunt effectiveness** means tracking, per hunt, whether it found something, how long it took, and whether the finding led to a new detection, a documented gap, or a dead end, the same rigor this blog's Collection Management Framework post applies to intelligence collection generally, applied here to the hunts built on top of it.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A four-stage pipeline showing how a single reported technique becomes program output: a CTI report describes a specific technique, that technique is mapped to a MITRE ATT&CK ID, the ATT&CK ID is converted into a falsifiable hunt hypothesis, and the hunt's outcome branches into either a new Part 2 detection rule, if the hunt found a repeatable pattern, or a documented negative result, if it found nothing." >
+    <rect x="10" y="55" width="130" height="45" rx="7" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="75" y="75" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">CTI report:</text>
+    <text x="75" y="88" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">"actor does X"</text>
+    <rect x="165" y="55" width="130" height="45" rx="7" fill="#f59e0b" fillOpacity="0.14" stroke="#f59e0b" strokeWidth="1.1" />
+    <text x="230" y="75" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">ATT&amp;CK</text>
+    <text x="230" y="88" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">technique ID</text>
+    <rect x="320" y="55" width="130" height="45" rx="7" fill="#a855f7" fillOpacity="0.14" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="385" y="75" textAnchor="middle" fill="currentColor" fontSize="8" fontWeight="bold">Falsifiable</text>
+    <text x="385" y="88" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.75">hunt hypothesis</text>
+    <rect x="475" y="20" width="150" height="38" rx="7" fill="#10b981" fillOpacity="0.14" stroke="#10b981" strokeWidth="1.1" />
+    <text x="550" y="35" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Found it →</text>
+    <text x="550" y="48" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">new Part 2 detection</text>
+    <rect x="475" y="90" width="150" height="38" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="550" y="105" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Found nothing →</text>
+    <text x="550" y="118" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">documented negative</text>
+    <line x1="140" y1="77" x2="165" y2="77" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socD2)" />
+    <line x1="295" y1="77" x2="320" y2="77" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socD2)" />
+    <line x1="450" y1="65" x2="475" y2="42" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socD2)" />
+    <line x1="450" y1="90" x2="475" y2="109" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#socD2)" />
+    <defs>
+      <marker id="socD2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.6" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>The Lab below runs this exact pipeline four times against one real advisory, Scattered Spider's reported tradecraft, each row of the playbook is one pass through these four stages.</p>
+</div>
 
 ## Lab: Build a Hunt Playbook from a Real Campaign
 

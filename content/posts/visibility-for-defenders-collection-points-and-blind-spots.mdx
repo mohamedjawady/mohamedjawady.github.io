@@ -83,6 +83,54 @@ Cloud and SaaS telemetry, API audit logs (the AWS CloudTrail/Azure Activity Log 
 
 Email telemetry, gateway logs, message headers, and attachment detonation sandboxes, sees the initial access vector for most intrusions that don't start with an exposed application. It answers "did this org receive the lure" and "what did the attachment actually do when detonated," which is a narrower but still essential question than any of the other four layers ask.
 
+## Where the Named Tools Actually Sit
+
+The five layers above are functions, not products. In a real environment those functions get implemented by named tools, and vendors increasingly market across layer boundaries in ways that make a product's actual vantage point harder to see than it should be, "XDR" in particular gets used as a synonym for "good visibility" rather than the specific, bounded thing it actually is. The table below maps common product categories to the layer they occupy, what they characteristically record, and where their coverage structurally stops. The product names are illustrative, not an endorsement or an exhaustive list, the category and the layer are what matters.
+
+| Category | Examples | Layer | What it records | Structural blind spot |
+|---|---|---|---|---|
+| NIDS / NIPS | Suricata, Snort, Zeek/Corelight | Network | Signature and protocol matches on the wire; Zeek specifically produces structured connection, DNS, HTTP, and TLS logs | Nothing inside traffic it can't decrypt; blind to anything that never leaves the host |
+| <Term concept="ndr">NDR</Term> | Darktrace, Vectra AI, ExtraHop | Network | Behavioral baselines across flows, flags "this host has never talked to this destination before" | Same encryption blind spot as NIDS, plus needs a baselining period before it's reliable |
+| <Term concept="edr">EDR</Term> | CrowdStrike Falcon, Microsoft Defender for Endpoint, SentinelOne, Elastic Defend | Endpoint | Process creation, command-line arguments, module loads, LSASS access, registry and file writes | Nothing before install, nothing once disabled or uninstalled, nothing on a host outside the managed fleet |
+| <Term concept="xdr">XDR</Term> | Microsoft Defender XDR, CrowdStrike Falcon Insight XDR, Palo Alto Cortex XDR, SentinelOne Singularity | Cross-layer, correlation only | Stitches the same vendor's EDR, identity, email, and cloud signals into one incident timeline | Only correlates what its own underlying sensors already collect; a gap in one of those sensors is still a gap, just less visible under a unified console |
+| <Term concept="mdi">MDI</Term> / ITDR | Microsoft Defender for Identity, Okta ThreatInsight, Entra ID Protection | Identity | Protocol-level Kerberos/NTLM abuse (Kerberoasting, DCSync, coercion heuristics), sign-in risk scoring | Only sees what the identity provider itself mediates; nothing once a session or token is already valid |
+| <Term concept="casb">CASB</Term> / <Term concept="sspm">SSPM</Term> | Microsoft Defender for Cloud Apps, Netskope, Obsidian Security | Cloud / SaaS | OAuth grant history, SaaS configuration drift, third-party app risk | Coverage limited to SaaS apps actually onboarded or discovered; unregistered shadow IT is invisible by definition |
+| <Term concept="cspm">CSPM</Term> | Wiz, Prisma Cloud, Microsoft Defender for Cloud | Cloud | Misconfigurations, exposed resources, IAM policy risk in the cloud control plane | A point-in-time configuration snapshot, not real-time behavioral telemetry |
+| Email security gateway | Proofpoint, Mimecast, Microsoft Defender for Office 365 | Email | Headers, attachment detonation, click-time URL rewriting | Nothing once a message reaches a channel it doesn't inspect (Teams, Slack, a personal webmail tab) |
+| <Term concept="waf">WAF</Term> | Cloudflare, AWS WAF, ModSecurity/Coraza | Application edge | Request pattern matches against known attack signatures | Confirms an attempt arrived; nothing about the backend query or response it triggered (Scenario 4) |
+| <Term concept="siem">SIEM</Term> | Splunk, Microsoft Sentinel, Elastic Security | Aggregation, not a sensor | Central store for everything above; where correlation rules and detections actually run | Only knows what was forwarded to it; a source that was never ingested doesn't exist as far as the SIEM is concerned |
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 180" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A diagram of five colored boxes representing Network, Endpoint, Identity, Cloud/SaaS, and Email tooling, each with representative product examples, enclosed inside one dashed rectangle labeled XDR and SIEM as a correlation layer wrapped around the same five bands. A note below states that this correlation layer only ever sees what its own underlying sensors already collect.">
+    <text x="320" y="26" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">XDR / SIEM: a correlation layer wrapped around these same five bands</text>
+    <rect x="8" y="42" width="624" height="96" rx="10" fill="currentColor" fillOpacity="0.04" stroke="currentColor" strokeWidth="1.1" strokeOpacity="0.4" strokeDasharray="5 3" />
+    <rect x="18" y="64" width="115" height="52" rx="6" fill="#0ea5e9" fillOpacity="0.15" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="75.5" y="86" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Network</text>
+    <text x="75.5" y="100" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Suricata, Zeek,</text>
+    <text x="75.5" y="109" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Darktrace</text>
+    <rect x="141" y="64" width="115" height="52" rx="6" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="1.1" />
+    <text x="198.5" y="86" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Endpoint</text>
+    <text x="198.5" y="100" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">CrowdStrike, Defender,</text>
+    <text x="198.5" y="109" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">SentinelOne</text>
+    <rect x="264" y="64" width="115" height="52" rx="6" fill="#a855f7" fillOpacity="0.15" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="321.5" y="86" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Identity</text>
+    <text x="321.5" y="100" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Defender for Identity,</text>
+    <text x="321.5" y="109" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Okta</text>
+    <rect x="387" y="64" width="115" height="52" rx="6" fill="#f59e0b" fillOpacity="0.15" stroke="#f59e0b" strokeWidth="1.1" />
+    <text x="444.5" y="86" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Cloud / SaaS</text>
+    <text x="444.5" y="100" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Defender for Cloud Apps,</text>
+    <text x="444.5" y="109" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Wiz</text>
+    <rect x="510" y="64" width="115" height="52" rx="6" fill="#ef4444" fillOpacity="0.15" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="567.5" y="86" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Email</text>
+    <text x="567.5" y="100" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Proofpoint,</text>
+    <text x="567.5" y="109" textAnchor="middle" fill="currentColor" fontSize="6.5" opacity="0.75">Mimecast</text>
+    <text x="320" y="158" textAnchor="middle" fill="currentColor" fontSize="8.5" opacity="0.75">It only ever sees what its own underlying sensors already collect, a blind spot in one of them is still a blind spot underneath the unified console</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>XDR and SIEM don't sit alongside the five layers as a sixth vantage point, they sit on top of them. Buying one doesn't answer whether the sensor underneath a given box was ever turned on.</p>
+</div>
+
+That last point is worth sitting with, because it's the one procurement conversations skip most often: "we bought XDR" and "we have coverage" are not the same claim, for exactly the same reason "we have identity logging" wasn't in Scenario 1. The coverage map in a later section of this post is still the thing that answers the underlying question, XDR and SIEM only change where the answer gets displayed once the map says yes.
+
 ## The Blind Spot Principle
 
 The pattern across all five layers is the same one, stated once so the scenarios below don't have to repeat it: **every collection point's blind spot is shaped by where it physically or logically sits relative to the attack.** A sensor on the wire cannot see inside a process. A sensor on a process cannot see what already happened inside an encrypted session it wasn't running during. A log of authentication decisions cannot describe behavior after the decision was made. This isn't a maturity problem that better tooling eventually solves, it's a structural property of what each collection point was built to observe, and it is exactly why "we have an EDR" or "we have a SIEM" answers a much smaller question than most people asking it think it does.
@@ -330,3 +378,5 @@ None of the six scenarios above involved a novel technique. Every one of them is
 	The full technical treatment of Kerberoasting and the coercion-to-RBCD relay chain referenced in Scenarios 1 and 2.
 13. "Kerberos, NTLM, and the Event IDs That Actually Matter" (this blog). [/posts/kerberos-ntlm-windows-event-ids](/posts/kerberos-ntlm-windows-event-ids)
 	The identity-layer event ID mapping referenced throughout the Identity layer section.
+14. Microsoft, "What is Microsoft Defender for Identity?" [https://learn.microsoft.com/en-us/defender-for-identity/what-is](https://learn.microsoft.com/en-us/defender-for-identity/what-is)
+	Confirms the sensor-on-domain-controller deployment model referenced in the "Where the Named Tools Actually Sit" table's MDI/ITDR row.

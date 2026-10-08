@@ -10,7 +10,7 @@ interface VisualizationCardProps {
 export function VisualizationCard({ visualization }: VisualizationCardProps) {
   return (
     <Link href={`/visualizations/${visualization.id}`} className="group">
-      <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border-2 hover:border-primary/50">
+      <Card className="h-full transition-colors border hover:border-emerald-500/40">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <CardTitle className="text-xl group-hover:text-primary transition-colors line-clamp-2 flex-1">

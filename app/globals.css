@@ -5,25 +5,25 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 220 15% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 15% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --popover-foreground: 220 15% 12%;
+    --primary: 220 15% 14%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 15% 14%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 44%;
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 15% 14%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 160 84% 39%;
+    --radius: 0.4rem;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -32,25 +32,25 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 220 18% 8%;
+    --foreground: 220 10% 92%;
+    --card: 220 18% 10%;
+    --card-foreground: 220 10% 92%;
+    --popover: 220 18% 10%;
+    --popover-foreground: 220 10% 92%;
+    --primary: 220 10% 92%;
+    --primary-foreground: 220 15% 14%;
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 220 10% 92%;
+    --muted: 220 14% 16%;
+    --muted-foreground: 220 8% 62%;
+    --accent: 220 14% 16%;
+    --accent-foreground: 220 10% 92%;
+    --destructive: 0 62% 42%;
+    --destructive-foreground: 220 10% 92%;
+    --border: 220 14% 18%;
+    --input: 220 14% 18%;
+    --ring: 160 70% 45%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -155,7 +155,7 @@ code {
 
 /* Prose improvements for blog posts */
 .prose {
-  @apply max-w-none;
+  @apply max-w-[70ch];
 }
 
 .prose pre {
@@ -168,12 +168,6 @@ code {
 
 .prose pre code {
   @apply bg-transparent p-0;
-}
-
-/* Blog post content styling */
-.prose p {
-  text-align: justify;
-  text-justify: inter-word;
 }
 
 /* Center images in blog posts */
@@ -270,76 +264,6 @@ html {
 /* Better focus states */
 button:focus-visible {
   @apply ring-2 ring-green-500 ring-offset-2 ring-offset-background;
-}
-
-/* Banner shimmer animation */
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-.animate-shimmer {
-  animation: shimmer 2s ease-in-out;
-}
-
-/* Post hero banner background styles */
-.post-hero-banner {
-  position: relative;
-  background-attachment: fixed;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-}
-
-/* Enhanced text shadows for better readability on banners */
-.banner-text-shadow {
-  text-shadow: 
-    0 1px 3px rgba(0, 0, 0, 0.4),
-    0 2px 6px rgba(0, 0, 0, 0.3),
-    0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-/* Glassmorphism effect for overlay elements */
-.glass-effect {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.glass-effect-dark {
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Parallax effect for banner backgrounds */
-@media (min-width: 768px) {
-  .parallax-banner {
-    background-attachment: fixed;
-  }
-}
-
-/* Smooth gradient overlays */
-.gradient-overlay-dark {
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.3) 0%,
-    rgba(0, 0, 0, 0.5) 50%,
-    rgba(0, 0, 0, 0.7) 100%
-  );
-}
-
-.gradient-overlay-light {
-  background: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.1) 0%,
-    rgba(255, 255, 255, 0.2) 50%,
-    rgba(255, 255, 255, 0.3) 100%
-  );
 }
 
 /* Improved transitions */

@@ -44,9 +44,7 @@ export default async function PostsPage() {
 
           
           <h1 className="text-4xl md:text-6xl font-bold font-mono tracking-tighter mb-6">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-muted-foreground to-foreground">
-              All
-            </span>{" "}
+            <span className="text-foreground">All</span>{" "}
             <span className="text-emerald-500">Posts</span>
           </h1>
           

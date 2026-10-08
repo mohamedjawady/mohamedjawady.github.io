@@ -24,34 +24,25 @@ interface PostCardProps {
 
 export function PostCard({ post }: PostCardProps) {
   return (
-    <Card className="h-full hover:shadow-xl hover:scale-[1.02] transition-all duration-300 border-border/50 group overflow-hidden">
+    <Card className="h-full border-border hover:border-emerald-500/40 transition-colors group overflow-hidden">
       {/* Banner Image */}
       {post.banner && (
-        <div className="relative w-full h-48 overflow-hidden bg-gradient-to-br from-muted/50 to-muted">
+        <div className="relative w-full h-48 overflow-hidden bg-muted">
           <Link href={`/posts/${post.slug}`}>
             <div className="relative w-full h-full">
               <Image
                 src={post.banner}
                 alt={post.bannerAlt || post.title}
                 fill
-                className="object-cover transition-all duration-500 group-hover:scale-110 group-hover:brightness-110"
+                className="object-cover"
                 sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
                 quality={85}
               />
-              {/* Subtle overlay for better text contrast if needed */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              
-              {/* Reading indicator overlay */}
-              <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="bg-white/90 dark:bg-black/90 backdrop-blur-sm rounded-full px-2 py-1">
-                  <span className="text-xs font-medium text-foreground">{post.readingTime}</span>
-                </div>
-              </div>
             </div>
           </Link>
         </div>
       )}
-      
+
       <CardHeader className={`pb-3 ${post.banner ? 'pt-4' : ''}`}>
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
           <Calendar className="w-4 h-4" />
@@ -60,7 +51,7 @@ export function PostCard({ post }: PostCardProps) {
           <span>{post.readingTime}</span>
         </div>
         <Link href={`/posts/${post.slug}`}>
-          <h3 className="text-xl font-semibold hover:text-emerald-500 transition-colors line-clamp-2 group-hover:text-emerald-500">
+          <h3 className="text-xl font-semibold transition-colors line-clamp-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
             {post.title}
           </h3>
         </Link>
@@ -95,10 +86,10 @@ export function PostCard({ post }: PostCardProps) {
           
           {/* Tags */}
           {post.tags.slice(0, post.visibility === 'draft' ? 2 : 3).map((tag) => (
-            <Badge 
-              key={tag} 
-              variant="secondary" 
-              className="text-xs bg-muted/50 hover:bg-emerald-500/20 text-muted-foreground hover:text-emerald-400 border border-border/40 transition-colors cursor-pointer"
+            <Badge
+              key={tag}
+              variant="secondary"
+              className="text-xs text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
             >
               #{tag}
             </Badge>

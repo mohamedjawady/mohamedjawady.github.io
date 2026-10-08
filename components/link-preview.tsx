@@ -130,7 +130,7 @@ export function LinkPreview({ href, children, className }: LinkPreviewProps) {
       {/* Preview Card */}
       {showPreview && (
         <div className="absolute z-50 top-full left-0 mt-2 w-80 max-w-sm">
-          <Card className="shadow-lg border-border/50 bg-background/95 backdrop-blur">
+          <Card className="border-border bg-background">
             {loading ? (
               <CardContent className="p-4">
                 <div className="animate-pulse space-y-2">

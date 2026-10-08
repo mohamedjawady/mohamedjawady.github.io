@@ -27,7 +27,7 @@ export function CheatsheetCard({ cheatsheet }: CheatsheetCardProps) {
   const difficultyLevel = difficultyIcons[cheatsheet.difficulty]
   
   return (
-    <Card className="group h-full transition-all duration-300 hover:shadow-lg hover:scale-[1.02] border border-border/50 hover:border-border">
+    <Card className="group h-full transition-colors border border-border/50 hover:border-emerald-500/40">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg line-clamp-2 group-hover:text-primary transition-colors">

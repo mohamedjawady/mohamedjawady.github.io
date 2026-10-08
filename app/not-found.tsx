@@ -8,7 +8,7 @@ export default function NotFound() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-2xl mx-auto text-center">
         {/* Error Message */}
-        <Card className="bg-card/50 backdrop-blur-sm border-emerald-500/20">
+        <Card className="border-emerald-500/20">
           <CardContent className="p-8">
             <h2 className="text-2xl md:text-3xl font-bold mb-4">
               Page Not Found

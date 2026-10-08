@@ -31,9 +31,7 @@ export default function AboutPage() {
 
           
           <h1 className="text-4xl md:text-6xl font-bold font-mono tracking-tighter mb-8">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-muted-foreground to-foreground">
-              About
-            </span>{" "}
+            <span className="text-foreground">About</span>{" "}
             <span className="text-emerald-500">Me</span>
           </h1>
           

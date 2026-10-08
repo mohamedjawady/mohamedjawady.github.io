@@ -24,7 +24,7 @@ export function StudyDeckCard({ deck }: StudyDeckCardProps) {
   }
 
   return (
-    <Card className="h-full hover:shadow-lg transition-shadow duration-200">
+    <Card className="h-full border-border hover:border-emerald-500/40 transition-colors">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="line-clamp-2 text-lg">

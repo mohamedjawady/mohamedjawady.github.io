@@ -39,9 +39,7 @@ export default async function CheatsheetsPage() {
           
           <h1 className="text-4xl md:text-6xl font-bold font-mono tracking-tighter mb-6">
             <span className="text-emerald-500">Cheat</span>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-muted-foreground to-foreground">
-              sheets
-            </span>
+            <span className="text-foreground">sheets</span>
           </h1>
           
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">

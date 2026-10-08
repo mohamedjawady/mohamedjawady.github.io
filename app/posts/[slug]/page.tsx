@@ -1,4 +1,5 @@
-import { getPostBySlug, getAllPosts, getSeriesNavigation } from "@/lib/posts"
+import { getPostBySlug, getAllPosts, getSeriesNavigation, getAllSeries, getPublicAndDraftPosts } from "@/lib/posts"
+import { PostSidebar } from "@/components/post-sidebar"
 import { MDXRemote } from "next-mdx-remote/rsc"
 import { mdxComponents } from "@/components/mdx-components"
 import { Badge } from "@/components/ui/badge"
@@ -63,7 +64,6 @@ import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { SeriesNavigation } from "@/components/series-navigation"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
 import { Term } from "@/components/ui/term"
-import Image from "next/image"
 import { LatestPostsSlider } from "@/components/latest-posts-slider"
 import { ReadingProgressBar } from "@/components/visualizations/reading-progress-bar"
 import { ScrollReveal } from "@/components/scroll-reveal"
@@ -205,6 +205,11 @@ export default async function PostPage({ params }: PostPageProps) {
   // Get series navigation data if post is part of a series
   const seriesNavigation = post.series ? await getSeriesNavigation(post.slug) : null
 
+  // Sidebar data: all series, plus standalone posts that don't belong to one
+  const allSeries = await getAllSeries()
+  const allPublicPosts = await getPublicAndDraftPosts()
+  const otherPosts = allPublicPosts.filter((p) => !p.series)
+
   const ogImageUrl = getCanonicalUrl(post.banner || '/android-chrome-512x512.png')
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
@@ -232,75 +237,45 @@ export default async function PostPage({ params }: PostPageProps) {
         </div>
       )}
 
-      {/* Post Header with Banner Background */}
-      <header className="relative w-full min-h-[75vh] flex items-center justify-center overflow-hidden">
-        {/* Banner Background */}
-        {post.banner && (
-          <div className="absolute inset-0 z-0">
-            <Image
-              src={post.banner}
-              alt={post.bannerAlt || post.title}
-              fill
-              className="object-cover object-center parallax-banner"
-              priority
-              sizes="100vw"
-              quality={95}
-            />
-            {/* Enhanced dark overlay for text readability */}
-            <div className="absolute inset-0 gradient-overlay-dark" />
-          </div>
-        )}
+      {/* Post Header */}
+      <header className="border-b border-border">
+        <div className="max-w-7xl mx-auto px-6 pt-14 pb-10">
+          {post.series && (
+            <p className="font-mono text-sm text-emerald-600 dark:text-emerald-400 mb-3">
+              {post.series}
+              {typeof post.seriesOrder === "number" && ` · Part ${post.seriesOrder}`}
+            </p>
+          )}
 
-        {/* Fallback gradient background when no banner */}
-        {!post.banner && (
-          <div className="absolute inset-0 z-0 bg-gradient-to-br from-green-600/20 via-blue-600/20 to-purple-600/20 dark:from-green-600/10 dark:via-blue-600/10 dark:to-purple-600/10" />
-        )}
-
-        {/* Content Container */}
-        <div className="relative z-10 max-w-5xl mx-auto px-6 py-20 text-center">
-
-          {/* Post Title */}
-          <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold mb-8 leading-tight text-white banner-text-shadow">
+          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-4 max-w-3xl">
             {post.title}
           </h1>
 
-          {/* Post Description */}
           {post.description && (
-            <p className="text-xl md:text-2xl lg:text-3xl text-white/95 leading-relaxed mb-10 max-w-4xl mx-auto banner-text-shadow font-light">
+            <p className="text-lg text-muted-foreground leading-relaxed mb-6 max-w-2xl">
               {post.description}
             </p>
           )}
 
-          {/* Post Meta Information */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-10">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-5">
             {post.visibility !== 'draft' && (
-              <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
+              <span className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4" />
-                <span className="text-sm font-medium">{formatDate(post.date)}</span>
-              </div>
+                {formatDate(post.date)}
+              </span>
             )}
             {post.visibility !== 'draft' && (
-              <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
+              <span className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4" />
-                <span className="text-sm font-medium">{post.readingTime}</span>
-              </div>
+                {post.readingTime}
+              </span>
             )}
-            {post.author && (
-              <div className="flex items-center gap-2 glass-effect-dark rounded-full px-5 py-3 text-white/90 hover:text-white transition-all duration-300 hover:scale-105">
-                <span className="text-sm">by</span>
-                <span className="font-semibold text-green-400">{post.author}</span>
-              </div>
-            )}
+            {post.author && <span>by {post.author}</span>}
           </div>
 
-          {/* Tags */}
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className="flex flex-wrap gap-2">
             {post.tags.map((tag) => (
-              <Badge
-                key={tag}
-                variant="secondary"
-                className="glass-effect text-white border-white/30 hover:bg-white/20 hover:border-white/50 transition-all duration-300 px-4 py-2 text-sm font-medium hover:scale-105 banner-text-shadow"
-              >
+              <Badge key={tag} variant="outline" className="font-mono text-xs">
                 #{tag}
               </Badge>
             ))}
@@ -308,40 +283,30 @@ export default async function PostPage({ params }: PostPageProps) {
         </div>
       </header>
 
-      {/* Series Navigation */}
-      {seriesNavigation && seriesNavigation.series && (
-        <div className="bg-background/95 backdrop-blur-sm border-b border-border/40">
-          <div className="max-w-6xl mx-auto px-6 py-8">
-            <SeriesNavigation
-              series={seriesNavigation.series}
-              posts={seriesNavigation.posts}
-              currentIndex={seriesNavigation.currentIndex}
-              previousPost={seriesNavigation.previousPost}
-              nextPost={seriesNavigation.nextPost}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Main Content */}
-      <div className="bg-background/95 backdrop-blur-sm relative z-10">
-        <div className="max-w-5xl mx-auto px-6 py-20">
+      <div className="relative z-10">
+        <div className="max-w-7xl mx-auto px-6 py-14">
           {post.visibility === 'draft' ? (
             /* Draft Content Placeholder */
             <div className="text-center py-20">
             </div>
           ) : (
             /* Full Content for Published Posts */
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
-              {/* Table of Contents */}
-              <aside className="lg:col-span-1">
-                <div className="sticky top-24 max-h-[calc(100vh-6rem)]">
-                  <TableOfContents content={post.content} />
+            <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_220px] gap-10">
+              {/* Series / category sidebar */}
+              <aside className="hidden lg:block">
+                <div className="sticky top-24 max-h-[calc(100vh-6rem)] overflow-y-auto toc-scrollbar pr-2">
+                  <PostSidebar
+                    series={allSeries}
+                    otherPosts={otherPosts}
+                    currentSlug={post.slug}
+                    currentSeries={post.series ?? null}
+                  />
                 </div>
               </aside>
 
               {/* Post Content */}
-              <article className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none prose-lg">
+              <article className="prose prose-slate dark:prose-invert prose-lg mx-auto">
                 <MDXRemote
                   source={post.content}
                   components={postComponents}
@@ -352,7 +317,24 @@ export default async function PostPage({ params }: PostPageProps) {
                     },
                   }}
                 />
+
+                {seriesNavigation && seriesNavigation.series && (
+                  <SeriesNavigation
+                    series={seriesNavigation.series}
+                    posts={seriesNavigation.posts}
+                    currentIndex={seriesNavigation.currentIndex}
+                    previousPost={seriesNavigation.previousPost}
+                    nextPost={seriesNavigation.nextPost}
+                  />
+                )}
               </article>
+
+              {/* Table of Contents */}
+              <aside className="hidden xl:block">
+                <div className="sticky top-24 max-h-[calc(100vh-6rem)]">
+                  <TableOfContents content={post.content} />
+                </div>
+              </aside>
             </div>
           )}
         </div>

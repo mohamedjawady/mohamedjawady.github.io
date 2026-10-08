@@ -62,7 +62,7 @@ const getStatusColor = (status: Note['status']) => {
 
 export function NoteCard({ note }: NoteCardProps) {
   return (
-    <Card className="group h-full transition-all duration-200 hover:shadow-lg border-l-4 border-l-blue-500">
+    <Card className="group h-full transition-colors border-l-4 border-l-blue-500">
       <CardHeader className="space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

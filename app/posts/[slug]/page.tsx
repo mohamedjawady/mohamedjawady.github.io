@@ -49,6 +49,7 @@ import { GoroutineDebugWalkthrough } from "@/components/visualizations/goroutine
 import { ConcurrencyPatternsCompare } from "@/components/visualizations/concurrency-patterns-compare"
 import { GoConcurrencyPrimer } from "@/components/visualizations/go-concurrency-primer"
 import { GoEntryPointFlow } from "@/components/visualizations/go-entry-point-flow"
+import { PclntabStructureDiagram } from "@/components/visualizations/pclntab-structure-diagram"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
@@ -109,6 +110,7 @@ const postComponents = {
   ConcurrencyPatternsCompare: () => <ConcurrencyPatternsCompare />,
   GoConcurrencyPrimer: () => <GoConcurrencyPrimer />,
   GoEntryPointFlow: () => <GoEntryPointFlow />,
+  PclntabStructureDiagram: () => <PclntabStructureDiagram />,
   IntelligenceLifecycle: () => <IntelligenceLifecycle />,
   PyramidOfPain: () => <PyramidOfPain />,
   TTPCampaignTimeline: () => <TTPCampaignTimeline />,

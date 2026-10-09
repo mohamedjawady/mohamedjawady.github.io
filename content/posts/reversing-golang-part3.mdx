@@ -1,0 +1,360 @@
+---
+title: "Reversing Golang Part 3: Recovering Symbols from Stripped and Obfuscated Binaries"
+description: "Real Go malware ships stripped, and increasingly garbled. Part 1 claimed stripped Go binaries aren't really stripped because PCLNTAB survives. This part builds a hand-rolled Python parser to prove it, validates it against go tool nm ground truth, diagnoses exactly why the production tool GoReSym fails on this binary, then tests the claim again against a garble-obfuscated build and finds its real limit."
+date: "2026-10-09"
+author: "Mohamed Habib Jaouadi"
+tags: ["reverse-engineering", "golang", "malware-analysis", "pclntab", "garble", "python", "low-level"]
+banner: "/banners/posts/4750982421413888.webp"
+bannerAlt: "Reversing Golang Internals"
+visibility: "public"
+series: "Reversing Golang"
+seriesOrder: 3
+---
+
+> **Series Focus:** Part 1 showed that Go binaries embed PCLNTAB, a table the runtime needs for stack traces, and claimed this means "stripped" Go binaries aren't really stripped. Part 2 reversed concurrency primitives live with GDB, Delve, and Python. This part cashes in Part 1's claim directly: build a symbol-name recovery tool from the real Go runtime source, prove it against ground truth, find out why a well-known production tool fails where it succeeds, and then find the actual boundary of the technique against garble.
+
+## Introduction
+
+Real Go malware ships stripped. `-ldflags="-s -w"` is one flag, it meaningfully shrinks the binary, and it removes every function name `go tool nm` and most disassemblers rely on. A growing minority goes further and runs the binary through [garble](https://github.com/burrowers/garble), which renames every identifier at the source level before compilation and can encrypt string literals too. Both are things an analyst runs into constantly and neither is mysterious once you understand what Go's runtime actually needs to keep working.
+
+Part 1 made a specific, falsifiable claim: Go binaries can't be meaningfully stripped of all useful metadata, because the runtime itself depends on PCLNTAB (the Program Counter Line Table) to produce stack traces during a panic, and that table has to ship in the binary for the language to work correctly. This part tests that claim directly: build a tool that recovers function names from a stripped binary using nothing but the Go runtime's own published struct layout, validate it against known-good output, and then see what happens when the binary fights back.
+
+## The Target
+
+A small program shaped like the kind of thing worth reverse engineering: a license check with a config struct, a fake check-in URL, and a product key.
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+const licenseServer = "https://license.example-vendor.test/v1/check"
+const productKey = "TRIAL-7F3A-91C2-XMAS"
+
+type Config struct {
+	ServerURL string
+	Product   string
+	Interval  int
+}
+
+func loadConfig() Config {
+	return Config{
+		ServerURL: licenseServer,
+		Product:   productKey,
+		Interval:  3600,
+	}
+}
+
+func checkLicense(cfg Config, key string) bool {
+	return strings.EqualFold(key, cfg.Product)
+}
+
+func reportStatus(cfg Config, ok bool) string {
+	if ok {
+		return fmt.Sprintf("checking in with %s every %ds: licensed", cfg.ServerURL, cfg.Interval)
+	}
+	return fmt.Sprintf("checking in with %s every %ds: unlicensed", cfg.ServerURL, cfg.Interval)
+}
+
+func main() {
+	if len(os.Args) != 2 {
+		fmt.Println("usage: sample <license-key>")
+		os.Exit(1)
+	}
+	cfg := loadConfig()
+	ok := checkLicense(cfg, os.Args[1])
+	fmt.Println(reportStatus(cfg, ok))
+}
+```
+
+It never makes a real network call, there's nothing malicious here, it's a stand-in for the shape of a config-and-check-in pattern that shows up constantly in real samples: a URL, a key, a function that validates something, a function that reports status. Built the same debug-friendly way as every binary in this series:
+
+```bash
+go build -gcflags="all=-N -l" -o sample.exe main.go
+```
+
+```
+$ go tool nm sample.exe | grep "main\."
+  56bb80 D go:main.inittasks
+  4bd8a0 T main.checkLicense
+  4bd820 T main.loadConfig
+  4bdc40 T main.main
+  4bd960 T main.reportStatus
+```
+
+Four named functions. This is the ground truth the rest of this post gets checked against.
+
+## Stripping It
+
+```bash
+go build -gcflags="all=-N -l" -ldflags="-s -w" -trimpath -o sample_stripped.exe main.go
+```
+
+`-s` drops the symbol table, `-w` drops DWARF debug info, `-trimpath` removes local filesystem paths from the binary. The effect is immediate:
+
+```
+$ go tool nm sample_stripped.exe
+reading sample_stripped.exe: no symbols
+
+$ gdb --batch -ex "break 'main.main'" sample_stripped.exe
+No symbol table is loaded.  Use the "file" command.
+```
+
+No `go tool nm` output, and GDB can't resolve `main.main` by name anymore. It's also a meaningfully smaller file, 2.25 MB down to 1.5 MB, symbol tables and debug info aren't free. The binary still runs identically:
+
+```
+$ ./sample_stripped.exe TRIAL-7F3A-91C2-XMAS
+checking in with https://license.example-vendor.test/v1/check every 3600s: licensed
+```
+
+And `strings` immediately shows why stripping alone is a weak defense:
+
+```
+$ strings sample_stripped.exe | grep -E "license.example-vendor|TRIAL-7F3A"
+https://license.example-vendor.test/v1/check
+TRIAL-7F3A-91C2-XMAS
+```
+
+Stripping removes names. It does nothing to static data. The URL and the key are sitting in plaintext in the file regardless.
+
+## What Survives Stripping: PCLNTAB
+
+Here's the mechanism behind Part 1's claim, read directly from the Go runtime source (`runtime/symtab.go` in the Go 1.23.3 standard library):
+
+```go
+type pcHeader struct {
+	magic          uint32  // 0xFFFFFFF1
+	pad1, pad2     uint8   // 0,0
+	minLC          uint8   // min instruction size
+	ptrSize        uint8   // size of a ptr in bytes
+	nfunc          int     // number of functions in the module
+	nfiles         uint    // number of entries in the file tab
+	textStart      uintptr // base for function entry PC offsets, equal to moduledata.text
+	funcnameOffset uintptr // offset to the funcnametab variable from pcHeader
+	cuOffset       uintptr // offset to the cutab variable from pcHeader
+	filetabOffset  uintptr // offset to the filetab variable from pcHeader
+	pctabOffset    uintptr // offset to the pctab variable from pcHeader
+	pclnOffset     uintptr // offset to the pclntab variable from pcHeader
+}
+```
+
+This struct, 72 bytes on amd64 (an 8-byte prefix plus eight 8-byte offset fields), has to exist somewhere in every Go binary, stripped or not, because `panic()` needs to walk the stack and print function names and line numbers. `-s -w` removes the *separate* symbol table and DWARF sections; it has no reason to touch this structure, since removing it would break `panic` output in production.
+
+Two more pieces complete the picture, both also from `runtime/symtab.go`:
+
+```go
+type functab struct {
+	entryoff uint32 // relative to runtime.text
+	funcoff  uint32
+}
+```
+
+```go
+type _func struct {
+	entryOff uint32 // start pc, as offset from moduledata.text/pcHeader.textStart
+	nameOff  int32  // function name, as index into moduledata.funcnametab
+	// ... (args, pcsp, pcfile, etc.)
+}
+```
+
+The recovery path is: find the `pcHeader` by its magic number, read `nfunc` entries from the `functab` array, follow each `funcoff` to a `_func` struct, read its `nameOff`, and look that offset up in `funcnametab` to get the actual name string. No debugger, no symbol table, just the file on disk.
+
+## Building the Parser
+
+```python
+import struct
+import sys
+import pefile
+
+MAGIC = b"\xf1\xff\xff\xff"  # go1.16+ pcHeader.magic = 0xfffffff1, little-endian
+
+
+def read_cstr(data, off):
+    end = data.index(b"\x00", off)
+    return data[off:end].decode("utf-8", errors="replace")
+
+
+def parse_pclntab(path):
+    pe = pefile.PE(path)
+    for s in pe.sections:
+        data = s.get_data()
+        idx = data.find(MAGIC)
+        if idx != -1:
+            raw = data
+            break
+    else:
+        raise RuntimeError("pcHeader magic not found")
+
+    hdr = raw[idx: idx + 72]
+    magic, pad1, pad2, minLC, ptrSize = struct.unpack_from("<IBBBB", hdr, 0)
+    (nfunc, nfiles, textStart, funcnameOff, cuOff, filetabOff,
+     pctabOff, pclnOff) = struct.unpack_from("<QQQQQQQQ", hdr, 8)
+
+    funcname_base = idx + funcnameOff
+    pcln_base = idx + pclnOff
+
+    funcs = []
+    for i in range(nfunc):
+        entry_off, func_off = struct.unpack_from("<II", raw, pcln_base + i * 8)
+        f = pcln_base + func_off
+        fentry_off, name_off = struct.unpack_from("<II", raw, f)
+        name = read_cstr(raw, funcname_base + name_off)
+        funcs.append((entry_off, name))
+
+    return textStart, funcs
+```
+
+This first version assumes `pclntab` lives in `.rdata`, which is where it normally does. Before trusting it against a stripped binary, it has to agree with ground truth on the *unstripped* one:
+
+```
+$ python -c "
+from pclntab_parse import parse_pclntab
+text_start, funcs = parse_pclntab('sample.exe')
+for off, name in funcs:
+    if name.startswith('main.'):
+        print(f'0x{text_start+off:x} {name}')
+"
+0x4bd820 main.loadConfig
+0x4bd8a0 main.checkLicense
+0x4bd960 main.reportStatus
+0x4bdc40 main.main
+```
+
+Every address matches `go tool nm` exactly. Same script, pointed at the stripped binary where `go tool nm` reported nothing:
+
+```
+$ python -c "
+from pclntab_parse import parse_pclntab
+text_start, funcs = parse_pclntab('sample_stripped.exe')
+for off, name in funcs:
+    if name.startswith('main.'):
+        print(f'0x{text_start+off:x} {name}')
+"
+0x4bd820 main.loadConfig
+0x4bd8a0 main.checkLicense
+0x4bd960 main.reportStatus
+0x4bdc40 main.main
+```
+
+Identical addresses. `-s -w` only strips the separately-stored symbol table and DWARF info; the code layout and PCLNTAB are untouched, so the two binaries agree byte for byte on everything this parser reads.
+
+## Where GoReSym Fails, and Why
+
+[GoReSym](https://github.com/mandiant/GoReSym) is Mandiant's production tool for exactly this job, and it's a lot more capable than the 70 lines above: type recovery, build info, multi-format support. It's worth checking against the same stripped binary.
+
+```
+$ GoReSym sample_stripped.exe
+{"error": "Failed to parse file: failed to read pclntab: failed to locate pclntab"}
+```
+
+It fails, on a binary our own script just handled cleanly. Worth understanding why rather than shrugging and moving on, especially since GoReSym works fine on every *unstripped* binary in this series:
+
+```
+$ GoReSym sample.exe
+{
+    "Version": "1.23.3",
+    "BuildId": "...",
+    ...
+```
+
+GoReSym's own source (`objfile/pe.go`) explains the gap. Its primary lookup resolves `pclntab` via the PE symbol table (`runtime.pclntab` / `runtime.epclntab`), which `-s` removes, exactly as expected. It does have a fallback byte-scanner for exactly this situation, but the signature list it falls back to is:
+
+```go
+pclntab_sigs := [][]byte{
+    []byte("\xFB\xFF\xFF\xFF\x00\x00"), // go1.2  magic: 0xfffffffb
+    []byte("\xFA\xFF\xFF\xFF\x00\x00"), // go1.16 magic: 0xfffffffa
+    []byte("\xF0\xFF\xFF\xFF\x00\x00"), // go1.18 magic: 0xfffffff0
+}
+```
+
+This binary is built with Go 1.23.3, which uses magic `0xfffffff1` (confirmed directly from `runtime/symtab.go` above), introduced for Go 1.20. That value isn't in GoReSym v1.7.1's fallback list for PE files. The symbol-based lookup fails because of stripping, exactly as designed; the byte-scan fallback fails because its PE signature table hasn't been updated for the last few Go versions. Neither failure is a bug in Go's design, both are just the normal lag between a fast-moving runtime and a maintained external tool. Knowing the actual magic number, read straight from the standard library source rather than copied from an older blog post, is what let the hand-rolled version here keep working.
+
+## Garble: A Different Kind of Opponent
+
+[garble](https://github.com/mvdan.cc/garble) wraps the Go toolchain and rewrites identifiers before compilation, plus (with `-literals`) encrypts string constants so they're only decrypted at the point of use at runtime.
+
+```bash
+garble -literals build -o sample_garbled.exe main.go
+```
+
+The basics look like stripping, at first:
+
+```
+$ go tool nm sample_garbled.exe
+reading sample_garbled.exe: no symbols
+
+$ go version -m sample_garbled.exe
+sample_garbled.exe: unknown
+```
+
+That second line is new. `go version -m` reads a different embedded data structure (Go's module build-info blob, the thing `govulncheck` relies on) that survives plain `-s -w` stripping untouched, Part 1 and the sections above never had to think about it. Garble strips it specifically; it's a separate, deliberate design decision from symbol stripping. And `-literals` does what it claims:
+
+```
+$ strings sample_garbled.exe | grep -E "license.example-vendor|TRIAL-7F3A"
+$ echo $?
+1
+```
+
+Nothing. No plaintext URL, no plaintext key anywhere in the file. That's a real improvement over plain stripping, where both were sitting in cleartext.
+
+### When the Parser Hits Its Actual Limit
+
+Pointing the same PCLNTAB parser at the garbled binary:
+
+```
+$ python -c "from pclntab_parse import parse_pclntab; parse_pclntab('sample_garbled.exe')"
+Traceback (most recent call last):
+  ...
+RuntimeError: pcHeader magic not found in any section
+```
+
+It fails, honestly, not silently. Scanning every section (not just `.rdata`, since by this point it's worth checking whether garble moved things around, and it has, `grep`-ing for the raw magic bytes across the whole file turns up a hit inside `.pdata`, the exception-unwind-info section, somewhere PCLNTAB has no normal business being) and validating the candidate header fields (`pad1`/`pad2` must be zero, `ptrSize` must be 4 or 8) turns up nothing that passes. The handful of 4-byte matches inside `.text` are coincidental code bytes, and the two matches in `.data` fail validation (`ptrSize=0`, not a real header). Garble isn't just hiding `pclntab` in an unexpected place for this build; the genuine header, wherever it ends up, doesn't carry a byte-for-byte intact `0xfffffff1` signature the way the stripped-only binary's did.
+
+GoReSym agrees:
+
+```
+$ GoReSym sample_garbled.exe
+{"error": "Failed to parse file: failed to read pclntab: failed to locate pclntab"}
+```
+
+Same error, independently, from a tool with no shared code with the script above. That's a useful cross-check in itself: two different implementations hitting the identical wall is better evidence that the wall is real than either one failing alone. This is a deliberate part of garble's design, not an oversight. `-literals` hides static data; garble's broader obfuscation is built to specifically target the class of tool this post just wrote.
+
+## Where Static Analysis Hands Off to Live Analysis
+
+Static recovery has a real limit against garble, at least against the techniques this post covers. But the binary still has to run correctly, obfuscation happens in the file on disk, not in what the program does at runtime:
+
+```
+$ ./sample_garbled.exe TRIAL-7F3A-91C2-XMAS
+checking in with https://license.example-vendor.test/v1/check every 3600s: licensed
+```
+
+Same real URL, same real key, printed in plain text to stdout, from a binary where neither string exists anywhere in the file. Whatever garble did to the static data, the program has to reconstruct the real values in memory before it can use them. That's the actual boundary this post found empirically rather than assumed: static analysis (disassembly, PCLNTAB recovery, string scanning) recovers everything about this binary except the exact thing `-literals` targets, and the moment that gap matters, the answer is the live debugging this series built in Part 2, breaking at the point a value gets used rather than trying to find it at rest. That's a different post's worth of work to do properly against a garbled target with no symbols to break on by name, and an honest one to leave open rather than rush.
+
+## Conclusion
+
+Three claims, tested against real binaries instead of assumed:
+
+1. **"Stripped Go binaries aren't really stripped" is true, specifically and narrowly.** `-s -w` removes the symbol table and DWARF info. It does not and structurally cannot remove PCLNTAB without breaking `panic`, which is why a 70-line parser built from the published runtime struct layout recovers every function name a debug build has, verified address-for-address against `go tool nm` ground truth.
+2. **A production tool failing doesn't mean the underlying data is gone.** GoReSym's failure on the stripped binary traced to one specific, fixable gap, a PE fallback signature list that hasn't caught up to Go 1.20's magic number, not to the information being unrecoverable. Reading the actual runtime source instead of trusting a tool's internal assumptions is what closed that gap.
+3. **Garble moves the goalposts, honestly.** It defeats the magic-scan technique this post built, for real, verified two independent ways. It doesn't defeat the program's own need to reconstruct its real strings and behavior at runtime, which is where the next investigation starts.
+
+## References & Further Reading
+
+1. **[runtime/symtab.go (Go 1.23.3 source)](https://cs.opensource.google/go/go/+/refs/tags/go1.23.3:src/runtime/symtab.go)**
+   The `pcHeader`, `functab`, and `_func` struct definitions this post's parser is built directly from.
+
+2. **[GoReSym](https://github.com/mandiant/GoReSym)**
+   Mandiant's production Go symbol recovery tool, including its PE-specific `pclntab` location logic (`objfile/pe.go`) referenced above.
+
+3. **[garble](https://github.com/burrowers/garble)**
+   The obfuscating Go build wrapper used in the second half of this post, including the `-literals` flag.
+
+4. **[debug/gosym package documentation](https://pkg.go.dev/debug/gosym)**
+   The Go standard library's own PCLNTAB parser, a useful reference implementation distinct from both GoReSym's and this post's.
+
+5. **[Go 1.20 Release Notes](https://go.dev/doc/go1.20)**
+   The release that introduced the current `pcHeader` magic number, `0xfffffff1`, superseding the `0xfffffff0` magic GoReSym's PE fallback list still expects.

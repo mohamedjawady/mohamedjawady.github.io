@@ -1,12 +1,12 @@
 ---
 title: "DNS Security Analysis Series: Part 2 - Malicious Domain Detection and Infrastructure Analysis"
 description: "Advanced techniques for detecting malicious domains, analyzing domain characteristics, and identifying suspicious DNS infrastructure for security analysts."
-date: "2025-08-04"
+date: "2026-10-09"
 author: "Mohamed Habib Jaouadi"
 tags: ["dns-security-series", "dns-analysis", "malicious-domains", "threat-hunting", "domain-analysis", "incident-response"]
 banner: "/banners/posts/dns-security-analysis-part2.jpg"
 bannerAlt: "DNS Security Analysis Part 2 - Malicious Domain Detection and Infrastructure Analysis"
-visibility: "draft"
+visibility: "public"
 series: "DNS Security Analysis Series"
 seriesOrder: 2
 ---
@@ -23,28 +23,19 @@ This installment covers comprehensive techniques for evaluating domain legitimac
 
 ### Top-Level Domain (TLD) Analysis
 
-Not all TLDs are created equal from a security perspective. Certain TLDs have significantly higher concentrations of malicious domains due to factors like cost, registration requirements, and enforcement policies.
+Not all TLDs are created equal from a security perspective. Certain TLDs have significantly higher concentrations of malicious domains due to factors like cost, registration requirements, and enforcement policies. Precise percentages circulate a lot in security blog posts without a source; the numbers below come from Spamhaus's own published domain reputation data, which is worth checking directly rather than trusting a cached figure, since the picture shifts from report to report.
 
-#### High-Risk TLDs by Category
+#### Two Different Questions: Volume vs. Concentration
 
-**Free Domain TLDs** (Highest Risk):
-- `.tk` (Tokelau) - 99.94% malicious sites
-- `.cf` (Central African Republic) - 99.79% malicious sites  
-- `.gq` (Equatorial Guinea) - 99.58% malicious sites
-- `.ml` (Mali) - 99.41% malicious sites
-- `.ga` (Gabon) - 99.40% malicious sites
+Spamhaus's most recent domain reputation report (October 2025 to March 2026) separates two metrics that get conflated constantly:
 
-**New gTLD Abuse Leaders**:
-- `.country` - 99.30% malicious sites
-- `.stream` - 99.16% malicious sites
-- `.download` - 98.92% malicious sites
-- `.xin` - 98.87% malicious sites
-- `.gdn` - 98.76% malicious sites
+**By raw count**, `.com` leads by a wide margin (506,482 malicious-or-suspicious listings in that window), simply because it's enormous. `.top` holds second place and grew 83% in detections over the same period. Raw count tells you where the *bulk* of malicious infrastructure lives, dominated by whichever TLDs have the most domains registered overall, not where a given domain is statistically more likely to be malicious.
 
-![High-Risk TLD Analysis](../screenshots/dns-security-part2/high-risk-tld-analysis.png)
-*Screenshot showing TLD reputation analysis with malicious site percentages*
+**By concentration** (the share of a TLD's own zone that's flagged), the picture is different and more useful for scoring an individual unfamiliar domain: `.xin` has over 82% of its domains marked malicious, and three more TLDs (`.qpon`, `.locker`, `.lgbt`) also have more than half their zones flagged. Among the newer generic TLDs Spamhaus tracks, `.cfd` leads at a 17.54% concentration rate.
 
-These statistics highlight the importance of TLD-based risk assessment in DNS security analysis. While not every domain in these TLDs is malicious, the overwhelming concentration of malicious sites makes them valuable indicators for automated detection systems.
+#### The `.tk`/`.cf`/`.gq`/`.ml`/`.ga` Case Is More Interesting Than a Static Number
+
+These five ccTLDs (Tokelau, Central African Republic, Equatorial Guinea, Mali, Gabon) were free to register through Freenom for years and were, for most of that period, a reliable top entry on every "worst TLDs" list. That changed: Freenom stopped operating in 2023, and by the April-September 2024 Spamhaus report, `.cf`, `.gq`, and `.tk` had dropped **out of the top 20 entirely**, because the free-registration pipeline that made them attractive to both spammers and legitimate low-budget users had stopped functioning. Then, in July 2026, Freenom resumed selling `.gq` domains (alongside `.tk` and `.cf`), which means any analysis treating these TLDs as a fixed, permanently-high-risk bucket is already out of date by the time it's published. The lesson generalizes: TLD risk is downstream of registrar and policy decisions, not an immutable property of the TLD string, and a detection pipeline that hardcodes a TLD blocklist needs a refresh cadence, not a one-time list.
 
 #### TLD Analysis Methodology
 
@@ -75,9 +66,6 @@ Multiple threat intelligence platforms provide domain reputation services that c
 - **RiskIQ Community** - Passive DNS and infrastructure analysis
 - **URLVoid** - Multi-blacklist checking service
 - **ThreatCrowd** - Open-source threat intelligence aggregation
-
-![Domain Reputation Check](../screenshots/dns-security-part2/domain-reputation-check.png)
-*Screenshot showing multi-source domain reputation analysis results*
 
 #### Domain Age Analysis
 
@@ -128,8 +116,7 @@ DGAs generate pseudorandom domain names to evade takedowns and maintain persiste
 - Consistent length patterns across multiple domains
 - Temporal clustering of similar domains
 
-![DGA Detection Analysis](../screenshots/dns-security-part2/dga-detection-analysis.png)
-*Screenshot showing DGA pattern analysis with entropy calculations*
+Part 3 of this series goes deeper on the entropy math specifically, including a subtlety worth flagging here too: hexadecimal-encoded data has a hard ceiling of 4.0 bits/char (16 symbols, $\log_2(16)=4$), while base64 can reach up to 6.0 bits/char (64 symbols). A detection threshold calibrated against one encoding won't transfer cleanly to the other.
 
 #### Entropy Calculation for Domain Analysis
 
@@ -263,9 +250,6 @@ done < suspicious_ips.txt
 
 Passive DNS data provides historical resolution information that can reveal infrastructure relationships and attack campaign connections.
 
-![Passive DNS Analysis](../screenshots/dns-security-part2/passive-dns-analysis.png)
-*Screenshot showing passive DNS data revealing infrastructure relationships*
-
 ```python
 import requests
 import json
@@ -351,9 +335,6 @@ DNS brute forcing attempts to discover subdomains through dictionary attacks. Th
 - Queries for common subdomain names (mail, ftp, vpn, admin)
 - Sequential or dictionary-based subdomain patterns
 - NXDOMAIN responses in high volume
-
-![DNS Brute Force Detection](../screenshots/dns-security-part2/dns-brute-force-detection.png)
-*Screenshot showing DNS brute force attack patterns in logs*
 
 ```bash
 # Detect DNS brute forcing patterns
@@ -504,18 +485,25 @@ Effective malicious domain detection forms the foundation of proactive DNS secur
 3. **Threat hunting** using detected patterns
 4. **Intelligence sharing** with security community
 
-The next part of this series will explore advanced DNS attack techniques including DNS tunneling, internationalized domain name abuse, and sophisticated evasion methods that challenge traditional detection approaches.
+[Part 3](/posts/dns-security-analysis-part3) picks this up directly: DNS tunneling, internationalized domain name homograph attacks, and the encrypted-DNS visibility problem, each reversed and detected with the same multi-indicator discipline used throughout this post.
 
 ### Key Takeaways
 
-✅ **Multi-indicator analysis** provides more accurate malicious domain detection than single metrics
-✅ **Statistical approaches** effectively identify Domain Generation Algorithms and suspicious patterns
-✅ **Infrastructure correlation** reveals attack campaign relationships and threat actor infrastructure
-✅ **Behavioral monitoring** detects reconnaissance and unauthorized DNS usage
-✅ **Automated detection** scales security operations while maintaining analyst efficiency
+No single indicator above is reliable alone. TLD, by itself, is a weak and time-sensitive signal, as the `.tk`/`.cf`/`.gq` history shows directly: a list that was accurate in 2022 was wrong by 2024 and wrong again in a different direction by mid-2026. Domain age, entropy, and PTR/FCrDNS checks are all the same way individually, each one throws false positives constantly on its own. What holds up is combining several of these signals and scoring rather than gating on any single one, which is also why the detection snippets throughout this post build toward multi-factor scoring functions rather than single-condition checks.
+
+## References and Further Reading
+
+1. Spamhaus. [Understanding Top-Level Domain (TLD) Abuse](https://www.spamhaus.org/resource-hub/domain-reputation/understanding-top-level-domain-tld-abuse-helps-illuminate-and-predict-domain-threat-trends/). Domain Reputation Resource Hub.
+2. Spamhaus. [Reputation Statistics: Networks, Countries, Registrars & TLD Charts](https://www.spamhaus.org/reputation-statistics/).
+3. Spamhaus. [Domain Reputation Update, October 2025 - March 2026](https://info.spamhaus.com/domain-reputation-updates). The source for the volume/concentration figures and the `.tk`/`.cf`/`.gq` Freenom history cited above.
+4. Antonakakis, M. & Perdisci, R., et al. (2012). [From Throw-Away Traffic to Bots: Detecting the Rise of DGA-Based Malware](https://www.usenix.org/system/files/conference/usenixsecurity12/sec12-final127.pdf). 21st USENIX Security Symposium. The foundational paper on statistical DGA detection via NXDOMAIN clustering.
+5. Weimer, F. (2005). [Passive DNS Replication](http://www.enyo.de/fw/software/dnslogger/first2005-paper.pdf). FIRST Conference. The original passive DNS technique this post's infrastructure-correlation section builds on.
+6. IETF. [RFC 5936: DNS Zone Transfer Protocol (AXFR)](https://www.rfc-editor.org/rfc/rfc5936). The protocol specification behind the zone-transfer detection section.
+7. Shannon, C.E. (1948). [A Mathematical Theory of Communication](https://scholar.google.com/scholar?q=A+Mathematical+Theory+of+Communication+Shannon+1948). Bell System Technical Journal, 27(3), 379-423. Same entropy foundation Part 3 uses for tunneling detection, applied here to DGA scoring.
 
 ---
 
-**Next in Series**: Part 3 will cover advanced DNS attack techniques, including DNS tunneling, IDN abuse, and modern encrypted DNS challenges.
-
-*Practice the domain analysis techniques covered in this post using real DNS logs and the provided detection scripts.*
+**Series navigation:**
+- [Part 1: Fundamentals and Query Analysis](/posts/dns-fundamentals-analysis-part1)
+- Part 2: Malicious Domain Detection (you are here)
+- [Part 3: Advanced Attack Techniques](/posts/dns-security-analysis-part3)

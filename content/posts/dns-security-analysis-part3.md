@@ -103,10 +103,12 @@ Where:
 For a string with uniform character distribution (maximum randomness), entropy approaches $\log_2(n)$. For English text, entropy typically ranges 2.5-3.5 bits per character due to language patterns. Base64-encoded data has entropy exceeding 4.0 bits per character due to near-uniform character distribution.
 
 **Practical Interpretation:**
-- **Entropy < 3.0**: Likely natural language domain (example: "microsoft" = 2.8)
-- **Entropy 3.0-4.0**: Potentially legitimate acronym or brand (example: "aws-ec2-prod" = 3.6)
-- **Entropy > 4.0**: Strong indicator of encoded data (example: "a9f3c2e1d8b4" = 4.1)
-- **Entropy > 4.5**: Very high confidence of base64/hex encoding (example: "SGVsbG9Xb3JsZA==" = 4.3)
+- **Entropy < 3.0**: Likely natural language domain (example: `microsoft` = 2.95)
+- **Entropy 3.0-4.0**: Potentially legitimate acronym or brand, or hex-encoded data approaching its ceiling (example: `aws-ec2-prod` = 3.42)
+- **Entropy ≥ 4.0**: Strong indicator of encoded data (realistically only reached by encodings with an alphabet wider than hex, see below)
+- **Entropy ≥ 4.5**: Very high confidence of base64-style encoding (example, a real 38-character base64 payload chunk: `RCCCPP3m8cJrMPkOx90B5Ih1NKIPCw0Ew27YDg` = 4.67)
+
+One subtlety worth being precise about: hexadecimal data has a hard mathematical ceiling here, not just a typical range. With only 16 possible symbols, $\log_2(16) = 4.0$ bits is the maximum entropy a hex string can ever reach, and only in the limit of a very long, perfectly uniform string. A real 80-character random hex payload lands around 3.85, close to but never at or past that ceiling. Base64's 64-symbol alphabet has a much higher ceiling, $\log_2(64) = 6.0$, which is why it's base64 payloads, not hex ones, that realistically clear the 4.5 threshold above. If you're setting detection thresholds, calibrate hex and base64 payloads separately rather than applying one global cutoff to both.
 
 <CollapsibleCode title="Entropy Calculation Function">
 

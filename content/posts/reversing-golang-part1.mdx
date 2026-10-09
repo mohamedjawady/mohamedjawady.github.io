@@ -64,11 +64,11 @@ Go binaries embed a massive table called **PCLNTAB** (Program Counter Line Table
 2.  The source file path.
 3.  The exact line number.
 
-This is why "stripped" Go binaries aren't really stripped in the traditional sense. The runtime *needs* this generic table for stack traces (`panic`).
+This is why "stripped" Go binaries aren't really stripped in the traditional sense. The runtime *needs* this generic table for stack traces (`panic`). [Part 3](/posts/reversing-golang-part3) of this series builds a symbol-name recovery tool from this exact mechanism and proves the claim against a real stripped binary, address-for-address, rather than leaving it as an assertion.
 
 **Essential Tools:**
 *   **IDAGolangHelper / AlphaGolang**: Scripts that parse the PCLNTAB to rename functions and restore file paths in IDA.
-*   **GoReSym**: A robust standalone tool that dumps symbols for use in Ghidra/IDA.
+*   **GoReSym**: A robust standalone tool that dumps symbols for use in Ghidra/IDA. Worth knowing before reaching for it: its own `go install .../GoReSym@latest` install instructions silently fetch a build two major versions behind the real latest release, a packaging bug Part 3 traces and works around.
 
 ### Calling Convention: Stack vs Registers
 
@@ -317,7 +317,7 @@ For those who want to go even deeper, here are the standard industry references 
     SentinelOne's set of IDA python scripts for fixing function names and string references in stripped binaries.
 
 4.  **[GoReSym](https://github.com/mandiant/GoReSym)**
-    Mandiant's symbol recovery tool. It parses the embedded metadata to recover function names, types, and line numbers across various Go versions.
+    Mandiant's symbol recovery tool. It parses the embedded metadata to recover function names, types, and line numbers across various Go versions. Pin a specific release tag and build from source rather than trusting `@latest`; see Part 3 for why.
 
 5.  **[The Go Memory Model](https://go.dev/ref/mem)**
     Understanding how Go handles memory visibility is crucial when analyzing the race conditions often exploited in concurrent malware.

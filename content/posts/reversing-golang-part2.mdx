@@ -892,7 +892,7 @@ Static decompilation and live debugging answer different questions, and three bi
 
 A few takeaways worth keeping:
 
-1. **`go tool nm` works on every Go binary**, optimized or not, because PCLNTAB has to ship for stack traces to work. Use it before reaching for a decompiler, on every level in this post it was the first command run.
+1. **`go tool nm` works on every Go binary**, optimized or not, because PCLNTAB has to ship for stack traces to work. Use it before reaching for a decompiler, on every level in this post it was the first command run. [Part 3](/posts/reversing-golang-part3) covers what to do when it doesn't, stripped and garble-obfuscated binaries, where `nm` itself reports nothing.
 2. **Count `runtime.newproc` and `runtime.makechan` call sites, not instructions**, to find where concurrency actually starts in a disassembly. A worker pool shows a fixed, small number of these; one-goroutine-per-item shows one site executed many times.
 3. **`lea` chains, magic division constants, and `rol`/`ror` are compiler fingerprints.** Multiplication and division by small constants, and `(x<<n)|(x>>(8-n))` rotates, both compile to recognizable, searchable patterns instead of the instructions you might expect.
 4. **A mutex's fast path is one locked instruction.** `lock cmpxchg` succeeding means `sync.Mutex.Lock` never touches the scheduler; only contention falls into `lockSlow`.

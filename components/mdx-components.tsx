@@ -195,7 +195,7 @@ export const mdxComponents = {
     </LinkPreview>
   ),
   table: ({ children }: { children: React.ReactNode }) => (
-    <div className="my-6 w-full overflow-y-auto">
+    <div className="my-6 w-full max-w-full overflow-x-auto">
       <table className="w-full border-collapse border border-border/50 rounded-lg overflow-hidden">
         {children}
       </table>

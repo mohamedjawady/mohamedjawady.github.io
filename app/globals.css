@@ -154,8 +154,9 @@ code {
 }
 
 /* Prose improvements for blog posts */
-.prose {
-  @apply max-w-[70ch];
+.prose p {
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .prose pre {

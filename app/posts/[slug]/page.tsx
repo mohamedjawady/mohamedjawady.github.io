@@ -1,5 +1,6 @@
 import { getPostBySlug, getAllPosts, getSeriesNavigation, getAllSeries, getPublicAndDraftPosts } from "@/lib/posts"
 import { PostSidebar } from "@/components/post-sidebar"
+import Image from "next/image"
 import { MDXRemote } from "next-mdx-remote/rsc"
 import { mdxComponents } from "@/components/mdx-components"
 import { Badge } from "@/components/ui/badge"
@@ -238,8 +239,23 @@ export default async function PostPage({ params }: PostPageProps) {
       )}
 
       {/* Post Header */}
-      <header className="border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 pt-14 pb-10">
+      <header className="relative border-b border-border overflow-hidden">
+        {post.banner && (
+          <>
+            <Image
+              src={post.banner}
+              alt={post.bannerAlt || post.title}
+              fill
+              className="object-cover object-center"
+              priority
+              sizes="100vw"
+              quality={90}
+            />
+            <div className="absolute inset-0 bg-background/95" />
+          </>
+        )}
+
+        <div className="relative max-w-[90rem] mx-auto px-6 pt-14 pb-10">
           {post.series && (
             <p className="font-mono text-sm text-emerald-600 dark:text-emerald-400 mb-3">
               {post.series}
@@ -285,16 +301,16 @@ export default async function PostPage({ params }: PostPageProps) {
 
       {/* Main Content */}
       <div className="relative z-10">
-        <div className="max-w-7xl mx-auto px-6 py-14">
+        <div className="max-w-[90rem] mx-auto px-6 py-14">
           {post.visibility === 'draft' ? (
             /* Draft Content Placeholder */
             <div className="text-center py-20">
             </div>
           ) : (
             /* Full Content for Published Posts */
-            <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_220px] gap-10">
+            <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_240px] gap-12">
               {/* Series / category sidebar */}
-              <aside className="hidden lg:block">
+              <aside className="hidden lg:block min-w-0">
                 <div className="sticky top-24 max-h-[calc(100vh-6rem)] overflow-y-auto toc-scrollbar pr-2">
                   <PostSidebar
                     series={allSeries}
@@ -306,7 +322,7 @@ export default async function PostPage({ params }: PostPageProps) {
               </aside>
 
               {/* Post Content */}
-              <article className="prose prose-slate dark:prose-invert prose-lg mx-auto">
+              <article className="prose prose-slate dark:prose-invert prose-lg max-w-[70ch] mx-auto min-w-0">
                 <MDXRemote
                   source={post.content}
                   components={postComponents}
@@ -330,7 +346,7 @@ export default async function PostPage({ params }: PostPageProps) {
               </article>
 
               {/* Table of Contents */}
-              <aside className="hidden xl:block">
+              <aside className="hidden xl:block min-w-0">
                 <div className="sticky top-24 max-h-[calc(100vh-6rem)]">
                   <TableOfContents content={post.content} />
                 </div>

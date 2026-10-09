@@ -1,9 +1,9 @@
 ---
-title: "Reversing Golang Part 2: Goroutines, Channels, and Live Debugging with GDB and Python"
-description: "Part 1 covered Go's internal data structures through a decompiler. This part builds an actual concurrent crackme, compiles it, and reverses it live with GDB and a hand-rolled Python/capstone disassembler, confirming the ABI and write-barrier theory from Part 1 against real register dumps and disassembly."
+title: "Reversing Golang Part 2: Goroutines, Channels, and Live Debugging with GDB, Delve, and Python"
+description: "Part 1 covered Go's internal data structures through a decompiler. This part builds three concurrent crackmes of increasing complexity, fan-out channels, a mutex worker pool, and select with timeouts, and reverses each one live with GDB, Delve, and a hand-rolled Python/capstone disassembler, confirming the ABI and write-barrier theory from Part 1 against real register dumps, real disassembly, and a real caught goroutine leak."
 date: "2026-10-09"
 author: "Mohamed Habib Jaouadi"
-tags: ["reverse-engineering", "golang", "gdb", "python", "capstone", "low-level", "internals"]
+tags: ["reverse-engineering", "golang", "gdb", "delve", "python", "capstone", "low-level", "internals"]
 banner: "/banners/posts/4750982421413888.webp"
 bannerAlt: "Reversing Golang Internals"
 visibility: "public"
@@ -11,17 +11,84 @@ series: "Reversing Golang"
 seriesOrder: 2
 ---
 
-> **Series Focus:** Part 1 walked Go's internal data structures (strings, slices, interfaces) through a static decompiler view. This part builds a small concurrent crackme, compiles it with debug info, and reverses it live: breakpoints and register dumps in GDB, then a from-scratch disassembler in Python with capstone. Every transcript below is a real capture from a real binary, not a reconstruction.
+> **Series Focus:** Part 1 walked Go's internal data structures (strings, slices, interfaces) through a static decompiler view. This part builds three small concurrent crackmes, each demonstrating a different Go concurrency pattern, and reverses them live: breakpoints and register dumps in GDB, goroutine-aware inspection in Delve, and a from-scratch disassembler in Python with capstone. Every transcript below is a real capture from a real binary, not a reconstruction.
 
 ## Introduction
 
-Static analysis in a decompiler is one way to read a Go binary. Attaching a debugger and watching it execute is another, and it's the one that actually answers the question Part 1 left open: when Go spawns a goroutine, what does that look like at the OS level? When two goroutines race to write a channel, what instructions run?
+Static analysis in a decompiler is one way to read a Go binary. Attaching a debugger and watching it execute is another, and it's the one that actually answers the question Part 1 left open: when Go spawns a goroutine, what does that look like at the OS level? When a mutex is contended, what instruction actually blocks? When a `select` statement picks between a channel and a timeout, what runtime function decides?
 
-To find out, this post builds a tiny concurrent crackme, compiles it exactly the way Part 1 recommended, and reverses it with two tools instead of IDA: GDB, and a short Python script built on `capstone` and `pefile`. Along the way we'll confirm, with live register values, the ABIInternal argument order Part 1 described, and catch the exact write-barrier idiom Part 1 said to recognize and ignore, this time inside a real disassembly.
+To find out, this post builds three tiny concurrent crackmes, each one demonstrating a different, genuinely common Go concurrency pattern, and reverses them with three tools instead of IDA: GDB, Delve (the Go-aware debugger this post installs along the way), and a short Python script built on `capstone` and `pefile`. Along the way we'll confirm, with live register values, the ABIInternal argument order Part 1 described; catch the exact write-barrier idiom Part 1 said to recognize and ignore, this time inside real disassembly; watch a `sync.Mutex`'s fast path resolve to a single locked instruction; and catch a genuinely leaked goroutine red-handed in a live debugger.
 
-## The Target: A Concurrent Crackme
+## How These Primitives Actually Work
 
-The program takes a 16-character flag on the command line. It spawns one goroutine per character, each of which transforms its byte and reports a pass/fail verdict over a channel. A separate goroutine waits for all workers and closes the channel. `main` collects every verdict and only prints `Access Granted` if all sixteen agree.
+Before reversing anything, it's worth being precise about what a goroutine, a channel, a mutex, and `select` actually *are*, because all three crackmes below are reversed by recognizing the runtime calls these primitives compile down to. If `runtime.newproc` or `runtime.selectgo` are going to mean something in a disassembly, they need to mean something conceptually first.
+
+**Goroutines run on top of a scheduler with three kinds of entities**, usually called the GMP model: a **G** is a goroutine, a lightweight unit of work with its own small, growable stack. An **M** is a real OS thread. A **P** is a processor, a scheduling context; there are exactly `GOMAXPROCS` of them. A G can only run while some M holds a P, and each P keeps a local queue of runnable G's. When an M needs work, it pulls from its own P's queue first, then tries stealing from another P, then checks a global queue. This is the mechanism behind something Level 1 shows directly: sixteen goroutines, five OS threads. The scheduler is multiplexing G's onto a small, fixed pool of M's through P's, not handing out a thread per goroutine.
+
+**A channel is a struct, `runtime.hchan`**: a ring buffer for buffered sends, two wait queues (`sendq` and `recvq`, each a linked list of parked goroutines called `sudog`), and an internal lock guarding all of it. A buffered send with room just copies into the next free slot and moves on. An *unbuffered* send, Level 3's `results` channel, skips the buffer entirely: if a receiver is already parked in `recvq`, the value is copied directly from the sender's stack to the receiver's and the receiver is woken, a direct handoff between two goroutines. If nobody is listening, the sender parks itself on `sendq` instead and waits, which is precisely the mechanism behind the leaked goroutine Level 3 catches live.
+
+**`sync.Mutex` is a single word of state.** `Lock()`'s fast path is one atomic instruction, a compare-and-swap trying to flip that word from 0 to 1. Uncontended, it succeeds and the function returns immediately, no scheduler involvement at all. Contended, the CAS fails and the call falls into a slow path that eventually parks the goroutine on a semaphore until the holder calls `Unlock()`. Level 2 disassembles this fast path directly.
+
+**`select` always compiles to one call, `runtime.selectgo`**, no matter how many cases it has. It shuffles the case order for fairness, checks once whether any case can proceed immediately, and if none can, parks the goroutine on every channel involved at once. Whichever channel becomes ready first wins, and the goroutine tears down its registration on the rest. Level 3's watchdog, a channel send racing a `time.After`, is exactly two cases resolved this way.
+
+<GoConcurrencyPrimer />
+
+With the concepts in place, here's how the three binaries below map onto them:
+
+<ConcurrencyPatternsCompare />
+
+## Getting a Go-Aware Debugger
+
+Before touching any of the three binaries, it's worth fixing the tooling gap Part 1 didn't need to deal with: a decompiler doesn't care what debugged a binary, but live analysis does, and not every debugger understands Go's runtime equally well.
+
+A lot of Windows setups run MinGW-w64's GDB, and that build typically doesn't ship with Python scripting support:
+
+```
+$ gdb --batch -ex "python print('ok')" ./crackme.exe
+Python scripting is not supported in this copy of GDB.
+```
+
+That matters because Go ships `runtime-gdb.py`, a set of Python pretty-printers that add commands like `info goroutines`. Without Python support, that command simply doesn't exist, and GDB falls back to showing OS threads, not goroutines, which are a userspace abstraction the Go runtime multiplexes onto those threads. GDB's plain thread view is still useful, as the Level 1 section below shows, but it can't answer "what is goroutine 42 doing right now," only "what is OS thread 6 doing."
+
+The fix is [Delve](https://github.com/go-delve/delve), a debugger built specifically for Go:
+
+```
+$ go install github.com/go-delve/delve/cmd/dlv@latest
+go: downloading github.com/go-delve/delve v1.27.2
+go: github.com/go-delve/delve@v1.27.2 requires go >= 1.25.0; switching to go1.26.9
+go: downloading go1.26.9 (windows/amd64)
+...
+$ dlv version
+Delve Debugger
+Version: 1.27.2
+```
+
+One wrinkle worth knowing about: Delve enforces a minimum Go version for the *target* binary, independent of which Go version built Delve itself. A binary compiled with an older toolchain than Delve expects gets this:
+
+```
+$ dlv exec ./crackme.exe -- G0R0UT1NES_YEAH!
+Go version go1.23.3 is too old for this version of Delve (minimum supported version 1.25)
+```
+
+`--check-go-version=false` downgrades that to a warning rather than a hard stop, and it worked fine for every binary in this post:
+
+```
+$ dlv exec ./crackme.exe --check-go-version=false -- G0R0UT1NES_YEAH!
+WARNING: undefined behavior - Go version go1.23.3 is too old for this version of Delve
+Type 'help' for list of commands.
+```
+
+`go install` drops the binary in `$(go env GOPATH)/bin`, usually `~/go/bin` on Linux/macOS or `%USERPROFILE%\go\bin` on Windows. If `dlv` isn't found after installing, that directory isn't on `PATH` yet, not a failed install.
+
+With that out of the way, all three levels below.
+
+## Level 1: Fan-Out and a Buffered Channel
+
+The simplest pattern: spawn one goroutine per unit of work, have each one report back over a channel, collect the results.
+
+### Level 1: The Target
+
+The program takes a 16-character flag on the command line. It spawns one goroutine per character, each of which transforms its byte and reports a pass/fail verdict over a buffered channel. A separate goroutine waits for all workers and closes the channel. `main` collects every verdict and only prints `Access Granted` if all sixteen agree.
 
 ```go
 package main
@@ -94,9 +161,9 @@ func main() {
 }
 ```
 
-Nothing exotic: a per-byte XOR against a position-dependent key, a left-rotate by 3, and sixteen goroutines racing to populate a buffered channel. That's enough to exercise `runtime.newproc`, `runtime.makechan`, `runtime.chansend1`/`chanrecv2`, and `sync.WaitGroup`, which is exactly the territory Part 1 promised to cover.
+A per-byte XOR against a position-dependent key, then a left-rotate by 3. That's enough to exercise `runtime.newproc`, `runtime.makechan`, `runtime.chansend1`/`chanrecv2`, and `sync.WaitGroup`, which is exactly the territory Part 1 promised to cover.
 
-Build it the same way Part 1 did, disabling optimization and inlining so the disassembly matches the source one to one:
+Build it disabling optimization and inlining so the disassembly matches the source one to one, the same convention Part 1 used:
 
 ```bash
 go build -gcflags="all=-N -l" -o crackme.exe main.go
@@ -109,9 +176,9 @@ $ ./crackme.exe G0R0UT1NES_YEAH!
 Access Granted
 ```
 
-## Step 1: Mapping the Binary
+### Level 1: Mapping the Binary
 
-Before opening a debugger, `go tool nm` gives a free symbol table, even on a "release" build, because Go embeds PCLNTAB regardless (Part 1 covered why):
+`go tool nm` gives a free symbol table, even on a "release" build, because Go embeds PCLNTAB regardless (Part 1 covered why):
 
 ```
 $ go tool nm crackme.exe | grep -i "main\."
@@ -125,18 +192,7 @@ $ go tool nm crackme.exe | grep -i "main\."
 
 `main.main.gowrap1` is worth pausing on. Since Go 1.22, each loop iteration gets its own copy of the loop variable, and the compiler now generates a small wrapper closure (`gowrap1`) for `go` statements that capture it, rather than the classic "closure captures the shared loop variable" bug that older Go code had to work around manually. That symbol is the compiler telling you this binary was built with the newer semantics.
 
-## Step 2: GDB, Live
-
-Worth checking before anything else: does your GDB build have Python scripting support? A lot of Windows setups run MinGW-w64's GDB, and that build typically doesn't:
-
-```
-$ gdb --batch -ex "python print('ok')" ./crackme.exe
-Python scripting is not supported in this copy of GDB.
-```
-
-That matters because Go ships `runtime-gdb.py`, a set of Python pretty-printers that add commands like `info goroutines`. Without Python support, that command simply doesn't exist. It's a real limitation worth knowing about before you lean on it mid-analysis: if you need native goroutine-aware debugging, Delve (`dlv`), not GDB, is the tool built for Go specifically. Everything below uses plain GDB instead, which still gets you remarkably far since Go debug builds carry full DWARF line info.
-
-### Breaking on `main.main`
+### GDB: Breaking on main.main
 
 ```
 $ gdb --batch \
@@ -164,7 +220,7 @@ rcx            0xc000062000        824634122240
 
 Two things to notice before a single line of our own code has executed. First, GDB already reports five new OS threads. Those are the Go scheduler's own M's (machine threads), spun up by the runtime to host P's (processors) for `GOMAXPROCS`, not anything our 16 goroutines created yet. Second, `x/16xb &'main.target'` dumps the embedded array straight out of process memory, byte for byte identical to the literal in the source. GDB resolved the dotted symbol `main.target` with no help from us.
 
-### Catching Goroutines Mid-Flight
+### GDB: Catching Goroutines Mid-Flight
 
 Breaking on `checkByte` and letting GDB hit it repeatedly shows the scheduler fanning work across threads in real time:
 
@@ -192,9 +248,33 @@ rax 0x2   2      rbx 0x52  82     rcx 0xc00008e000   rdi 0xc00000a150
 
 This is Part 1's ABIInternal table turned into a live measurement rather than a claim: `idx` (an `int`) lands in RAX, `b` (a `byte`) in RBX, the channel in RCX, the `*sync.WaitGroup` in RDI, exactly the integer-argument register order Part 1 listed. GDB's symbolic `main.checkByte (idx=0, b=71 'G', ...)` line is reading DWARF variable locations, but the raw register dump next to it confirms it's not guessing.
 
-The thread switching is the scheduler in action too: two different OS threads (5 and 6) are trading off which goroutine runs next, which is the M:N model Part 1's teaser promised, a handful of OS threads multiplexing sixteen goroutines, not a thread each.
+The thread switching is the scheduler in action too: two different OS threads (5 and 6) are trading off which goroutine runs next, the M:N model this series keeps coming back to, a handful of OS threads multiplexing sixteen goroutines, not a thread each.
 
-## Step 3: Reading the Disassembly
+<GoroutineDebugWalkthrough />
+
+### Delve: The Same Breakpoint, a Goroutine-Native View
+
+Now the same breakpoint through Delve instead, with `check-go-version=false` to tolerate the toolchain mismatch:
+
+```
+$ dlv exec ./crackme.exe --check-go-version=false -- G0R0UT1NES_YEAH!
+(dlv) break main.checkByte
+(dlv) continue
+> [Breakpoint 1] main.checkByte() main.go:25 (hits goroutine(19):1 total:1)
+(dlv) goroutines
+  Goroutine 1 - User: main.go:51 main.main (thread 18700)
+  Goroutine 2 - User: runtime/proc.go:425 runtime.gopark [force gc (idle)]
+  Goroutine 3 - User: runtime/proc.go:425 runtime.gopark [GC sweep wait]
+  Goroutine 4 - User: runtime/proc.go:425 runtime.gopark [GC scavenge wait]
+  Goroutine 18 - User: runtime/proc.go:425 runtime.gopark [finalizer wait]
+* Goroutine 19 - User: main.go:25 main.checkByte (thread 31112)
+  Goroutine 20 - User: main.go:51 main.main.gowrap1
+[7 goroutines]
+```
+
+This is the view GDB's plain thread list can't give you. Goroutines 2, 3, and 4 are the Go runtime's own background housekeeping, forced-GC, sweep, and scavenge, all parked in `runtime.gopark` waiting to be woken up, nothing to do with our code. Goroutine 18 is the finalizer goroutine every Go program gets for free. Goroutine 19 is the worker we just broke on. Goroutine 20 is the `go func(){ wg.Wait(); close(results) }()` collector, identified by its `gowrap1` symbol, parked waiting on the WaitGroup. Seven goroutines exist at this point in a program whose source only mentions two `go` statements, and Delve's `goroutines` command is what makes that visible without guessing from thread IDs.
+
+### Reading the Disassembly
 
 `disassemble 'main.checkByte'` in Intel syntax gives the full function. The interesting parts, in order:
 
@@ -270,9 +350,9 @@ call   fmt.Println
 
 Two `runtime.newproc` call sites, not sixteen: one per `go` statement in the source, each one executed sixteen (and one) times at runtime. That's the distinction between a call site in the disassembly and an actual goroutine spawn, and it's easy to miss if you're counting instructions instead of reading control flow.
 
-## Step 4: The Same Thing in Python
+### Level 1: The Same Thing in Python
 
-GDB is interactive; sometimes you want a script you can point at a function name and get instructions back, independent of any debugger. `go tool nm` already gives symbol addresses, and `pefile` can map a virtual address to a file offset, so `capstone` can disassemble the raw bytes directly:
+GDB and Delve are interactive; sometimes you want a script you can point at a function name and get instructions back, independent of any debugger. `go tool nm` already gives symbol addresses, and `pefile` can map a virtual address to a file offset, so `capstone` can disassemble the raw bytes directly:
 
 ```python
 import subprocess
@@ -328,7 +408,7 @@ main.checkByte @ 0x4bb240, 384 bytes
 
 Using the function boundary from `nm` (`checkByte.deferwrap1` is the next symbol after `checkByte`, so it marks the end) keeps the disassembler honest about where the function actually stops, rather than guessing from a `ret` and hoping there's no padding or jump table in between.
 
-## Solving It
+### Level 1: Solving It
 
 Once the key schedule (`idx*7 + 11`) and the transform (XOR then rotate-left-3) are recovered from the disassembly, undoing both recovers the flag without ever brute-forcing it:
 
@@ -352,30 +432,492 @@ $ ./crackme.exe G0R0UT1NES_YEAH!
 Access Granted
 ```
 
+## Level 2: A Worker Pool and a Mutex
+
+Level 1's pattern, one goroutine per unit of work, doesn't scale to large inputs; spawning a million goroutines for a million-row job is wasteful. The idiomatic fix is a bounded worker pool: a fixed number of goroutines pulling jobs from a channel. And once multiple workers need to update shared state, the choice shifts from "communicate to share" to Go's other sanctioned option: a plain `sync.Mutex`.
+
+### Level 2: The Target
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+	"sync"
+)
+
+var target2 = [16]byte{
+	0x80, 0x8e, 0xa0, 0x87, 0x8c, 0x91, 0x87, 0x8c,
+	0xb6, 0xaa, 0x8a, 0x82, 0x9e, 0x8d, 0xb5, 0x5c,
+}
+
+const numWorkers = 4
+
+// Pool holds the shared verdict array. Unlike Level 1's channel-based
+// fan-in, workers here write directly into shared memory guarded by
+// a mutex: "share memory by communicating" turned on its head.
+type Pool struct {
+	mu    sync.Mutex
+	votes [16]bool
+}
+
+func (p *Pool) record(idx int, ok bool) {
+	p.mu.Lock()
+	p.votes[idx] = ok
+	p.mu.Unlock()
+}
+
+func worker(jobs <-chan int, candidate string, pool *Pool, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for idx := range jobs {
+		b := candidate[idx]
+		key := byte(idx ^ 0x5a)
+		t := b + key
+		t = t ^ (key >> 1)
+		pool.record(idx, t == target2[idx])
+	}
+}
+
+func main() {
+	if len(os.Args) != 2 || len(os.Args[1]) != 16 {
+		fmt.Println("usage: level2 <16-char-flag>")
+		os.Exit(1)
+	}
+	candidate := os.Args[1]
+
+	jobs := make(chan int, len(candidate))
+	for i := 0; i < len(candidate); i++ {
+		jobs <- i
+	}
+	close(jobs)
+
+	var pool Pool
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+	for w := 0; w < numWorkers; w++ {
+		go worker(jobs, candidate, &pool, &wg)
+	}
+	wg.Wait()
+
+	ok := true
+	for _, v := range pool.votes {
+		if !v {
+			ok = false
+			break
+		}
+	}
+
+	if ok {
+		fmt.Println("Access Granted")
+	} else {
+		fmt.Println("Access Denied")
+	}
+}
+```
+
+The transform changes too, an additive step folded through an XOR, just different enough from Level 1 that pattern-matching the previous solve script against this binary won't work, which is the point: each level has to be read on its own.
+
+```bash
+go build -gcflags="all=-N -l" -o level2.exe main.go
+```
+
+```
+$ ./level2.exe WRONGWRONGWRONG1
+Access Denied
+$ ./level2.exe SH4RE_MEM0RY_OK!
+Access Granted
+```
+
+### Level 2: Mapping the Binary
+
+```
+$ go tool nm level2.exe | grep -iE "main\.|sync\.\(\*Mutex\)"
+  4bb240 T main.(*Pool).record
+  4bb520 T main.main
+  4bba20 T main.main.gowrap1
+  5693e0 D main.target2
+  4bb2e0 T main.worker
+  4bb4c0 T main.worker.deferwrap1
+  488120 T sync.(*Mutex).Lock
+  488520 T sync.(*Mutex).Unlock
+  488180 T sync.(*Mutex).lockSlow
+  488580 T sync.(*Mutex).unlockSlow
+```
+
+Only four worker symbols-worth of machinery regardless of input length, `main.worker` is the same function body whether it processes 16 jobs or 16 million. Compare that to Level 1, where `runtime.newproc` fired once per input byte. That's the whole argument for a worker pool, visible in the symbol table before a single breakpoint is set: `sync.(*Mutex).lockSlow` and `unlockSlow` are also exported symbols here, the contended path a mutex falls into when the fast path fails, something Level 1's channel-only design never touches.
+
+### GDB: The Mutex Fast Path
+
+```
+$ gdb --batch -ex "set disassembly-flavor intel" \
+    -ex "disassemble 'main.(*Pool).record'" ./level2.exe
+```
+
+```asm
+call   0x488120   ; sync.(*Mutex).Lock
+...
+lea    rcx,[rcx+rax*1]
+lea    rcx,[rcx+0x8]      ; &votes[idx], +8 skips the mutex field
+mov    BYTE PTR [rcx],dl  ; votes[idx] = ok
+...
+call   0x488520   ; sync.(*Mutex).Unlock
+```
+
+The `+0x8` offset is `Pool`'s memory layout made visible: the `sync.Mutex` field (a single `int32` under the hood, word-aligned) sits at offset 0, `votes` starts right after it. Disassembling `sync.(*Mutex).Lock` itself shows why the call is cheap in the common case:
+
+```
+$ gdb --batch -ex "set disassembly-flavor intel" \
+    -ex "disassemble 'sync.(*Mutex).Lock'" ./level2.exe
+```
+
+```asm
+xor    eax,eax
+mov    edx,0x1
+lock cmpxchg DWORD PTR [rcx],edx
+sete   cl
+test   cl,cl
+jne    <fast return>
+jmp    <call sync.(*Mutex).lockSlow>
+```
+
+`lock cmpxchg` is the atomic compare-and-swap that implements the uncontended fast path: try to flip the mutex's state word from 0 (unlocked) to 1 (locked) in a single atomic instruction. If that succeeds, `sete` catches it and the function returns immediately, no syscall, no scheduler involvement. Only when the CAS fails (someone else already holds the lock) does execution fall into `lockSlow`, which parks the goroutine properly. One locked instruction is the entire cost of an uncontended `Lock()` call.
+
+### Delve: Watching the Pool Contend
+
+```
+$ dlv exec ./level2.exe --check-go-version=false -- SH4RE_MEM0RY_OK!
+(dlv) break main.(*Pool).record
+(dlv) continue
+(dlv) goroutines
+  Goroutine 1 - User: runtime/sema.go:71 sync.runtime_Semacquire [semacquire]
+  Goroutine 2 - User: runtime/proc.go:425 runtime.gopark [force gc (idle)]
+  Goroutine 3 - User: runtime/proc.go:425 runtime.gopark [GC sweep wait]
+  Goroutine 4 - User: runtime/proc.go:425 runtime.gopark [GC scavenge wait]
+  Goroutine 18 - User: runtime/proc.go:425 runtime.gopark [finalizer wait]
+  Goroutine 19 - User: main.go:24 main.(*Pool).record (thread 8560)
+  Goroutine 20 - User: main.go:58 main.main.gowrap1
+  Goroutine 21 - User: main.go:58 main.main.gowrap1
+* Goroutine 22 - User: main.go:24 main.(*Pool).record (thread 35632)
+[9 goroutines]
+```
+
+Two differences from Level 1 jump out immediately. First, `Goroutine 1` here is `main` itself, parked in `sync.runtime_Semacquire [semacquire]`, the exact internal call `wg.Wait()` makes when it blocks: Level 2's `main` calls `wg.Wait()` directly rather than delegating to a `gowrap1` closure, so this is `main` itself caught mid-block. Second, exactly four worker goroutines exist (19, 20, 21, 22) no matter how long the input is, continuing without respawning, cycling through the `jobs` channel. Continuing further shows the same four goroutine IDs hitting the breakpoint repeatedly, never a fifth: proof, live, that the pool is bounded.
+
+### Level 2: The Same Thing in Python
+
+Same script as Level 1, pointed at a different symbol:
+
+```
+$ python disasm.py level2.exe main.(*Pool).record main.main
+main.(*Pool).record @ 0x4bb240, 736 bytes
+
+0x4bb240:	cmp	rsp, qword ptr [r14 + 0x10]
+0x4bb244:	jbe	0x4bb2b6
+...
+0x4bb268:	call	0x488120
+...
+0x4bb288:	lea	rcx, [rcx + rax]
+0x4bb28c:	lea	rcx, [rcx + 8]
+0x4bb290:	mov	byte ptr [rcx], dl
+...
+0x4bb2a0:	call	0x488520
+```
+
+Capstone doesn't resolve the call targets to symbol names the way GDB does (that's purely a convenience GDB adds from the symbol table at display time), but the addresses (`0x488120`, `0x488520`) match `sync.(*Mutex).Lock` and `Unlock` from the `nm` output exactly. Cross-referencing a standalone disassembler's raw addresses against `nm`'s symbol table is a normal part of the workflow when the tool doesn't do that resolution for you.
+
+### Level 2: Solving It
+
+Inverting the additive-XOR transform is one more step than Level 1's pure XOR/rotate, but the same idea:
+
+```python
+target2 = [0x80, 0x8e, 0xa0, 0x87, 0x8c, 0x91, 0x87, 0x8c,
+           0xb6, 0xaa, 0x8a, 0x82, 0x9e, 0x8d, 0xb5, 0x5c]
+
+flag = bytearray(16)
+for idx, t in enumerate(target2):
+    key = idx ^ 0x5a
+    pre_xor = t ^ (key >> 1)
+    flag[idx] = (pre_xor - key) & 0xff
+
+print(flag.decode())
+```
+
+```
+$ python solve2.py
+SH4RE_MEM0RY_OK!
+$ ./level2.exe SH4RE_MEM0RY_OK!
+Access Granted
+```
+
+## Level 3: select, Timeouts, and a Real Goroutine Leak
+
+The last pattern is the one that trips people up in production: `select` across multiple channel operations, and what happens when nobody is listening on the other end.
+
+### Level 3: The Target
+
+```go
+package main
+
+import (
+	"fmt"
+	"math/bits"
+	"os"
+	"sync"
+	"time"
+)
+
+type result struct {
+	index int
+	ok    bool
+}
+
+var target3 = [16]byte{
+	0xa1, 0xc6, 0x6f, 0x44, 0x7b, 0xbe, 0x64, 0xa6,
+	0x5c, 0xa8, 0xa3, 0x09, 0x09, 0x2d, 0xd9, 0x76,
+}
+
+func checkByte(idx int, b byte, out chan<- result, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	shift := (idx % 5) + 1
+	key := byte(idx*3 + 7)
+	t := bits.RotateLeft8(b, shift) ^ key
+
+	// A watchdog send: give up after 2s instead of blocking forever on
+	// an unbuffered channel if nobody is listening.
+	select {
+	case out <- result{index: idx, ok: t == target3[idx]}:
+	case <-time.After(2 * time.Second):
+	}
+}
+
+// watchdogLeak is never read from. It exists to demonstrate what a
+// genuinely leaked goroutine looks like from inside a live debugger:
+// parked forever in a channel send, not a bug in the flag check itself.
+func watchdogLeak(stuck chan<- struct{}) {
+	stuck <- struct{}{}
+}
+
+func main() {
+	if len(os.Args) != 2 || len(os.Args[1]) != 16 {
+		fmt.Println("usage: level3 <16-char-flag>")
+		os.Exit(1)
+	}
+	candidate := os.Args[1]
+
+	results := make(chan result) // unbuffered: a real rendezvous, not a mailbox
+	var wg sync.WaitGroup
+
+	for i := 0; i < len(candidate); i++ {
+		wg.Add(1)
+		go checkByte(i, candidate[i], results, &wg)
+	}
+
+	stuck := make(chan struct{}) // nobody ever receives from this
+	go watchdogLeak(stuck)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	votes := make([]bool, len(candidate))
+	for r := range results {
+		votes[r.index] = r.ok
+	}
+
+	ok := true
+	for _, v := range votes {
+		if !v {
+			ok = false
+			break
+		}
+	}
+
+	if ok {
+		fmt.Println("Access Granted")
+	} else {
+		fmt.Println("Access Denied")
+	}
+}
+```
+
+`results` is unbuffered this time, a genuine synchronous rendezvous between sender and receiver rather than Level 1's mailbox-style buffered channel. Each worker's `select` races a channel send against a 2-second timeout. And `watchdogLeak` is a deliberate, deterministic bug: it sends on a channel nobody ever reads, so that goroutine blocks forever. The program still works correctly (Go doesn't wait for orphaned goroutines when `main` returns), but while it's running, that goroutine is genuinely, permanently stuck, which is exactly the scenario a debugger-level goroutine leak detector exists for.
+
+```bash
+go build -gcflags="all=-N -l" -o level3.exe main.go
+```
+
+```
+$ ./level3.exe WRONGWRONGWRONG1
+Access Denied
+$ ./level3.exe S3LECT_W4TCHD0G!
+Access Granted
+```
+
+### Level 3: Mapping the Binary
+
+```
+$ go tool nm level3.exe | grep -i "main\."
+  4d13e0 T main.checkByte
+  4d1680 T main.checkByte.deferwrap1
+  4d1720 T main.main
+  4d1d80 T main.main.func1
+  4d1e40 T main.main.gowrap1
+  4d1de0 T main.main.gowrap2
+  5893f0 D main.target3
+  4d16e0 T main.watchdogLeak
+```
+
+Two `gowrap` symbols this time (`gowrap1` and `gowrap2`), one per closure-capturing `go` statement in `main`: the `watchdogLeak` launch and the `wg.Wait(); close(results)` collector.
+
+### GDB: A Division-by-Constant Fingerprint and selectgo
+
+```
+$ gdb --batch -ex "set disassembly-flavor intel" \
+    -ex "disassemble 'main.checkByte'" ./level3.exe
+```
+
+The `idx % 5` computation produces something that looks nothing like a modulo at first glance:
+
+```asm
+movabs rax,0xcccccccccccccccd
+mov    rcx,rdx
+imul   rdx
+add    rdx,rcx
+sar    rdx,0x2
+mov    rbx,rcx
+sar    rcx,0x3f
+sub    rdx,rcx
+lea    rdx,[rdx+rdx*4]       ; rdx * 5
+```
+
+`0xCCCCCCCCCCCCCCCD` is a well-known magic constant: compilers replace division (and modulo) by a small constant with a multiply against a precomputed reciprocal, because integer division is slow and multiplication is cheap. That specific constant is the signature for dividing by 5. Seeing it in a disassembly, with no literal `div` or `idiv` instruction anywhere nearby, is the pattern worth recognizing: not "weird math," but "the compiler divided by a constant and showed its work."
+
+Further down, the rotate is now variable-count instead of Level 1's fixed `rol sil, 3`:
+
+```asm
+rol    bl,cl        ; shift came from (idx % 5) + 1, not a constant
+xor    ebx,edx
+```
+
+`cl` holds the shift amount, which is why x86 requires the count operand in `cl` specifically for variable-count shifts and rotates, a hardware constraint going back to the 8086. And the `select` statement compiles to a single, unglamorous call:
+
+```asm
+call   0x44d860   ; runtime.selectgo
+```
+
+Every `select` with more than one case lowers to a call into `runtime.selectgo`, regardless of how many cases it has or what they do; the branching between cases happens inside that runtime function, not in the caller's disassembly. If you're hunting for a `select` statement in a Go binary, `call runtime.selectgo` is what you grep for.
+
+### Delve: Catching the Leak
+
+This is the payoff for installing a Go-aware debugger. Break late enough that every worker has resolved and the leaked goroutine has had time to block, then just ask:
+
+```
+$ dlv exec ./level3.exe --check-go-version=false -- S3LECT_W4TCHD0G!
+(dlv) break main.go:71
+(dlv) continue
+> [Breakpoint 1] main.main() main.go:71 (hits goroutine(1):1 total:1)
+(dlv) goroutines
+* Goroutine 1 - User: main.go:71 main.main (thread 12040)
+  Goroutine 2 - User: runtime/proc.go:425 runtime.gopark [force gc (idle)]
+  Goroutine 3 - User: runtime/proc.go:425 runtime.gopark [GC sweep wait]
+  Goroutine 4 - User: runtime/proc.go:425 runtime.gopark [GC scavenge wait]
+  Goroutine 18 - User: runtime/proc.go:425 runtime.gopark [finalizer wait]
+  Goroutine 35 - User: main.go:40 main.watchdogLeak [chan send]
+[6 goroutines]
+```
+
+There it is: `Goroutine 35 - ... main.watchdogLeak ... [chan send]`, permanently parked trying to send on a channel nobody reads. By this point all sixteen `checkByte` workers have already finished (their `select` resolved one way or the other and they returned, `defer wg.Done()` fired, they're gone), which is exactly why they no longer appear in the list, only the genuinely stuck goroutine remains visible alongside the standard runtime housekeeping goroutines. This is the practical difference a goroutine-aware debugger makes: GDB would show you a thread sitting idle; Delve tells you, by name and by line number, which Go-level goroutine is blocked and why.
+
+In a real production incident, this is precisely the signature of a goroutine leak: something parked in `[chan send]` or `[chan receive]` indefinitely, growing memory usage one abandoned goroutine at a time until the process falls over. Catching it live, with `dlv attach <pid>` on a running process and `goroutines`, is faster than reasoning about it from a core dump.
+
+### Level 3: The Same Thing in Python
+
+```
+$ python disasm.py level3.exe main.checkByte main.checkByte.deferwrap1
+main.checkByte @ 0x4d13e0, 672 bytes
+...
+0x4d14e9:	rol	bl, cl
+0x4d14ef:	xor	ebx, edx
+...
+```
+
+Capstone confirms the variable-count rotate independent of GDB, same bytes, same instruction, read straight from the PE file with no process running at all.
+
+### Level 3: Solving It
+
+The transform inverts cleanly once the rotate amount and key formula are read off the disassembly:
+
+```python
+def ror8(x, n):
+    n %= 8
+    return ((x >> n) | (x << (8 - n))) & 0xff
+
+target3 = [0xa1, 0xc6, 0x6f, 0x44, 0x7b, 0xbe, 0x64, 0xa6,
+           0x5c, 0xa8, 0xa3, 0x09, 0x09, 0x2d, 0xd9, 0x76]
+
+flag = bytearray(16)
+for idx, t in enumerate(target3):
+    shift = (idx % 5) + 1
+    key = (idx * 3 + 7) & 0xff
+    flag[idx] = ror8(t ^ key, shift)
+
+print(flag.decode())
+```
+
+```
+$ python solve3.py
+S3LECT_W4TCHD0G!
+$ ./level3.exe S3LECT_W4TCHD0G!
+Access Granted
+```
+
+## Side by Side
+
+| | Level 1 | Level 2 | Level 3 |
+|---|---|---|---|
+| Pattern | Fan-out, buffered channel | Worker pool, mutex | select + timeout, unbuffered channel |
+| Goroutines spawned | 16 workers + 1 collector | 4 workers (fixed) | 16 workers + 1 collector + 1 leaked |
+| Shared state | None (channel owns the data) | `[16]bool` guarded by `sync.Mutex` | None (channel owns the data) |
+| Key runtime calls | `newproc`, `makechan`, `chansend1` | `Mutex.Lock`/`Unlock`, `lockSlow` | `selectgo`, `gopark` |
+| Debugger finding | ABIInternal register order confirmed live | Fast-path `lock cmpxchg`, bounded goroutine count | A real goroutine permanently parked in `[chan send]` |
+
+The pattern across all three: `go tool nm` plus a disassembler recovers the algorithm every time, cheaply and the same way regardless of which concurrency primitive the source used. A debugger is what's actually required to see the primitive itself in motion, and only one of the two debuggers used here, Delve, understood what it was looking at.
+
 ## Conclusion
 
-Static decompilation and live debugging answer different questions, and this binary showed where each one earns its keep. The decompiler (Part 1's territory) is faster for recovering an algorithm: the `lea` multiply trick and the `rol` idiom are obvious at a glance once you know the shapes. The debugger is what actually proves a theory about the runtime: Part 1's ABIInternal register table was a specification; watching `idx` land in RAX and `b` in RBX across two different OS threads is a measurement of the same thing.
+Static decompilation and live debugging answer different questions, and three binaries built around three different concurrency patterns showed where each tool earns its keep. The decompiler (Part 1's territory) is faster for recovering an algorithm: the `lea` multiply trick, the division-by-5 magic constant, and the `rol`/`ror` idioms are obvious at a glance once you know the shapes. GDB is what proves a theory about the runtime with raw register values. And Delve is what GDB can't be, without Python scripting support anyway: a debugger that understands goroutines are not threads, and can tell you exactly which one is stuck and why.
 
 A few takeaways worth keeping:
 
-1. **`go tool nm` works on every Go binary**, optimized or not, because PCLNTAB has to ship for stack traces to work. Use it before reaching for a decompiler.
-2. **Count `runtime.newproc` and `runtime.makechan` call sites**, not instructions, to find where concurrency actually starts in a disassembly.
-3. **`lea` chains and `rol`/`ror` are compiler fingerprints.** Multiplication by a small constant and `(x<<n)|(x>>(8-n))` rotates both compile to recognizable, searchable patterns.
-4. **Know your debugger's limits before you rely on it.** A GDB build without Python support can't run Go's goroutine-aware extensions; Delve exists specifically because GDB's generic DWARF support only goes so far with Go's runtime.
+1. **`go tool nm` works on every Go binary**, optimized or not, because PCLNTAB has to ship for stack traces to work. Use it before reaching for a decompiler, on every level in this post it was the first command run.
+2. **Count `runtime.newproc` and `runtime.makechan` call sites, not instructions**, to find where concurrency actually starts in a disassembly. A worker pool shows a fixed, small number of these; one-goroutine-per-item shows one site executed many times.
+3. **`lea` chains, magic division constants, and `rol`/`ror` are compiler fingerprints.** Multiplication and division by small constants, and `(x<<n)|(x>>(8-n))` rotates, both compile to recognizable, searchable patterns instead of the instructions you might expect.
+4. **A mutex's fast path is one locked instruction.** `lock cmpxchg` succeeding means `sync.Mutex.Lock` never touches the scheduler; only contention falls into `lockSlow`.
+5. **`select` is always `runtime.selectgo`**, no matter how many cases or what they do. The branching logic lives inside the runtime, not in the caller's disassembly.
+6. **Know your debugger's limits before you rely on it.** A GDB build without Python support can't run Go's goroutine-aware extensions; Delve exists specifically because GDB's generic DWARF support only goes so far with Go's runtime, and this post's Level 3 goroutine leak was invisible to anything less goroutine-aware than `dlv goroutines`.
 
 ## References & Further Reading
 
 1. **[Go Runtime Scheduler Design Doc](https://go.dev/s/go11sched)**
-   The original design document for the GMP (goroutine/machine/processor) scheduler model observed above.
+   The original design document for the GMP (goroutine/machine/processor) scheduler model observed throughout this post.
 
 2. **[Delve: a Debugger for Go](https://github.com/go-delve/delve)**
-   The Go-aware alternative to GDB, with native `goroutine`, `goroutines`, and `stack` commands.
+   The Go-aware alternative to GDB, with native `goroutine`, `goroutines`, and `stack` commands. Installed and used throughout Levels 1 through 3.
 
 3. **[Capstone Disassembly Framework](https://www.capstone-engine.org/)**
-   The engine behind the Python disassembler in this post.
+   The engine behind every Python disassembler script in this post.
 
 4. **[pefile Documentation](https://github.com/erocarrera/pefile)**
    Used here only to map a virtual address to a file offset; it can parse the entire PE structure if you need more.
 
 5. **[Go 1.22 Release Notes: Loop Variable Semantics](https://go.dev/blog/loopvar-preview)**
-   The change behind the `gowrap1` symbol observed in `go tool nm`.
+   The change behind the `gowrap1`/`gowrap2` symbols observed via `go tool nm` in every level.
+
+6. **[The Go Memory Model](https://go.dev/ref/mem)**
+   The formal rules behind why Level 2's mutex and Level 1's channel are both valid ways to synchronize, and why Level 3's unbuffered channel behaves differently from Level 1's buffered one.
+
+7. **[sync.Mutex Source](https://cs.opensource.google/go/go/+/refs/tags/go1.23.3:src/sync/mutex.go)**
+   The Go standard library implementation behind the `lock cmpxchg` fast path disassembled in Level 2.

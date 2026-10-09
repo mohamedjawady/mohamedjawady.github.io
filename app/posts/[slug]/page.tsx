@@ -45,6 +45,10 @@ import { WMIRemoteFlow } from "@/components/visualizations/wmi-remote-flow"
 import LOLBASCategories from "@/components/visualizations/lolbas-categories"
 import BITSAdminAttackFlow from "@/components/visualizations/bitsadmin-attack-flow"
 import { GoDataStructures } from "@/components/visualizations/go-data-structures"
+import { GoroutineDebugWalkthrough } from "@/components/visualizations/goroutine-debug-walkthrough"
+import { ConcurrencyPatternsCompare } from "@/components/visualizations/concurrency-patterns-compare"
+import { GoConcurrencyPrimer } from "@/components/visualizations/go-concurrency-primer"
+import { GoEntryPointFlow } from "@/components/visualizations/go-entry-point-flow"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
@@ -101,6 +105,10 @@ const postComponents = {
   LOLBASCategories: () => <LOLBASCategories />,
   BITSAdminAttackFlow: () => <BITSAdminAttackFlow />,
   GoDataStructures: () => <GoDataStructures />,
+  GoroutineDebugWalkthrough: () => <GoroutineDebugWalkthrough />,
+  ConcurrencyPatternsCompare: () => <ConcurrencyPatternsCompare />,
+  GoConcurrencyPrimer: () => <GoConcurrencyPrimer />,
+  GoEntryPointFlow: () => <GoEntryPointFlow />,
   IntelligenceLifecycle: () => <IntelligenceLifecycle />,
   PyramidOfPain: () => <PyramidOfPain />,
   TTPCampaignTimeline: () => <TTPCampaignTimeline />,

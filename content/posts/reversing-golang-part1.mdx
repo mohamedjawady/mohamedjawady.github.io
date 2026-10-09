@@ -55,6 +55,8 @@ The execution flow usually looks like this:
 3.  `runtime.main`: The main goroutine. It runs initializers (`init()` functions).
 4.  **`main.main`**: YOUR code. This is what you are looking for.
 
+<GoEntryPointFlow />
+
 ### The PCLNTAB Structure
 
 Go binaries embed a massive table called **PCLNTAB** (Program Counter Line Table). This table maps every instruction address to:
@@ -171,6 +173,22 @@ fmt_Println(args);
 
 Notice the verbosity? A single line of Go becomes ~10 lines of C initialization. This is why pattern recognition is vital. You aren't reading code; you are recognizing **idioms**.
 
+**Verified against a real disassembly:** the pseudocode above is a readable approximation. Here's what `gdb -ex "disassemble main.main"` actually produces for this exact program, built with `go build -gcflags="all=-N -l"`:
+
+```asm
+lea    rcx,[rip+0x2304b]        ; &"sample" (the string bytes, read-only data)
+mov    QWORD PTR [rsp+0x18],rcx ; s.ptr
+mov    QWORD PTR [rsp+0x20],0x6 ; s.len = 6
+...
+call   runtime.convTstring      ; box the string into an interface{}
+...
+mov    QWORD PTR [rsp+0x40],0x1 ; args.len = 1
+mov    QWORD PTR [rsp+0x48],0x1 ; args.cap = 1
+call   fmt.Println
+```
+
+Two things the pseudocode simplified. First, the interface boxing in real Go isn't manual field assignment, it's a single call to `runtime.convTstring` (there's a `convT*` variant per concrete type: `convTslice`, `convTint64`, and so on). Second, that call is immediately followed by the same write-barrier branch Part 2 of this series disassembles in detail, a `cmp` against `runtime.writeBarrier` deciding whether to call `runtime.gcWriteBarrier2` or just store the pointer directly. Seeing `call runtime.convT*` in a disassembly is the real-world signal for "a value is being boxed into an interface here," more reliable than trying to spot manual type/data field writes.
+
 ## Ex2: Reversing Slices & Append
 
 **Source (`ex2/main.go`):**
@@ -246,6 +264,18 @@ new_nums.cap = new_nums.cap;
 fmt_Println(interface_box(new_nums));
 ```
 
+**Verified against a real disassembly:** grepping the `call` instructions out of a real, debug-built binary for this exact program confirms the shape above without needing to read a single `mov`:
+
+```
+call   runtime.newobject    ; backing array for []int{1, 2, 3}
+call   runtime.growslice    ; append(nums, 4) exceeds cap(3)
+call   runtime.convTslice   ; box the slice into interface{} for Println
+call   runtime.gcWriteBarrier2
+call   fmt.Println
+```
+
+`interface_box(new_nums)` in the pseudocode is, concretely, `runtime.convTslice`, the slice-specific sibling of the `runtime.convTstring` call Ex1 showed. Different concrete type, same boxing mechanism, same naming convention: `conv` + `T` + the Go type. Recognizing the `convT*` family is more useful in practice than memorizing individual interface field offsets, because it tells you exactly where in a disassembly a concrete value crosses into `interface{}`, regardless of which type it started as.
+
 ## Advanced: Write Barriers (`gcWriteBarrier`)
 
 In larger functions, you will often see strange assembly checks before pointer assignments:
@@ -271,7 +301,7 @@ Reversing Go is less about reading every instruction and more about identifying 
 3.  **Interface Boxing:** When standard types vanish into `RTYPE` pointers, you are seeing interfaces being built.
 4.  **Tooling:** Use `AlphaGolang` or `IDAGolangHelper` to restore the PCLNTAB.
 
-In the next part, we will tackle **Goroutines**, the **Go Scheduler**, and how to trace channel operations (`chan`) which are the backbone of Go concurrency.
+[Part 2](/posts/reversing-golang-part2) picks this up directly: three concurrent crackmes built around goroutines, channels, a mutex, and `select`, reversed live with GDB, Delve, and a Python/capstone disassembler, confirming the ABIInternal register order and write-barrier idiom above against real register dumps instead of pseudocode.
 
 ## References & Further Reading
 

@@ -104,6 +104,12 @@ To improve performance, Go shifted to a register-based model. It uses a specific
 **Why this matters for Reversing:**
 If you load a modern Go binary into an older decompiler (or one without Go support), it might assume the standard "Microsoft x64" convention. It will look for arguments in RCX/RDX and ignore RAX/RBX. The result? **Empty function calls.** You'll see `SomeFunction()` with no arguments, even though the assembly clearly shows `MOV RAX, 0x1` right before the call.
 
+### IDA Already Solves This, as of 8.1
+
+This used to mean hand-writing `__usercall` prototypes for every function, pinning each argument to the register the disassembly showed it in. As of **IDA 8.1**, it doesn't: IDA ships an official `golang` plugin (a standard plugin, not a third-party script) that detects a Go binary automatically (startup signatures, Go-specific segment names, PE/ELF symbol patterns), parses PCLNTAB for function names and package paths, parses `typelinks` for type information, and, critically, **infers ABI0 vs ABIInternal from the binary's detected Go version and architecture** and allocates the correct register set for its own `__golang` calling convention accordingly. Load a Go 1.17+ binary in a current IDA and `main.checkByte(idx, b, out, wg)` should already show arguments bound to RAX/RBX/RCX/RDI, no manual prototype surgery required.
+
+If the auto-detection ever gets it wrong, there's a direct override rather than a manual rewrite: set `force_regabi=on` to force register-based, or `force_regabi=off` to force stack-based, either via `cfg/golang.cfg` or the `golang:detect_and_parse` action. Two things worth knowing before leaning on this, though. First, it only solves the *calling convention*, type recovery still depends on `typelinks` being present and intact, which a stripped binary partially survives (Part 3 of this series shows PCLNTAB itself always does) but garble is built to defeat the same way it defeats everything else in that post. Second, this is IDA-specific; Ghidra and other decompilers have their own (often less complete) Go support, and the manual register-pinning technique below still applies anywhere the automatic version doesn't.
+
 ## Go Internals: Visualizing Data Structures
 
 Go's power comes from its built-in types: `string`, `slice`, and `interface`. Unlike C, these are valid structs, not just pointers.
@@ -217,19 +223,50 @@ When `cap` is reached:
 IDA often fails to analyze `runtime.growslice` correctly because it returns a structure by value (the new slice header). It might show up as a function returning `void` but modifying stack memory weirdly.
 
 **The Fix:**
-You must manually define the slice structure in IDA and update the function prototype.
+The shipped `golang` plugin recovers Go's own built-in types automatically from `typelinks` when that metadata is intact, but `runtime.growslice`'s return-by-value signature still regularly needs a manual nudge, and any struct that isn't a Go builtin (a malware's own config structure, for instance) always will, since there's no `typelinks` entry for a type the plugin doesn't know to look for. Defining a struct by hand in IDA is a core skill independent of Go specifically, worth having regardless of how much the automatic recovery above does for you.
 
-1.  **Define the Struct:**
+1.  **Open Local Types.** `Shift+F1`, or View &rarr; Open subviews &rarr; Local Types. This is where Hex-Rays keeps every struct, union, and typedef the decompiler can reference, separate from the Structures window used in classic (non-decompiler) IDA workflows.
+2.  **Add the type.** Press `Ins` (or right-click &rarr; *Add type...*), switch to the **C syntax** tab, and type the declaration directly:
     ```c
     struct GoIntSlice {
-        int64* data;
-        int64 len;
-        int64 cap;
+        __int64 *data;
+        __int64 len;
+        __int64 cap;
     };
     ```
-2.  **Fix the Prototype:**
-    Change `runtime_growslice(...)` to:
-    `GoIntSlice __usercall runtime_growslice(GoIntSlice oldSlice, int needed, ...)`
+    For more than one struct at once (all three of Part 1's data structures, say), right-click the type list instead and choose **Parse declarations...**, which accepts a whole block of C in one go:
+    ```c
+    struct GoString  { char *data; __int64 len; };
+    struct GoSlice    { void *data; __int64 len; __int64 cap; };
+    struct GoInterface { void *type; void *data; };
+    struct GoIntSlice { __int64 *data; __int64 len; __int64 cap; };
+    ```
+3.  **Apply it.** With the struct defined, two places to point it: on a decompiled local variable, click the variable and press `Y` (*Set lvar type*), then type `GoIntSlice` (or `GoIntSlice *` if it's a pointer). On a function's prototype, click the function name or its signature line in the pseudocode and press `Y` to edit the full declaration, e.g.:
+    ```c
+    GoIntSlice __usercall runtime_growslice(GoIntSlice oldSlice, int needed, ...);
+    ```
+    `__usercall` is what tells IDA you're pinning explicit argument locations rather than relying on the calling convention it already inferred; needed here because `growslice`'s by-value struct return is exactly the pattern IDA's own analysis tends to misjudge as a `void` function quietly clobbering stack memory, called out at the top of this section.
+
+The same three steps are scriptable, which matters when you're defining the same handful of structs across many functions or many samples rather than once by hand:
+
+```python
+import ida_typeinf
+
+decl = """
+struct GoIntSlice {
+    __int64 *data;
+    __int64 len;
+    __int64 cap;
+};
+"""
+ida_typeinf.idc_parse_types(decl, ida_typeinf.PT_SILENT)
+
+# apply to a specific function's return type + prototype
+ea = idc.get_name_ea_simple("runtime_growslice")
+idc.SetType(ea, "GoIntSlice __usercall runtime_growslice(GoIntSlice oldSlice, int needed, ...);")
+```
+
+`idc_parse_types` does the same parsing as the Local Types "Parse declarations..." dialog; `SetType` applies a declaration string to the function at a given address, equivalent to pressing `Y` on it manually. Both are standard IDAPython, stable across recent IDA releases.
 
 Once you do this, the decompiler snaps into place:
 
@@ -321,3 +358,12 @@ For those who want to go even deeper, here are the standard industry references 
 
 5.  **[The Go Memory Model](https://go.dev/ref/mem)**
     Understanding how Go handles memory visibility is crucial when analyzing the race conditions often exploited in concurrent malware.
+
+6.  **[Hex-Rays: Golang Plugin Documentation](https://docs.hex-rays.com/user-guide/plugins/plugins-shipped-with-ida/golang-plugin)**
+    The official documentation for IDA's shipped Go support: automatic ABI0/ABIInternal detection, `force_regabi`, and PCLNTAB/`typelinks`-based recovery, referenced above.
+
+7.  **[Hex-Rays: IDA 8.1 Release Notes](https://docs.hex-rays.com/release-notes/8_1)**
+    The release that added register-based (`regabi`) calling convention support to the golang plugin, eliminating the need for manual `__usercall` prototypes on most Go functions.
+
+8.  **[Hex-Rays: Types (User Guide)](https://docs.hex-rays.com/9.1/user-guide/types)**
+    The Local Types window, C-syntax struct entry, and "Parse declarations..." workflow used in the manual structure walkthrough above.

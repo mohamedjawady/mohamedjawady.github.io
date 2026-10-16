@@ -1,0 +1,131 @@
+---
+title: "Threat-Informed Defense Series Part 2: One Technique, Several Tactics, and How to Map Raw Evidence Without Guessing"
+description: "Part 2 of the Threat-Informed Defense series. MITRE ATT&CK lets a single technique live under four different tactics at once, which looks like a design flaw until you see why. Worked through Valid Accounts (T1078) and a real, CISA-documented Scattered Spider intrusion chain, with a practical workflow for mapping raw evidence to ATT&CK without assuming more than the evidence supports."
+date: "2026-10-16"
+author: "Mohamed Habib Jaouadi"
+tags: ["mitre-attack", "threat-informed-defense", "cti", "ttp", "detection-engineering"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Abstract threat intelligence network visualization"
+visibility: "public"
+series: "Threat-Informed Defense & MITRE ATT&CK"
+seriesOrder: 2
+---
+
+> **Series Focus:** [Part 1](/posts/mitre-attck-series-part1) covered the organizations behind ATT&CK and the tactic/technique/sub-technique/procedure hierarchy, grounded in Mustang Panda's DLL side-loading. This part goes after something that looks like a flaw in that hierarchy until you understand why MITRE built it this way: the same technique, with the same `T####` ID, can legitimately sit under more than one tactic at once.
+
+<TIDDialogue
+  title="Isn't that just bad taxonomy?"
+  lines={[
+    { speaker: "lead", text: "I pulled up Valid Accounts, T1078, to build a coverage layer last week. It's listed under four tactics at once. Initial Access, Persistence, Privilege Escalation, and now Stealth. That's not a category, that's ATT&CK shrugging." },
+    { speaker: "cti", text: "It's not shrugging. A stolen password gets you in the door, keeps you in the building after the door's locked, and gets you into the server room if it's the right password. Same key, three different doors." },
+    { speaker: "lead", text: "Fine, but then how do I file a detection gap under it? If a technique doesn't commit to one tactic, what am I even prioritizing against?" },
+    { speaker: "soc", text: "You're prioritizing against what the evidence in front of you actually shows, not what the technique page allows in the abstract. That's a you problem, not an ATT&CK problem." },
+    { speaker: "lead", text: "That's not comforting, Priya." },
+    { speaker: "cti", text: "It's not supposed to be comforting. It's supposed to be accurate." },
+  ]}
+/>
+
+**The crux of this part:** if a technique doesn't tell you the tactic by itself, what does? And given a pile of raw log evidence instead of a tidy incident report, how do you get from "something happened" to a specific, defensible ATT&CK mapping without just picking whichever tactic sounds right?
+
+## T1078: The Technique That Breaks the Grid
+
+Jordan's frustration is a reasonable first reaction to [T1078, Valid Accounts](https://attack.mitre.org/techniques/T1078/). Checked directly against the current ATT&CK page, it's listed under four tactics simultaneously:
+
+| Tactic | Why valid credentials serve it |
+|---|---|
+| **Initial Access** | A stolen or purchased password gets the adversary into the environment in the first place, no exploit required. |
+| **Persistence** | An account that stays valid is access that survives a reboot, a patch, or an EDR sweep, unlike a dropped implant. |
+| **Privilege Escalation** | The same mechanism, compromising a more privileged account instead of a regular one, moves the adversary up instead of just in. |
+| **Stealth** | Authenticating with real credentials doesn't trip the alerts a malicious binary would. It looks like Tuesday. |
+
+(Stealth is worth a flag here before Part 3 covers it properly: this used to be a single tactic called Defense Evasion. MITRE split it into Stealth and Defense Impairment in the April 2026 release, and T1078 landed in Stealth specifically, not Defense Impairment, because using a real password to blend in is categorically different from disabling the logging that would have caught it. More on that split next part.)
+
+The thing Jordan's missing isn't a flaw in ATT&CK, it's that **a technique describes a capability, and a tactic describes what a specific adversary used that capability for, on a specific occasion.** T1078 doesn't commit to a tactic because the behavior itself, authenticating with valid credentials, doesn't commit to an objective. The same key opens whichever door the adversary points it at. What tells you which tactic applies isn't the technique page, it's the evidence: what was the account used to accomplish, *this time*?
+
+That reframes Jordan's coverage-layer problem rather than solving it for free. You don't get to mark "T1078 covered" once. You have to ask whether your telemetry catches valid-account abuse used for initial entry, separately from whether it catches valid-account abuse used to maintain access after an incident response team thinks they've evicted the adversary. Those are different detections even though they're the same `T####` ID.
+
+## From Raw Evidence to a Mapping: Scattered Spider at a Help Desk
+
+Here's where that distinction stops being abstract. In November 2023, CISA and the FBI published a joint advisory, [AA23-320A](https://www.cisa.gov/sites/default/files/2023-11/aa23-320a_scattered_spider.pdf), documenting Scattered Spider's TTPs from active FBI investigations. Strip the incident down to what was actually observed, in order, the way an analyst would actually encounter it, not as a pre-labeled technique list:
+
+1. An IT help desk receives a phone call or SMS from someone claiming to be an employee, usually with enough real personal details (gathered beforehand) to sound legitimate, asking for a password reset or MFA re-enrollment.
+2. The help desk, following a normal-looking process, resets the credential or re-enrolls the MFA device, now pointed at infrastructure the adversary controls.
+3. In other documented cases, rather than a help desk, the adversary already has a valid password (phished or purchased) and instead bombards the real user with repeated MFA push notifications until one gets approved out of fatigue, not consent.
+4. Either path ends the same way: the adversary is now authenticating with a legitimate account, no exploit, no malware, through the front door.
+
+Mapping that without jumping straight to a label: step 1 and 2 are social engineering directed at a third party (the help desk) to subvert an authentication mechanism, not a technical exploit. Step 3, the push-bombing path, matches [T1621, Multi-Factor Authentication Request Generation](https://attack.mitre.org/techniques/T1621/), confirmed under the **Credential Access** tactic: the adversary already has a password and is specifically trying to clear the second factor. Step 4, in both paths, is [T1078.004, Valid Accounts: Cloud Accounts](https://attack.mitre.org/techniques/T1078/004/), and *now* Jordan's four-tactic table earns its keep: this specific use is Initial Access, because it's how Scattered Spider got in, not Persistence or Privilege Escalation, because the evidence here doesn't show either of those yet. If the same account gets used two weeks later to survive a password rotation, that's a second, separate mapping, Persistence, from the same technique ID, backed by new evidence, not assumed from the first.
+
+Notice what the help-desk social-engineering step *doesn't* cleanly map to: it's real, it's documented, it's the actual initial lever Scattered Spider pulls, and it's closer to a pretext than a named technique with a clean ID. That's a deliberately honest thing to show rather than paper over. Not every sentence in a threat report corresponds to exactly one ATT&CK technique, and forcing one is worse than leaving a gap and noting it.
+
+## A Workflow for Mapping Raw Evidence
+
+Generalized from the walkthrough above, into steps that hold up against a report that isn't this tidy:
+
+1. **Write down what the evidence actually shows**, separate from what you suspect. "An account was reset after a help desk call" is evidence. "Scattered Spider attacked us" is a conclusion, and it's not step one.
+2. **Identify the behavior**, not the actor. What did whoever did this actually do, mechanically?
+3. **Map the behavior to a technique**, checking the technique's actual description against your evidence rather than against a title that sounds close.
+4. **Use a sub-technique** only when the technique page defines one that matches, `T1078.004` here, not every technique has this extra level.
+5. **Identify the tactic from the objective the evidence supports**, not from the technique's full list of possible tactics. T1078 lists four; this incident's evidence supports exactly one of them at a time.
+6. **Keep the procedure-level detail separate and preserved.** "Help desk call, personal details used as pretext, MFA re-enrolled to attacker-controlled device" is what makes this incident investigable later. It's not part of the technique ID, but losing it loses the thing a responder actually needs.
+
+<TIDQuiz
+  title="Part 2 Check"
+  questions={[
+    {
+      question: "T1078 (Valid Accounts) is listed under four tactics at once. What determines which tactic applies to a specific observed instance?",
+      options: [
+        "Whichever tactic is listed first on the technique page",
+        "The evidence: what the adversary actually used the valid account to accomplish on that occasion",
+        "The sub-technique, since each sub-technique maps to exactly one tactic",
+        "It's arbitrary; any of the four tactics can be cited interchangeably",
+      ],
+      correctIndex: 1,
+      explanation: "The technique describes a reusable capability; the tactic describes what a specific adversary used it for, this time. The same T1078 instance used for initial entry is a different mapping than T1078 used weeks later to survive a password rotation, even though the technique ID doesn't change.",
+    },
+    {
+      question: "In the Scattered Spider help-desk scenario, which observed step maps to T1621 specifically?",
+      options: [
+        "The initial phone call impersonating an employee",
+        "The help desk resetting the password",
+        "Repeated MFA push notifications sent to bypass a second factor the adversary didn't otherwise have",
+        "The adversary's first login with the reset credential",
+      ],
+      correctIndex: 2,
+      explanation: "T1621, Multi-Factor Authentication Request Generation, specifically covers bombarding a user with MFA prompts to exploit fatigue. That's the push-bombing path, distinct from the help-desk social-engineering path, even though both can end in the same T1078.004 outcome.",
+    },
+    {
+      question: "Why does the walkthrough leave the help-desk social-engineering pretext without a clean, confident ATT&CK technique mapping?",
+      options: [
+        "It was an oversight in the walkthrough",
+        "Because forcing evidence into the nearest-sounding technique name is worse than honestly noting a gap",
+        "Because CISA's advisory doesn't mention it",
+        "Because ATT&CK doesn't cover social engineering at all",
+      ],
+      correctIndex: 1,
+      explanation: "Not every real event in an intrusion corresponds cleanly to one named technique. Forcing a label onto evidence that doesn't clearly support it produces a mapping that looks precise but isn't, which is worse for downstream decisions than flagging the gap honestly.",
+    },
+    {
+      question: "What's the practical consequence for Jordan's coverage layer of T1078 spanning four tactics?",
+      options: [
+        "None; marking 'T1078 covered' once is sufficient regardless of tactic",
+        "Coverage has to be assessed per tactical use case (initial entry vs. persistence vs. escalation), not once for the technique ID as a whole",
+        "T1078 should be removed from the coverage layer since it's too broad to be useful",
+        "Only the Stealth-tagged use of T1078 needs a detection, since the others are rare",
+      ],
+      correctIndex: 1,
+      explanation: "A single 'covered' checkmark against T1078 hides that detecting valid-account abuse at initial entry and detecting it as a persistence mechanism weeks later are different problems requiring different telemetry and different detections, even though they share a technique ID.",
+    },
+  ]}
+/>
+
+## What's Next
+
+[Part 3](/posts/mitre-attck-series-part3) is where the Stealth/Defense Impairment split from this part gets its full treatment, alongside the other two ATT&CK matrices most Enterprise-focused teams never open: Mobile and ICS, including a real, publicly documented ICS incident (TRITON/TRISIS) to show what "Inhibit Response Function" actually looks like when it isn't hypothetical.
+
+## References & Further Reading
+
+1. **[MITRE ATT&CK: T1078, Valid Accounts](https://attack.mitre.org/techniques/T1078/)**, including its four listed tactics, checked live against the current technique page.
+2. **[MITRE ATT&CK: T1621, Multi-Factor Authentication Request Generation](https://attack.mitre.org/techniques/T1621/)**
+3. **[MITRE ATT&CK: T1078.004, Valid Accounts: Cloud Accounts](https://attack.mitre.org/techniques/T1078/004/)**
+4. **[CISA/FBI Joint Advisory AA23-320A: Scattered Spider](https://www.cisa.gov/sites/default/files/2023-11/aa23-320a_scattered_spider.pdf)**, published November 16, 2023, the primary source for the help-desk social engineering and MFA fatigue chain above.
+5. **[MITRE ATT&CK: Scattered Spider (G1015)](https://attack.mitre.org/groups/G1015)**

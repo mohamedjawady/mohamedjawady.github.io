@@ -1,0 +1,128 @@
+---
+title: "Threat-Informed Defense Series Part 7: Unknown, Claimed, Validated, and Closing the Loop"
+description: "The finale of the Threat-Informed Defense series. The real CTID tools that turn ATT&CK from a reference matrix into a repeatable program, Navigator, Workbench, the Technique Inference Engine, Powered Suit, and Sync, and the three-word coverage model, Unknown, Claimed, Validated, applied to T1021.002's own journey across Parts 5 and 6 of this series."
+date: "2026-10-16"
+author: "Mohamed Habib Jaouadi"
+tags: ["mitre-attack", "threat-informed-defense", "detection-engineering", "security-program", "cti"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Abstract threat intelligence network visualization"
+visibility: "public"
+series: "Threat-Informed Defense & MITRE ATT&CK"
+seriesOrder: 7
+---
+
+> **Series Focus:** [Part 6](/posts/mitre-attck-series-part6) closed out T1021.002's defensive design: detection in Part 5, mitigations and D3FEND in Part 6. This final part is about the loop from [Part 1](/posts/mitre-attck-series-part1): turning one technique's worth of work into a repeatable program, and being honest about the difference between a technique you've mapped, one you've claimed coverage for, and one you've actually tested.
+
+<TIDDialogue
+  title="So are we done with T1021.002?"
+  lines={[
+    { speaker: "lead", text: "We've spent three parts on one sub-technique. Detection in Part 5, mitigations in Part 6. Are we done? Can I mark it covered and move the team on to the next thing?" },
+    { speaker: "detection", text: "Depends what 'covered' means on whatever dashboard you're about to update it on. Is it 'we discussed it,' 'we built something,' or 'we tested it and have evidence'? Those are three very different claims wearing the same checkmark." },
+    { speaker: "cti", text: "That's the whole series in one sentence, honestly. Part 1 to Part 6 kept drawing the same distinction at every layer, technique versus procedure, claimed group versus confirmed one, Detection Strategy versus a tested analytic. This is just that same distinction showing up one more time, at the program level instead of the technique level." },
+    { speaker: "soc", text: "So what actually happened to T1021.002, concretely, across this series? Not the theory, the actual sequence." },
+    { speaker: "facilitator", text: "Let's trace it. That's a good way to close this out." },
+  ]}
+/>
+
+**The crux of this part:** what's the difference between a technique that's mapped, one that's claimed as covered, and one that's actually been validated, and what tools turn that distinction into a repeatable habit instead of a one-time audit?
+
+## T1021.002, Traced Through Its Own Coverage States
+
+<CoverageJourney />
+
+That three-word progression, **Unknown, Claimed, Validated**, is worth being precise about, because the gap between the middle and the last one is where most security programs quietly live without noticing:
+
+- **Unknown** means exactly that: the team hasn't established whether the required visibility or detection capability exists. Not "probably fine," not "likely covered by the EDR," actually unknown.
+- **Claimed** means a detection, a tool, or a vendor dashboard says the technique is covered, but nobody has recently produced evidence that claim is true. This is the state most coverage spreadsheets quietly live in, and the most dangerous one to mistake for finished, because it looks identical to Validated from the outside.
+- **Validated** means an authorized test produced evidence: the telemetry was generated, it reached the platform, the detection logic matched, and the resulting alert carried enough context to act on. Part 5's five-step test is what moved T1021.002 from Claimed to Validated, not the existence of AN1468 on the technique page.
+
+A detection rule existing, a vendor marketing slide, or a technique appearing on a Navigator layer are all, at most, a Claimed-level data point. None of them are evidence by themselves. The discipline this whole series has been building, one layer at a time, is just this: don't let a Claimed-level artifact get treated as Validated-level evidence, anywhere in the chain, whether that's a technique mapping, a group attribution, a detection strategy, or a mitigation.
+
+## The Real Tools, Briefly
+
+A handful of tools, all free and maintained by the Center for Threat-Informed Defense, exist specifically to make this workflow repeatable instead of a one-off exercise redone from scratch every time:
+
+| Tool | What it's actually for |
+|---|---|
+| **[ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/)** | Visualize and annotate techniques in layers, exactly the kind of Unknown/Claimed/Validated layer this part is built around. |
+| **[ATT&CK Powered Suit](https://ctid.mitre.org/projects/attack-powered-suit/)** | A browser extension that helps translate an unstructured CTI report, like the Part 4 C0029 writeup, into candidate technique mappings, exported straight into Navigator. |
+| **[Technique Inference Engine (TIE)](https://ctid.mitre.org/projects/technique-inference-engine/)** | A machine-learning tool that suggests plausibly related techniques from a partial observed set. Useful for widening an investigation; its suggestions are hypotheses, not confirmed behavior. |
+| **[ATT&CK Workbench](https://ctid.mitre.org/projects/attck-workbench)** | A place to preserve internal notes, detection designs, and validation results so the next review doesn't start from zero, this post, structurally, is doing by hand what Workbench is built to do systematically. |
+| **[ATT&CK Sync](https://ctid.mitre.org/)** | Helps review what changed between ATT&CK releases. Given how much of this series turned out to hinge on catching recent changes, the Stealth/Defense Impairment split in Part 3, Data Sources' deprecation in Part 5, a tool built specifically to catch exactly that kind of drift is worth having on a schedule, not just reached for when something breaks. |
+
+None of these tools produce Validated-level evidence by themselves. Navigator shows you what you believe. TIE suggests what might be related. Workbench remembers what you found. Sync tells you what changed. The actual validation step, Part 5's five-step test, still has to happen outside all of them, against your own environment's real telemetry.
+
+## A Backlog Instead of a Dashboard
+
+The practical output of a coverage review shouldn't be a bigger spreadsheet. It should be a small number of specific, assigned actions. Applied to this series' own running example, a review might produce:
+
+1. **T1021.002: Validated.** AN1468 tested and confirmed (Part 5). Maintain; retest if the environment's logging configuration changes.
+2. **M1026, M1027: Done, low effort.** Policy changes confirmed in place (Part 6). No further action unless an audit finds drift.
+3. **M1035: Open decision, not a gap.** Deliberately not enabled due to operational dependency on admin shares; documented as an accepted risk with AN1468 as the compensating control, not a forgotten TODO.
+4. **Related techniques from C0029's full 28-technique list (Part 4): Unknown.** This series only ever validated one of them. The other 27 are exactly where T1021.002 started, before anyone had done this same five-step process for them specifically.
+
+That last line is the honest note to end a series like this one. Three techniques' worth of deep, validated work out of one campaign's 28 isn't a failure of the method, it's what the method actually looks like applied for real: slow, specific, and honest about what hasn't been done yet rather than inflated into a dashboard that implies more than three techniques' worth of confidence.
+
+<TIDQuiz
+  title="Part 7 Check"
+  questions={[
+    {
+      question: "What specifically moved T1021.002 from 'Claimed' to 'Validated' in this series?",
+      options: [
+        "AN1468 appearing on the official ATT&CK technique page",
+        "Part 5's five-step test: confirming the telemetry generated, reached the platform, the correlation fired, and the alert carried usable context",
+        "Jordan approving the budget for a detection engineer",
+        "D3FEND listing a mapped technique for the related mitigation",
+      ],
+      correctIndex: 1,
+      explanation: "A Detection Strategy and Analytic existing on a technique page is, at most, a Claimed-level data point. Only running the actual authorized test and confirming each link in the chain produces Validated-level evidence.",
+    },
+    {
+      question: "Why is 'Claimed' described as the most dangerous coverage state to mistake for 'Validated'?",
+      options: [
+        "Because Claimed items are usually wrong",
+        "Because it looks identical to Validated from the outside (a rule exists, a dashboard shows green) without the underlying evidence, so it's easy to stop looking at exactly the point where the real risk is still open",
+        "Because Claimed coverage doesn't appear on Navigator layers",
+        "Because only Unknown techniques require any further work",
+      ],
+      correctIndex: 1,
+      explanation: "A Claimed item presents the same outward signal as a Validated one, a rule, a checkmark, a line on a dashboard, which is exactly what makes it easy to treat as finished without ever producing the evidence that would actually justify that.",
+    },
+    {
+      question: "What's the right way to treat M1035 (disabling admin shares) being left off, per the backlog example in this part?",
+      options: [
+        "A forgotten task that needs to be added to next sprint immediately",
+        "Proof the security program failed",
+        "A documented, deliberate decision (accepted risk, with AN1468 as the compensating control) rather than an unlabeled gap",
+        "Irrelevant, since M1026 and M1027 already fully address the risk",
+      ],
+      correctIndex: 2,
+      explanation: "Part 6 established that M1035 carries real operational cost. Choosing not to enable it, with that choice documented and a compensating detection in place, is a legitimate risk decision, not the same thing as an overlooked gap.",
+    },
+    {
+      question: "Why does this part end by noting only 3 of C0029's 28 techniques were actually validated across this series?",
+      options: [
+        "To criticize the series for being incomplete",
+        "Because that's what the method honestly looks like applied in practice: specific, validated work is slow, and an honest backlog says what hasn't been done rather than implying full coverage",
+        "Because the other 25 techniques don't have real mitigations",
+        "Because ATT&CK Sync automatically validates the remaining techniques",
+      ],
+      correctIndex: 1,
+      explanation: "The point isn't that 3 out of 28 is a disappointing score. It's that genuine, validated coverage is inherently slower than a coverage percentage implies, and a program that's honest about that gap is more trustworthy than one that quietly inflates Claimed into Validated to make the dashboard look finished.",
+    },
+  ]}
+/>
+
+## Closing the Loop
+
+Back to Part 1's loop: Understand, Improve, Test and Measure, Learn and Repeat. This series walked that loop once, all the way around, on one real campaign and one real technique inside it. C0029 was the Understand step (Parts 1 and 4). AN1468 and the four mitigations were Improve (Parts 5 and 6). The five-step validation process was Test and Measure (Part 5). And this part, the honest backlog, the 27 still-Unknown techniques, is Learn and Repeat: not a finish line, the input to doing this again, for the next technique, with slightly better judgment about where the real work actually is than the team had at the start of Part 1.
+
+That's the whole argument this series has been making one layer at a time: ATT&CK is a vocabulary precise enough to support that loop, not a checklist that completes it for you. The framework can tell you what a tactic is, what a technique commits you to, which tools exist to help. It can't do the five-step test. It can't decide whether M1035 is worth your organization's operational cost. It can't tell you, honestly, whether "covered" means mapped, claimed, or validated on your own dashboard right now. That part was always going to be the actual work. ATT&CK just makes sure, when you do it, you and the next person doing the same work are using the same words to describe it.
+
+## References & Further Reading
+
+1. **[ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/)**
+2. **[CTID: ATT&CK Powered Suit](https://ctid.mitre.org/projects/attack-powered-suit/)**
+3. **[CTID: Technique Inference Engine](https://ctid.mitre.org/projects/technique-inference-engine/)**
+4. **[CTID: ATT&CK Workbench](https://ctid.mitre.org/projects/attck-workbench)**
+5. **[Center for Threat-Informed Defense](https://ctid.mitre.org/)**, home of ATT&CK Sync and the other tools referenced throughout this part.

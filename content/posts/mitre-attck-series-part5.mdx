@@ -1,0 +1,135 @@
+---
+title: "Threat-Informed Defense Series Part 5: From Technique to a Detection You Can Actually Trust"
+description: "Part 5 of the Threat-Informed Defense series. ATT&CK doesn't hand you a working detection, it hands you a starting point, and the gap between the two is where most detection engineering actually happens. Picks up C0029's documented SMB lateral movement from Part 4 and walks it through the real, current structure (Detection Strategies and Analytics replaced Data Sources entirely in October 2025) to a testable, telemetry-backed detection."
+date: "2026-10-16"
+author: "Mohamed Habib Jaouadi"
+tags: ["mitre-attack", "threat-informed-defense", "detection-engineering", "telemetry", "soc"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Abstract threat intelligence network visualization"
+visibility: "public"
+series: "Threat-Informed Defense & MITRE ATT&CK"
+seriesOrder: 5
+---
+
+> **Series Focus:** [Part 4](/posts/mitre-attck-series-part4) walked C0029, the campaign that breached MITRE's own network, through groups, software, and campaigns. This part picks up a specific piece of that campaign's documented behavior, lateral movement over SMB, and follows it through detection engineering: from a technique ID to telemetry requirements to an analytic you could actually test.
+
+<TIDDialogue
+  title="Doesn't ATT&CK just tell you how to detect it?"
+  lines={[
+    { speaker: "lead", text: "I keep seeing 'T1021.002, SMB lateral movement' on coverage slides like it's a solved problem. Doesn't the technique page just tell you how to detect it?" },
+    { speaker: "detection", text: "It tells you an approach. Whether that approach actually fires in your environment is an entirely separate question, and it's the one that takes the actual work." },
+    { speaker: "soc", text: "I've gotten alerts that technically match a technique description and told me nothing useful. 'SMB share accessed.' Great. Which one, by whom, and was anything weird about it?" },
+    { speaker: "detection", text: "Right, that's a one-event detection, and it's almost always noise. The real version correlates multiple events, which means multiple pieces of telemetry all have to actually be collected, reaching the same place, at the same time." },
+    { speaker: "cti", text: "So the C0029 report said 'lateral movement via SMB.' What does that sentence actually commit a detection engineer to build?" },
+    { speaker: "detection", text: "More than a sentence. Let's go through it properly." },
+  ]}
+/>
+
+**The crux of this part:** what's the actual, current chain from an ATT&CK technique ID to a detection you could put in front of an auditor and defend, and what happens at each link where that chain is most likely to quietly break?
+
+## The Structure Changed, and Not Long Ago
+
+Before the chain itself: a correction, because this is a place where citing last year's structure as current produces real, concrete mistakes rather than a dated nuance. Part 1 of this series originally described ATT&CK technique pages as carrying two detection-relevant layers, Data Sources and Data Components. That was accurate once. It stopped being accurate in **October 2025**, when ATT&CK v18 deprecated Data Sources outright, replacing single-sentence detection text with a structured three-layer model:
+
+- **Detection Strategy**: a high-level approach to catching a technique, identified by a `DET####` ID.
+- **Analytic**: platform-agnostic logic implementing that strategy, identified by an `AN####` ID.
+- **Data Component**: the specific observable event property an analytic actually depends on.
+
+If a resource, a training deck, or an earlier draft of this series describes Data Sources as a current layer, it's citing the superseded structure. Worth checking the date on anything that still does.
+
+<DetectionChainDiagram />
+
+## T1021.002, End to End
+
+Checked live against the current technique page, [T1021.002, SMB/Windows Admin Shares](https://attack.mitre.org/techniques/T1021/002/), carries exactly one Detection Strategy: **DET0530, "Multi-Event Detection for SMB Admin Share Lateral Movement."** Its analytic, **AN1468**, describes the behavior precisely: SMB-based remote file share access to `ADMIN$` or `C$`, followed by remote service creation, scheduled task creation, or suspicious process execution on the same target host.
+
+Read that analytic carefully and notice what it refuses to do: it doesn't fire on share access alone. A single `ADMIN$` connection happens constantly in a normal Windows environment, backup jobs, software deployment, legitimate remote administration. What makes this analytic specific enough to be useful is the *correlation*, share access followed by something that looks like code execution on the far end, which is exactly the pattern Part 4's C0029 campaign exhibited: Impacket-style tooling reaching a target over SMB and then creating a remote service to execute.
+
+That correlation requirement is also exactly where a one-event detection fails Priya's 2am test from the dialogue above. "SMB share accessed" alone is noise. "SMB share accessed, immediately followed by a new service installed on the same host" is a specific, investigable pattern.
+
+## What Has to Actually Be Collected
+
+An analytic is a specification, not telemetry. Before it can fire on anything, the events it depends on have to exist in your environment, reach your detection platform, and carry the fields the correlation needs. For AN1468's pattern specifically, independently documented Windows detection guidance for this exact technique points to a concrete, checkable set of events:
+
+| Event | What it establishes |
+|---|---|
+| **Windows Event ID 5140** | A network share object was accessed, filtered for `ADMIN$`/`C$`/`IPC$` from a non-administrative source. This is the "share access" half of the correlation. |
+| **Windows Event ID 4624 (LogonType 3)** | The network logon that necessarily preceded the share access. Ties a specific account and source IP to the access. |
+| **Windows Event ID 7045** | A new service was installed, the classic PsExec/Impacket-style signature on the target side. This is the "suspicious process execution" half. |
+| **Windows Event ID 4648** | A logon using explicit credentials, which fires when a process authenticates to a remote host with different credentials than the current session, a common signature of Impacket's `wmiexec`/`smbexec` style tools specifically. |
+
+Four separate event types, from at least two different hosts' logs (the source of the connection and the target that got a new service), have to be collected, retained, and correlatable by timestamp and account for AN1468 to mean anything in practice. If 7045 isn't being logged on member servers, or 5140 auditing isn't enabled, the detection strategy and the analytic can both be exactly right and still produce nothing. That's not a logic problem. It's a visibility problem, and the fix is enabling the right audit policy, not rewriting the correlation.
+
+## Testing It, Not Just Writing It
+
+A detection existing in a SIEM is not evidence that it works. The practical test for AN1468 specifically:
+
+1. **Confirm the four event types above are actually being generated** on a representative target host, not assumed from a vendor datasheet.
+2. **Confirm they reach the detection platform**, SIEM or EDR, intact, with the fields the correlation needs (source IP, account, target host, timestamp).
+3. **Run an authorized, representative test**: an admin share connection followed by a deliberate remote service creation, the exact pattern AN1468 is built to catch, in a controlled environment.
+4. **Confirm the correlation actually fires**, not just that the individual events appear in logs separately.
+5. **Confirm the resulting alert carries enough context** (which account, which two hosts, which service name) for an analyst to investigate without starting from zero.
+
+Skipping straight from "the technique page has a Detection Strategy" to "we're covered" treats a specification as if it were a tested result. Part 7 of this series covers exactly this distinction, claimed coverage versus validated coverage, in depth; for now, the practical version is simpler: a Detection Strategy and Analytic existing on a technique page is the starting point for this five-step process, not a substitute for it.
+
+[MITRE CAR](https://car.mitre.org/), the Cyber Analytics Repository, is worth knowing about here too: it's a separate, still-actively-maintained project with pseudocode and platform-specific analytic examples, a genuinely useful supplementary resource for step 3 above, but it doesn't cover every technique, and it's not a replacement for validating against your own environment's actual telemetry.
+
+<TIDQuiz
+  title="Part 5 Check"
+  questions={[
+    {
+      question: "What happened to Data Sources in ATT&CK v18 (October 2025)?",
+      options: [
+        "They were renamed to Data Components",
+        "Nothing; they remain the current detection-relevant layer",
+        "They were deprecated outright, replaced by a three-layer Detection Strategy / Analytic / Data Component structure",
+        "They were merged into the tactic field",
+      ],
+      correctIndex: 2,
+      explanation: "ATT&CK v18 replaced the old single-sentence detection text and the Data Source category with Detection Strategies, Analytics, and an updated Data Component layer. Material describing Data Sources as current is citing the superseded structure.",
+    },
+    {
+      question: "Why does AN1468 require share access AND a follow-on event (new service, scheduled task, suspicious process), rather than firing on share access alone?",
+      options: [
+        "Because share access alone can't be logged",
+        "Because share access to ADMIN$/C$ happens constantly in normal operations (backups, software deployment); the correlation with a follow-on execution event is what makes the pattern specific enough to be useful",
+        "Because ATT&CK requires at least two events per analytic by policy",
+        "Because single-event analytics are technically impossible to build",
+      ],
+      correctIndex: 1,
+      explanation: "A single ADMIN$ connection is routine and noisy on its own. Correlating it with a suspicious follow-on action on the target host is what turns a common administrative event into an investigable signal.",
+    },
+    {
+      question: "If Windows Event ID 7045 isn't being logged on member servers, what kind of problem is that, and what's the right fix?",
+      options: [
+        "A logic problem; rewrite the analytic's correlation conditions",
+        "A visibility problem; the detection strategy and analytic can be correct and still produce nothing, the fix is enabling the right audit policy, not changing the logic",
+        "Not a real problem, since 5140 alone is sufficient",
+        "A platform licensing issue with no available fix",
+      ],
+      correctIndex: 1,
+      explanation: "A correctly specified analytic that depends on telemetry your environment isn't collecting will never fire, no matter how well-written the correlation logic is. That's a collection gap, not a detection-logic bug.",
+    },
+    {
+      question: "Why is a Detection Strategy and Analytic existing on an ATT&CK technique page not, by itself, evidence that an organization is covered?",
+      options: [
+        "Because ATT&CK's detection guidance is usually wrong",
+        "Because it's a specification of an approach, not proof that the required telemetry is collected, reaches the platform, correlates correctly, and produces an actionable alert in that specific environment",
+        "Because Detection Strategies only apply to Mobile ATT&CK",
+        "Because MITRE CAR must be used instead",
+      ],
+      correctIndex: 1,
+      explanation: "The technique page gives you a starting, testable specification. Whether it actually works requires the five-step validation process: confirming telemetry generation, platform delivery, correlation firing, and alert context, in your own environment.",
+    },
+  ]}
+/>
+
+## What's Next
+
+[Part 6](/posts/mitre-attck-series-part6) moves from detecting a behavior to reducing its likelihood or impact in the first place: ATT&CK mitigations, D3FEND's structured defensive vocabulary, and the real-world case for combining prevention with detection instead of treating them as competing budget lines.
+
+## References & Further Reading
+
+1. **[MITRE ATT&CK: T1021.002, SMB/Windows Admin Shares](https://attack.mitre.org/techniques/T1021/002/)**, checked live for DET0530 and AN1468.
+2. **[MITRE ATT&CK: Updates, October 2025 (v18)](https://attack.mitre.org/resources/updates/updates-october-2025/)**, the primary source for the Data Sources deprecation and the Detection Strategy/Analytic structure.
+3. **[MITRE Cyber Analytics Repository (CAR)](https://car.mitre.org/)**

@@ -59,6 +59,7 @@ import { MatrixCompare } from "@/components/mitre/matrix-compare"
 import { ICSTacticCompare } from "@/components/mitre/ics-tactic-compare"
 import { ATTCKObjectsPivot } from "@/components/mitre/attck-objects-pivot"
 import { DetectionChainDiagram } from "@/components/mitre/detection-chain-diagram"
+import { MitigationD3FENDMap } from "@/components/mitre/mitigation-d3fend-map"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
@@ -148,6 +149,7 @@ const postComponents = {
   ICSTacticCompare: () => <ICSTacticCompare />,
   ATTCKObjectsPivot: () => <ATTCKObjectsPivot />,
   DetectionChainDiagram: () => <DetectionChainDiagram />,
+  MitigationD3FENDMap: () => <MitigationD3FENDMap />,
 }
 
 interface PostPageProps {

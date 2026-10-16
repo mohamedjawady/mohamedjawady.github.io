@@ -1,0 +1,123 @@
+---
+title: "Threat-Informed Defense Series Part 6: Mitigations, D3FEND, and When to Prevent Instead of Detect"
+description: "Part 6 of the Threat-Informed Defense series. Part 5 built a detection for T1021.002. This part asks the other half of the question: should some of that risk have been prevented instead? Covers ATT&CK's four real, live mitigations for the same technique, D3FEND's more specific defensive vocabulary mapped to them, and a practical rule for deciding what to mitigate versus what to detect."
+date: "2026-10-16"
+author: "Mohamed Habib Jaouadi"
+tags: ["mitre-attack", "threat-informed-defense", "d3fend", "mitigations", "security-architecture"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Abstract threat intelligence network visualization"
+visibility: "public"
+series: "Threat-Informed Defense & MITRE ATT&CK"
+seriesOrder: 6
+---
+
+> **Series Focus:** [Part 5](/posts/mitre-attck-series-part5) built a tested, telemetry-backed detection for T1021.002, SMB lateral movement, the pattern C0029 used against MITRE itself. This part asks the question Part 5 left open: should some of that same risk have been prevented instead of detected, and what does "mitigated" actually commit a defender to?
+
+<TIDDialogue
+  title="Didn't we already fix this?"
+  lines={[
+    { speaker: "lead", text: "We just spent all of Part 5 building a detection for SMB lateral movement. T1021.002 also lists four mitigations. Why do we need both? Pick one, it's cheaper." },
+    { speaker: "detection", text: "Because 'mitigated' doesn't mean 'can't happen.' One of those four mitigations is 'disable Windows administrative shares entirely,' which absolutely would have stopped C0029's lateral movement, and would also break every piece of remote admin tooling half the IT department depends on." },
+    { speaker: "lead", text: "So mitigations aren't free either. I assumed prevention was obviously the cheaper option." },
+    { speaker: "cti", text: "Prevention is cheaper when you can actually apply it without breaking something load-bearing. The expensive part isn't deciding to prevent, it's figuring out which preventions are safe to turn on in your specific environment." },
+    { speaker: "soc", text: "And some of this doesn't even feel like a choice. Not reusing local admin passwords across machines costs basically nothing and should just be done, detection or not." },
+    { speaker: "detection", text: "Right, and that's the actual question for today: which of these four is 'just do it,' which is 'detect because blocking it breaks things,' and which is 'do both because the blast radius is too big to leave to one layer.'" },
+  ]}
+/>
+
+**The crux of this part:** given a technique that already has a working detection, what does a listed mitigation actually commit a defender to, and how do you decide, for each one, whether it's worth the operational cost of turning it on versus relying on detection alone?
+
+## T1021.002's Four Real Mitigations
+
+Checked live against the current [T1021.002 technique page](https://attack.mitre.org/techniques/T1021/002/), exactly four mitigations are listed, the same technique Part 5 built AN1468 for:
+
+<MitigationD3FENDMap />
+
+Notice the spread. M1026, privileged account management, is close to a free lunch: don't let domain users sit in the local Administrators group across machines, don't allow remote admin logons with local credentials. It costs process discipline, not functionality. M1035, disabling administrative shares outright, is the opposite: it would eliminate the exact pathway C0029 used, and it would also break legitimate remote administration, software deployment tooling, and backup jobs that plenty of organizations still depend on `ADMIN$`/`C$` for. Same technique, same mitigations list, wildly different cost to actually turn on.
+
+This is the detail a flat "technique: mitigated" checkbox erases completely. A mitigation existing on a page is a menu, not a prescription. The actual work is figuring out which items on that menu your environment can afford.
+
+## D3FEND: Naming the Specific Thing, Not Just the Category
+
+ATT&CK's mitigations are broad categories, "Privileged Account Management" covers a lot of ground. [D3FEND](https://d3fend.mitre.org/), a separate MITRE knowledge graph, exists to get more specific about the actual defensive technique underneath a broad mitigation label. Checked directly against D3FEND's own ATT&CK-mitigation mapping:
+
+- **M1037, Filter Network Traffic** maps to **D3-NI, Network Isolation**: preventing hosts from reaching non-essential network resources, the specific mechanism behind "restrict SMB with the host firewall."
+- **M1026, Privileged Account Management** maps to **D3-LAM (Local Account Monitoring)** and **D3-DAM (Domain Account Monitoring)**: watching for unauthorized local and domain account activity, not just the policy of restricting privilege, the technical means of noticing when the policy's being violated.
+- **M1027, Password Policies** maps to **D3-SPP, Strong Password Policy**: directly, unsurprisingly, since the mitigation and the D3FEND technique describe almost the same thing from two angles.
+
+What D3FEND adds isn't new information, it's vocabulary precision. "We do privileged account management" is a sentence that could mean almost anything. "We do local and domain account monitoring (D3-LAM, D3-DAM) specifically" is a sentence that names an actual technical capability someone could be asked to demonstrate. It's worth being honest about D3FEND's limits too: a mapping existing between an ATT&CK mitigation and a D3FEND technique is not proof either one is implemented in a given environment, any more than a Detection Strategy existing on a technique page proved a detection worked back in Part 5. Same discipline, different layer.
+
+## Prevent What You Can Afford, Detect What You Can't
+
+Jordan's instinct in the dialogue above, that prevention should just be the obviously cheaper choice, is the right instinct pointed at the wrong variable. The real cost of a mitigation isn't implementing it, it's everything downstream that depended on the thing being allowed. A practical way to sort the four options above, and most mitigation decisions generally:
+
+| Question | If yes | T1021.002 example |
+|---|---|---|
+| **Does turning this on break anything that currently works?** | Weigh the operational cost seriously before committing | M1035 (disable admin shares) almost certainly yes, in most environments |
+| **Is the cost close to zero and the benefit real?** | Just do it, no tradeoff debate needed | M1026, M1027: process and policy changes, not functionality removed |
+| **Does this reduce the blast radius if prevention fails anyway?** | Worth doing even alongside detection | M1026 again: limits damage even if an account does get compromised |
+| **Can the behavior be observed reliably if you don't block it?** | Lean on detection instead of forcing prevention | SMB admin share access can be, which is exactly why Part 5's AN1468 is a reasonable primary control here |
+
+Applied to T1021.002 specifically: M1026 and M1027 are close to unconditional, do them regardless of whether AN1468 exists, because the cost is near zero and the benefit (smaller blast radius, harder credential reuse) holds up either way. M1037, network-level SMB filtering, is a worthwhile middle option in most environments, segmenting which hosts can even reach `ADMIN$` on which other hosts, without eliminating the capability outright. M1035, disabling administrative shares entirely, is the one that actually deserves the debate Jordan wanted to skip: it's the strongest prevention on the list and the most likely to break something real, which is exactly the scenario where Part 5's detection earns its keep as the primary control instead of a backup to a prevention that never got safely turned on.
+
+The general shape, independent of this specific technique: mitigate what can be made true consistently, without breaking the organization. Detect what can't be blocked without unacceptable cost. For anything with a large enough blast radius if it fails, M1026-style access restriction being a good example, do both, because detection catches what prevention misses and restricted blast radius limits the damage detection didn't catch in time.
+
+<TIDQuiz
+  title="Part 6 Check"
+  questions={[
+    {
+      question: "Why isn't M1035 (disabling Windows administrative shares) automatically the obvious choice for T1021.002, given it would eliminate the pathway entirely?",
+      options: [
+        "Because M1035 doesn't actually stop the technique",
+        "Because it's not a real ATT&CK mitigation",
+        "Because eliminating admin shares also breaks legitimate remote administration, software deployment, and backup tooling many environments depend on; the strongest prevention option often carries the highest operational cost",
+        "Because D3FEND doesn't map to it",
+      ],
+      correctIndex: 2,
+      explanation: "The mitigation's strength and its operational cost are often correlated. M1035 would genuinely stop this specific lateral-movement path, but at the cost of breaking real, currently-functioning administrative tooling, which is exactly the tradeoff that needs deliberate evaluation rather than a reflexive 'prevention is always cheaper' assumption.",
+    },
+    {
+      question: "What does D3FEND add that the ATT&CK mitigation (e.g., M1026, Privileged Account Management) doesn't already provide?",
+      options: [
+        "Proof that the mitigation is implemented in a specific environment",
+        "A more specific technical vocabulary (e.g., D3-LAM, Local Account Monitoring) for the actual capability underneath a broad mitigation category",
+        "A replacement for ATT&CK mitigations entirely",
+        "A guarantee that the mitigation stops the technique completely",
+      ],
+      correctIndex: 1,
+      explanation: "D3FEND doesn't prove anything is deployed or working, same limitation as the ATT&CK mitigation itself. What it adds is precision: naming the specific defensive technique (local/domain account monitoring) instead of the broad category (privileged account management) it falls under.",
+    },
+    {
+      question: "According to the decision framework in this part, when should a team prioritize detection over prevention for a given technique?",
+      options: [
+        "Always; detection is strictly superior to prevention",
+        "Never; prevention should always be attempted first regardless of cost",
+        "When the behavior can be observed reliably and blocking it would break something that currently works, as with SMB admin share access in most environments",
+        "Only when no ATT&CK mitigation exists for the technique",
+      ],
+      correctIndex: 2,
+      explanation: "The framework isn't 'prevention beats detection.' It's: mitigate what can be made consistently true without unacceptable cost, and lean on detection for behavior that's reliably observable but too costly or disruptive to block outright.",
+    },
+    {
+      question: "Why are M1026 and M1027 described as 'close to unconditional' in this part, regardless of whether a detection already exists?",
+      options: [
+        "Because they are the only mitigations D3FEND maps to",
+        "Because their operational cost is near zero (process and policy discipline, not removed functionality) while the benefit, smaller blast radius and harder credential reuse, holds up independently of any detection",
+        "Because ATT&CK ranks them as mandatory",
+        "Because they are the newest mitigations added to the technique page",
+      ],
+      correctIndex: 1,
+      explanation: "Unlike M1035, which trades functionality for prevention strength, M1026 and M1027 cost discipline rather than capability. That low cost relative to their benefit is what makes them close to a default yes, independent of whatever detection coverage already exists.",
+    },
+  ]}
+/>
+
+## What's Next
+
+[Part 7](/posts/mitre-attck-series-part7) closes the series: the tools that turn everything from Parts 1 through 6, technique mapping, detection engineering, mitigation decisions, into a repeatable program, and the honest distinction between a technique you've mapped, a technique you've claimed coverage for, and a technique you've actually validated.
+
+## References & Further Reading
+
+1. **[MITRE ATT&CK: T1021.002 Mitigations](https://attack.mitre.org/techniques/T1021/002/)**, checked live for M1037, M1035, M1027, and M1026.
+2. **[D3FEND: ATT&CK Mitigation Mappings](https://next.d3fend.mitre.org/mappings/attack-mitigations)**, the primary source for the D3-NI, D3-LAM, D3-DAM, and D3-SPP mappings above.
+3. **[D3FEND Matrix](https://d3fend.mitre.org/)**

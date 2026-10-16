@@ -53,6 +53,10 @@ import { PclntabStructureDiagram } from "@/components/visualizations/pclntab-str
 import { TIDDialogue } from "@/components/mitre/tid-dialogue"
 import { TIDQuiz } from "@/components/mitre/tid-quiz"
 import { TIDLoopDiagram } from "@/components/mitre/tid-loop-diagram"
+import { TIDOrgChart } from "@/components/mitre/tid-org-chart"
+import { TechniqueTacticBranches } from "@/components/mitre/technique-tactic-branches"
+import { MatrixCompare } from "@/components/mitre/matrix-compare"
+import { ICSTacticCompare } from "@/components/mitre/ics-tactic-compare"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
@@ -136,6 +140,10 @@ const postComponents = {
   TIDDialogue: TIDDialogue,
   TIDQuiz: TIDQuiz,
   TIDLoopDiagram: () => <TIDLoopDiagram />,
+  TIDOrgChart: () => <TIDOrgChart />,
+  TechniqueTacticBranches: TechniqueTacticBranches,
+  MatrixCompare: () => <MatrixCompare />,
+  ICSTacticCompare: () => <ICSTacticCompare />,
 }
 
 interface PostPageProps {

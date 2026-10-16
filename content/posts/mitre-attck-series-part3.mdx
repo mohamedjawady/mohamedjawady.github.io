@@ -43,6 +43,8 @@ The split also absorbed a structural change: the old parent technique [T1562, Im
 
 What this changes operationally, concretely: a coverage layer built before April 2026 that has "Defense Evasion: covered" as a single line now needs to be read as two separate claims. A detection that catches an adversary clearing Windows event logs (Defense Impairment) tells you nothing about whether you'd catch the same adversary authenticating with a stolen password and blending into normal traffic (Stealth). They were always two different problems. The split just stopped letting one checkmark paper over both.
 
+<MatrixCompare />
+
 ## Enterprise: the Matrix Most Teams Already Know
 
 Enterprise ATT&CK covers the environment this series has used for both examples so far, Mustang Panda's DLL side-loading in Part 1, Scattered Spider's help-desk social engineering in Part 2, Windows and Linux endpoints, cloud identity, SaaS, containers, and the networks connecting them. If a team's primary exposure is corporate IT and cloud infrastructure, this is where nearly all of the actual work happens, and it's also the matrix with the deepest tooling support, which Part 5 through Part 7 of this series lean on heavily.
@@ -72,6 +74,8 @@ Two real, separately documented incidents map cleanly to these, and the differen
 **[TRITON/TRISIS](https://attack.mitre.org/software/S1009)**, discovered in 2017, targeted a Middle Eastern petrochemical plant's Schneider Electric Triconex Safety Instrumented System, the system specifically designed to detect a dangerous condition and shut the process down safely. TRITON used [T0800, Activate Firmware Update Mode](https://attack.mitre.org/techniques/T0800/), tricking the safety controller into a firmware-update state that halts its normal monitoring. The plant kept running while its safety net was quietly disabled. That's Inhibit Response Function by definition: not touching the process, disabling what would have caught a problem with the process.
 
 **[Industroyer2](https://attack.mitre.org/software/S1072)**, used by Sandworm against Ukrainian power infrastructure in 2022 (and a close relative of the technique Sandworm used in the 2015 Ukraine grid attack too), used [T0855, Unauthorized Command Message](https://attack.mitre.org/techniques/T0855/) to send commands directly to substation breakers, instructing them to open outside any legitimate operational reason. That's Impair Process Control: not disabling a safety system, directly manipulating the process the safety system exists to watch over.
+
+<ICSTacticCompare />
 
 Put side by side, the distinction stops being academic: TRITON removed the net without touching the tightrope walker. Industroyer2 pushed the tightrope walker without touching the net. A defense that only watches for one of those two things is blind to the other, which is the entire reason ICS ATT&CK keeps them as separate tactics instead of folding both into one generic "Impact."
 

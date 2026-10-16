@@ -40,6 +40,17 @@ Jordan's frustration is a reasonable first reaction to [T1078, Valid Accounts](h
 
 (Stealth is worth a flag here before Part 3 covers it properly: this used to be a single tactic called Defense Evasion. MITRE split it into Stealth and Defense Impairment in the April 2026 release, and T1078 landed in Stealth specifically, not Defense Impairment, because using a real password to blend in is categorically different from disabling the logging that would have caught it. More on that split next part.)
 
+<TechniqueTacticBranches
+  techniqueId="T1078"
+  techniqueName="Valid Accounts"
+  branches={[
+    { tactic: "Initial Access", why: "A stolen or purchased password gets the adversary into the environment in the first place, no exploit required." },
+    { tactic: "Persistence", why: "An account that stays valid is access that survives a reboot, a patch, or an EDR sweep, unlike a dropped implant." },
+    { tactic: "Privilege Escalation", why: "The same mechanism, compromising a more privileged account instead of a regular one, moves the adversary up instead of just in." },
+    { tactic: "Stealth", why: "Authenticating with real credentials doesn't trip the alerts a malicious binary would. It looks like Tuesday." },
+  ]}
+/>
+
 The thing Jordan's missing isn't a flaw in ATT&CK, it's that **a technique describes a capability, and a tactic describes what a specific adversary used that capability for, on a specific occasion.** T1078 doesn't commit to a tactic because the behavior itself, authenticating with valid credentials, doesn't commit to an objective. The same key opens whichever door the adversary points it at. What tells you which tactic applies isn't the technique page, it's the evidence: what was the account used to accomplish, *this time*?
 
 That reframes Jordan's coverage-layer problem rather than solving it for free. You don't get to mark "T1078 covered" once. You have to ask whether your telemetry catches valid-account abuse used for initial entry, separately from whether it catches valid-account abuse used to maintain access after an incident response team thinks they've evicted the adversary. Those are different detections even though they're the same `T####` ID.

@@ -28,11 +28,13 @@ const difficultyIcons = {
 
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
+import SplunkSplCheatsheet from "@/components/cheatsheets/splunk-spl"
 
 // Import cheatsheet components dynamically
 const cheatsheetComponents: Record<string, React.ComponentType> = {
   "linux-system-calls": LinuxSystemCallsCheatsheet,
   "GdbDebuggingCheatsheet": GdbDebuggingCheatsheet,
+  "SplunkSplCheatsheet": SplunkSplCheatsheet,
   // Add your cheatsheet components here as you create them
 }
 

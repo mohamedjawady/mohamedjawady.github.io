@@ -4,6 +4,7 @@ export type ToolCategory =
   | "Decision & Operations Cycles"
   | "Risk Analysis"
   | "Matrices & Scoring"
+  | "Query & Detection"
   | "Free-Form"
 
 export interface ToolEntry {
@@ -22,6 +23,7 @@ export const CATEGORY_ORDER: ToolCategory[] = [
   "Decision & Operations Cycles",
   "Risk Analysis",
   "Matrices & Scoring",
+  "Query & Detection",
   "Free-Form",
 ]
 
@@ -123,6 +125,16 @@ export const tools: ToolEntry[] = [
     href: "/tools/admiralty-code",
     category: "Matrices & Scoring",
     tags: ["admiralty code", "source reliability", "intelligence grading", "export"],
+    status: "available",
+  },
+  {
+    id: "spl-builder",
+    title: "Splunk SPL Builder",
+    description:
+      "Pick a search command and a variant (function, option, or combination). Get a generated SPL example, the shape of the index data it expects, and the output table it produces.",
+    href: "/tools/spl-builder",
+    category: "Query & Detection",
+    tags: ["splunk", "spl", "siem", "query builder", "detection"],
     status: "available",
   },
   {

@@ -50,6 +50,9 @@ import { ConcurrencyPatternsCompare } from "@/components/visualizations/concurre
 import { GoConcurrencyPrimer } from "@/components/visualizations/go-concurrency-primer"
 import { GoEntryPointFlow } from "@/components/visualizations/go-entry-point-flow"
 import { PclntabStructureDiagram } from "@/components/visualizations/pclntab-structure-diagram"
+import { TIDDialogue } from "@/components/mitre/tid-dialogue"
+import { TIDQuiz } from "@/components/mitre/tid-quiz"
+import { TIDLoopDiagram } from "@/components/mitre/tid-loop-diagram"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
@@ -130,6 +133,9 @@ const postComponents = {
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,
   CollapsibleCode: CollapsibleCode,
   Term: Term,
+  TIDDialogue: TIDDialogue,
+  TIDQuiz: TIDQuiz,
+  TIDLoopDiagram: () => <TIDLoopDiagram />,
 }
 
 interface PostPageProps {
@@ -337,6 +343,10 @@ export default async function PostPage({ params }: PostPageProps) {
                   source={post.content}
                   components={postComponents}
                   options={{
+                    // Content is first-party (authored by the site owner), so
+                    // JS expression props (e.g. array/object literals passed
+                    // to interactive components) don't need to be stripped.
+                    blockJS: false,
                     mdxOptions: {
                       remarkPlugins: [remarkMath, remarkGfm],
                       rehypePlugins: [rehypeKatex, rehypeHighlight],

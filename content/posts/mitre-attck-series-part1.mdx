@@ -1,0 +1,160 @@
+---
+title: "Threat-Informed Defense Series Part 1: MITRE, ATT&CK, and What 'Evidence-Based Security' Actually Means"
+description: "The first part of a seven-part series on operationalizing MITRE ATT&CK, built around a four-person cast arguing through the material from their own seats: a SOC analyst, a CTI analyst, a detection engineer, and a security program lead. Part 1 covers the real organizational structure behind ATT&CK (and corrects a common misconception about it), the threat-informed defense loop, and what a tactic, technique, sub-technique, and procedure actually are, grounded in two real, currently-tracked threat groups instead of hypothetical scenarios."
+date: "2026-10-16"
+author: "Mohamed Habib Jaouadi"
+tags: ["mitre-attack", "threat-informed-defense", "cti", "detection-engineering", "soc"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Abstract threat intelligence network visualization"
+visibility: "public"
+series: "Threat-Informed Defense & MITRE ATT&CK"
+seriesOrder: 1
+---
+
+> **Series Focus:** Seven parts covering MITRE ATT&CK from the organizations that maintain it through operationalizing it: detection engineering, mitigations and D3FEND, and the tooling that turns a framework into a program. Every technique ID, tool name, and version claim in this series is checked against a primary source, not copied from a training deck.
+
+## How This Series Works
+
+A structural note before any ATT&CK content, because the format needs explaining.
+
+This series borrows its shape from [*Operating Systems: Three Easy Pieces*](https://pages.cs.wisc.edu/~remzi/OSTEP/) (OSTEP), the free operating systems textbook by Remzi and Andrea Arpaci-Dusseau. OSTEP's chapters open with a short, two-voice dialogue, Professor and Student, before the formal material starts: a handful of quick, often funny lines where the student asks the blunt question a reader would actually ask, the professor fumbles toward an answer, someone gets mildly exasperated, and it lands on a single bolded line: the crux of the problem the rest of the chapter exists to solve. It's brief. It happens once, at the top. Everything after it is straight explanation.
+
+ATT&CK material doesn't have OSTEP's problem, MITRE's own documentation is thorough, nobody's short on formal definitions here. What's missing is the friction OSTEP's dialogue generates: a tactic means something different to the analyst who has five minutes to act on an alert than it does to the analyst writing a quarterly report, and most ATT&CK content is written from neither seat. So this series keeps OSTEP's shape, one short scene per part, landing on one crux, but swaps the two-person cast for a five-person one, because the friction that matters here isn't "expert explains to novice," it's "four working analysts, four different jobs, arguing about what the same term should mean":
+
+<TIDDialogue
+  title="Why does this exist?"
+  lines={[
+    { speaker: "soc", text: "So what is this, actually? Another framework I'm supposed to memorize before my next shift?" },
+    { speaker: "facilitator", text: "It's a vocabulary, not a checklist. ATT&CK describes how adversaries actually behave, instead of..." },
+    { speaker: "soc", text: "I know what ATT&CK is, Sam. I have the Navigator matrix taped above my second monitor. What I don't have is time to read seven parts of anything." },
+    { speaker: "cti", text: "To be fair, Priya, that poster is also why half the industry treats ATT&CK like a checklist instead of what it actually is." },
+    { speaker: "detection", text: "Can I just say, from the detection side: nobody ever asks what telemetry you'd need to even see a technique. Every write-up jumps straight from 'adversary does X' to 'here's the rule,' like the data just shows up." },
+    { speaker: "lead", text: "And nobody asks what any of this costs. I've sat through three 'ATT&CK maturity' pitches this year. Two were a spreadsheet with checkmarks on it." },
+    { speaker: "soc", text: "So we're all annoyed at the same framework for different reasons. Does that make it better?" },
+    { speaker: "facilitator", text: "It makes it worth four people in a room instead of one. Let's find out." },
+  ]}
+/>
+
+**The crux of this series:** what does it actually take to turn "we mapped a technique" into "we can prove we'd catch it"? Not whether ATT&CK is useful, it clearly is, but what its basic unit actually commits you to, where that commitment runs out, and who's maintaining the thing in the first place.
+
+## Why This, Why Now
+
+Elena's and Jordan's worries above are the whole reason this series exists. "Threat-informed defense" is a specific claim: that defensive decisions should be driven by documented adversary behavior, not by generic best-practice checklists or whatever a vendor's marketing says their product blocks. The Center for Threat-Informed Defense defines it as:
+
+> "The systematic application of a deep understanding of adversary tradecraft and technology to improve defenses."
+
+That's a real commitment, not a slogan. It means a security program can be asked, "show me the evidence this control works against a specific, real behavior," and should have an answer. Most of this series is about what counts as that evidence and how to get it, not just how to fill in an ATT&CK matrix.
+
+<TIDLoopDiagram />
+
+The loop in that diagram is the shape of the whole series. **Understand** is what ATT&CK is for: a shared vocabulary for adversary behavior. **Improve** is defensive engineering, covered in Parts 5 and 6. **Test and Measure** is where claims get checked against reality instead of assumed. **Learn and Repeat** is what turns isolated projects into an actual program, covered in Part 7. Skip the testing step and you have a matrix full of assumptions. Skip the learning step and every test is a one-off that teaches the organization nothing.
+
+It's fair to notice this loop is the scientific method with better branding: hypothesis, intervention, experiment, iterate. It mostly is. What it adds is a shape that survives a budget meeting. "We're applying the scientific method to security controls" gets blank stares. "Can you show evidence this control works against documented adversary behavior" is the same question restated as something a security lead can actually ask a vendor, and ATT&CK is what makes "documented adversary behavior" mean the same specific thing every time it's said, instead of a different thing in every report.
+
+## The Organizations Behind ATT&CK (and a Correction)
+
+A lot of course material and blog content describes CTID (the Center for Threat-Informed Defense) and MITRE Engenuity as two peer organizations with separate roles: CTID researches, Engenuity evaluates. That's close enough to be dangerous. The actual structure, confirmed directly from MITRE's own materials, is a hierarchy, not a pair:
+
+| Entity | What it actually is |
+|---|---|
+| **MITRE Corporation** | The parent not-for-profit that operates several federally funded R&D centers. |
+| **MITRE Engenuity** | An operating entity under MITRE that runs multiple *initiatives*, including ATT&CK Evaluations and the Center for Threat-Informed Defense. It isn't a peer of CTID, it's the organization CTID operates inside of. |
+| **Center for Threat-Informed Defense (CTID)** | A privately funded, community-driven research program *run by* MITRE Engenuity, with roughly three dozen member organizations. Produces ATT&CK-adjacent tools and research: Navigator, Workbench, the Technique Inference Engine, M3TID, and its successor, INFORM. |
+| **ATT&CK Evaluations** | A separate program, also under MITRE Engenuity, that runs public adversary emulation against commercial security products. |
+| **ATT&CK** | The knowledge base itself, maintained by MITRE (not Engenuity specifically) and funded in part by the U.S. government. |
+
+This isn't pedantry for its own sake. Citing a claim as "CTID says" versus "ATT&CK Evaluations found" is citing two different programs with two different jobs, research and tooling on one side, product testing on the other, and conflating them makes a citation sound more authoritative than it is. It matters a level up from citations too: telling a budget owner "MITRE Engenuity evaluated us" describes a specific, well-defined test against emulated adversary behavior. "We follow MITRE's threat-informed defense framework" could mean someone on the team read one CTID blog post. The hierarchy above is what lets a reader, or a boss, tell those two claims apart.
+
+### M3TID Became INFORM
+
+The course material a lot of training decks are still built on describes M3TID ("Measure, Maximize, and Mature Threat-Informed Defense") as CTID's framework for assessing a program's maturity. That was accurate in April 2024, when M3TID shipped. It's dated now: CTID evolved M3TID directly into **INFORM**, a newer maturity model that, per CTID's own description, organizes assessment into 3 dimensions and 22 measurable components, with rebalanced scoring that weights higher-impact security decisions more heavily than M3TID's original version did.
+
+If you see "M3TID" in a vendor whitepaper or an older course, that's not wrong, exactly, it's the predecessor. INFORM is the one actively maintained today. This is the kind of drift this whole series tries to flag rather than silently inherit: frameworks move, and citing the superseded version as current is a real, checkable mistake, not a nitpick.
+
+## ATT&CK's Actual Vocabulary
+
+Everything else in this series depends on four terms being precise, because loose use of them is where most ATT&CK confusion actually starts.
+
+| Level | Answers | Granularity |
+|---|---|---|
+| **Tactic** | *Why* is the adversary doing this? | The objective. One of 14 Enterprise tactics (more on the exact count and a real structural change to this list in a moment). |
+| **Technique** | *What* behavior achieves that objective? | A reusable method. Has a `T####` ID. |
+| **Sub-technique** | *Which specific variant* of that method? | A `T####.###` ID, when ATT&CK defines one. Not every technique has sub-techniques. |
+| **Procedure** | *How* did a specific adversary actually implement it, this time? | An observed instance. Not a formal ATT&CK object with its own ID, it's the detail recorded in a technique's "Procedure Examples." |
+
+Rather than a hypothetical, here's a real one, currently tracked and still active: **Mustang Panda** (ATT&CK group [G0129](https://attack.mitre.org/groups/G0129), a China-linked espionage group) is consistently reported using a specific execution chain to deploy its PlugX implant:
+
+- **Tactic:** Defense Evasion, or as of the April 2026 release, more precisely **Defense Impairment or Stealth** (the tactic that used to be a single thing split into two; this series gets into exactly why in Part 3).
+- **Technique:** [T1574: Hijack Execution Flow](https://attack.mitre.org/techniques/T1574/).
+- **Sub-technique:** [T1574.002: DLL Side-Loading](https://attack.mitre.org/techniques/T1574/002/).
+- **Procedure:** Mustang Panda has repeatedly used a legitimate, signed Adobe CEF Helper executable, vulnerable to side-loading, to load a malicious DLL that decrypts and launches PlugX. That's the specific implementation, reported by multiple vendors across multiple campaigns, not a hypothetical "an adversary might."
+
+Elena, Priya, and Marcus would each reach for a different layer of that chain first, and all three would be right about their own job. Elena, writing a detection, wants the procedure: the exact binary, the exact DLL, the load order, that's what goes in a query. Priya would push back from the SOC seat: at 2am she doesn't care it's specifically the Adobe CEF Helper, she cares that something signed just loaded something unsigned from somewhere it shouldn't, and that's technique-level, not procedure-level. Marcus's read is that they're both describing different half-lives of the same behavior: the procedure is what Mustang Panda did this month; the technique, DLL side-loading, is what they'll still be doing after they rotate to a different signed binary, because side-loading is what actually works against how Windows resolves DLLs, not a property of the Adobe CEF Helper specifically. A detection written only against the procedure dies the day the binary changes. The whole reason the vocabulary has four layers instead of one is that "the attacker did a DLL thing" is true but useless, and each layer is useless for a different one of these three jobs if it's the only one you have.
+
+### Data Sources and Data Components: the Overlooked Fifth Layer
+
+The tactic/technique/sub-technique/procedure chain gets most of the attention, but ATT&CK technique pages carry a fifth layer that answers a different question entirely: *what evidence would even let us see this?* **Data sources** are the broad origin of telemetry (process monitoring, command execution, file metadata). **Data components** are the specific observable event types within that source (process creation, specifically, as opposed to process monitoring generally). Part 5 of this series is built almost entirely around this layer, because it's the one most course material skips past fastest, and it's exactly the layer Elena cares about most.
+
+<TIDQuiz
+  title="Part 1 Check"
+  questions={[
+    {
+      question: "MITRE Engenuity and CTID are best described as:",
+      options: [
+        "Two independent, peer organizations with separate missions",
+        "CTID is a program operating under MITRE Engenuity, alongside the separate ATT&CK Evaluations program",
+        "MITRE Engenuity is a program operating under CTID",
+        "The same organization under two different names",
+      ],
+      correctIndex: 1,
+      explanation: "MITRE Engenuity is the operating entity; CTID and ATT&CK Evaluations are two of the initiatives it runs. They are not peers of each other in the sense the question implies, they're both under the same parent.",
+    },
+    {
+      question: "M3TID and INFORM are related how?",
+      options: [
+        "They are unrelated, competing frameworks from different organizations",
+        "INFORM is an older, deprecated version that M3TID replaced",
+        "M3TID (2024) was CTID's original maturity model; INFORM is its evolved successor with 3 dimensions and 22 measurable components",
+        "M3TID measures ATT&CK Evaluations results; INFORM measures CTID membership",
+      ],
+      correctIndex: 2,
+      explanation: "CTID evolved M3TID directly into INFORM. Content that still describes M3TID as the current framework is citing the predecessor, not an error exactly, but dated.",
+    },
+    {
+      question: "In the Mustang Panda example, 'loading PlugX via a side-loaded DLL in the signed Adobe CEF Helper' is an example of:",
+      options: [
+        "A tactic",
+        "A technique",
+        "A sub-technique",
+        "A procedure",
+      ],
+      correctIndex: 3,
+      explanation: "DLL Side-Loading (T1574.002) is the sub-technique, the reusable, named category. The specific binary (Adobe CEF Helper) and specific payload (PlugX) are the procedure, this adversary's particular implementation of that sub-technique.",
+    },
+    {
+      question: "Data sources and data components answer which question?",
+      options: [
+        "Why is the adversary doing this?",
+        "What evidence would even make this behavior observable?",
+        "Who is responsible for this activity?",
+        "When did this technique first appear in ATT&CK?",
+      ],
+      correctIndex: 1,
+      explanation: "Data sources (broad telemetry origin) and data components (specific observable event types) are about visibility: whether you could see the behavior at all, independent of whether you've built a detection for it yet.",
+    },
+  ]}
+/>
+
+## What's Next
+
+[Part 2](/posts/mitre-attck-series-part2) goes deeper on tactics, techniques, and procedures specifically, including the Scattered Spider helpdesk social-engineering case the 2025 ATT&CK Evaluations round was built around, and works through why the same technique can legitimately support more than one tactic depending on what the adversary is actually trying to accomplish.
+
+## References & Further Reading
+
+1. **[Operating Systems: Three Easy Pieces](https://pages.cs.wisc.edu/~remzi/OSTEP/)**, by Remzi H. Arpaci-Dusseau and Andrea C. Arpaci-Dusseau. The structural model for this series' dialogue format.
+2. **[Center for Threat-Informed Defense](https://ctid.mitre.org/)**, the program's own site, including its definition of threat-informed defense quoted above.
+3. **[INFORM](https://ctid.mitre.org/projects/)** and the CTID blog post ["Inform Your Defense"](https://ctid.mitre.org/blog/2026/01/08/inform-your-defense/), announcing INFORM as M3TID's successor.
+4. **[MITRE ATT&CK: Mustang Panda (G0129)](https://attack.mitre.org/groups/G0129)**
+5. **[MITRE ATT&CK: T1574.002, DLL Side-Loading](https://attack.mitre.org/techniques/T1574/002/)**
+6. **[MITRE ATT&CK Evaluations: Enterprise 2025 Results](https://www.mitre.org/news-insights/news-release/mitre-attck-evaluations-advance-cloud-security-and-counter-espionage)**, the Scattered Spider / Mustang Panda round referenced above and continued in Part 2.
+7. **[MITRE ATT&CK: Scattered Spider (G1015)](https://attack.mitre.org/groups/G1015)**

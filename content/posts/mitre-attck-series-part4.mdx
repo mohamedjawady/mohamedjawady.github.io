@@ -1,0 +1,130 @@
+---
+title: "Threat-Informed Defense Series Part 4: Groups, Software, and Campaigns, Starting From Evidence Instead of a Name"
+description: "Part 4 of the Threat-Informed Defense series. A CTI report hands you an actor name before it hands you evidence, and that's backwards. Walked through using C0029, the real ATT&CK-documented campaign that breached MITRE's own network through chained Ivanti zero-days, including the honest detail that its campaign page has no confirmed Groups field at all."
+date: "2026-10-16"
+author: "Mohamed Habib Jaouadi"
+tags: ["mitre-attack", "threat-informed-defense", "cti", "attribution", "threat-intelligence"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Abstract threat intelligence network visualization"
+visibility: "public"
+series: "Threat-Informed Defense & MITRE ATT&CK"
+seriesOrder: 4
+---
+
+> **Series Focus:** [Part 3](/posts/mitre-attck-series-part3) covered the three ATT&CK matrices. This part is about the objects ATT&CK uses to connect a technique to real-world threat intelligence, groups, software, and campaigns, and why starting the analysis from an actor's name is the wrong order to do it in.
+
+<TIDDialogue
+  title="The report already says who did it"
+  lines={[
+    { speaker: "cti", text: "New report just dropped. Attributed to a China-nexus group, exploiting Ivanti Connect Secure zero-days. I was going to lead the writeup with the attribution, it's the part leadership will ask about first." },
+    { speaker: "soc", text: "Does the attribution change what I'm supposed to detect?" },
+    { speaker: "cti", text: "...No. The techniques are the techniques regardless of who's behind the keyboard." },
+    { speaker: "lead", text: "Then why does the attribution go first? Genuine question, I do the same thing in exec summaries." },
+    { speaker: "cti", text: "Because a name is a better headline than 'exploit public-facing application, defense evasion, lateral movement.' It's not a better starting point for the analysis. It's just a better sentence." },
+    { speaker: "detection", text: "Also, for what it's worth: the campaign you're describing, chained Ivanti zero-days, China-nexus, this exact timeframe. That's C0029. Look up its ATT&CK page before you commit to an attribution-first writeup." },
+    { speaker: "cti", text: "Why, what's on it?" },
+    { speaker: "detection", text: "Less than you'd think." },
+  ]}
+/>
+
+**The crux of this part:** when a report hands you an actor's name before it hands you evidence, what's the right order to actually work through, techniques first, then groups, software, and campaigns for context, and what happens when the "who" turns out to be the least certain part of the whole picture?
+
+## Four Objects, Four Different Questions
+
+ATT&CK organizes threat intelligence into four connected object types, each answering a different question about the same activity:
+
+| Object | Answers | What it's actually built from |
+|---|---|---|
+| **Technique** | What behavior was used? | The reusable `T####` vocabulary this whole series has been using. |
+| **Group** | Who is this activity associated with? | A named cluster of reported activity, tracked under a `G####` ID, when one exists. |
+| **Software** | What tools were used? | Named malware or tooling, `S####`, connected to the techniques it's been observed implementing. |
+| **Campaign** | Which tracked operation does this belong to? | A time-bound cluster of related intrusion activity, `C####`, introduced to ATT&CK in October 2022. |
+
+The recommended order to work through them, start with technique, then pivot outward to group, software, and campaign for added context, exists for a specific reason: technique is the layer with the least uncertainty. An observed command line either matches a technique's description or it doesn't. Attribution to a specific group is, almost always, the least certain layer in the whole chain. Leading an analysis with the most uncertain layer first is exactly backwards, even though it's the layer that makes the best headline.
+
+## C0029: A Campaign Without a Confirmed Group
+
+Elena's tip in the dialogue above points at something worth walking through directly, because it's real, current, and genuinely a little uncomfortable: in January 2024, MITRE itself, the organization that maintains ATT&CK, was breached. State-linked attackers chained two Ivanti Connect Secure zero-days (CVE-2023-46805 and CVE-2024-21887) to get into MITRE's NERVE research network. MITRE published its own incident writeup, attributing the activity to a cluster Mandiant tracks as **UNC5221**.
+
+Around the same window, ATT&CK's own maintainers documented a campaign built from this exact vulnerability chain, against a much broader set of victims: **[C0029, "Cutting Edge"](https://attack.mitre.org/campaigns/C0029/)**, active from December 2023 to February 2024, targeting the U.S. defense industrial base and organizations across telecommunications, finance, aerospace, and technology. Pulled directly off the current ATT&CK page:
+
+<ATTCKObjectsPivot />
+
+Read the Groups panel in that diagram again: **empty.** Not "attributed to a low-confidence group," genuinely no Groups field on the page at all. The actors are named in the page's prose, UNC5221, UTA0178, UNC5325, Mandiant's own internal cluster designators for activity that hasn't (yet, or ever) been formally consolidated into a single named, tracked ATT&CK group. That's not a gap in this walkthrough. It's the actual, current state of MITRE's own knowledge base, checked live, for the campaign that happened to breach MITRE itself.
+
+This is worth sitting with rather than smoothing over, because it's the cleanest possible refutation of "lead with the attribution." If the organization maintaining ATT&CK can't give its own breach a confirmed group page, no CTI report confidently naming an actor on day one of a disclosure is working from more certainty than that. The 28 techniques and 12 pieces of software on C0029's page are the parts of this that are actually documented with specificity. The "who" is the part everyone wants first and the part that's least nailed down.
+
+## Why Behaviors Outlast Actors
+
+C0029's software list makes a second point almost by accident. Among its twelve tools are custom malware built specifically for this campaign, ZIPLINE, BUSHWALK, WIREFIRE, names that exist because someone wrote this exact code for this exact operation. But the list also includes **Impacket** and **CrackMapExec**, publicly available, widely used tools that show up in security reports from hundreds of unrelated intrusions, red team engagements, and penetration tests, with no connection to UNC5221 at all.
+
+A defense built around "detect ZIPLINE" catches this campaign specifically and nothing else; the moment this actor (whoever they end up being formally attributed as) changes custom tooling, that detection goes dark. A defense built around "detect Impacket-style SMB/DCOM remote execution patterns" catches this campaign, plus the next hundred unrelated ones that reach for the same widely available tool, because the behavior, not the specific binary, is what's actually durable. Tool names rotate. Behaviors, particularly ones built on protocols and APIs that aren't going anywhere, don't.
+
+## A Practical Workflow for Enriching Threat Intelligence
+
+1. **Extract the raw, observed behavior from the report first**, before reading whatever attribution the report leads with.
+2. **Map that behavior to techniques.** This is the layer worth trusting most, it's checkable against the technique's own description.
+3. **Pivot to software**, if a tool is named, to see what else that tool is known to do, and whether it's bespoke (high attribution value) or commodity (low attribution value, high detection value).
+4. **Pivot to group**, treating the result as context, not conclusion. If the page is thin or the field is empty, as with C0029, that's information too, it tells you the attribution is genuinely unsettled, not that the search failed.
+5. **Pivot to campaign**, if one exists, for operational context: targets, timeframe, scale. Useful for deciding whether this is relevant to your organization's exposure, not for deciding whether the attribution is solid.
+6. **Prioritize defensive work by technique relevance to your environment**, not by how confident the attribution headline sounds.
+
+<TIDQuiz
+  title="Part 4 Check"
+  questions={[
+    {
+      question: "Why does the recommended workflow start with technique instead of group/actor attribution?",
+      options: [
+        "Because group attribution is always wrong",
+        "Because technique is the layer with the least uncertainty; an observed behavior either matches a technique's description or it doesn't, while attribution is almost always the least certain layer",
+        "Because ATT&CK doesn't track groups at all",
+        "Because techniques are easier to write about in an executive summary",
+      ],
+      correctIndex: 1,
+      explanation: "Attribution is consistently the shakiest part of any report. Starting from the most checkable layer (technique) and only pivoting to the least checkable one (group) for context, rather than leading with it, keeps the analysis honest about what's actually known.",
+    },
+    {
+      question: "What does C0029's ATT&CK campaign page actually show in its Groups field, checked live?",
+      options: [
+        "A confirmed attribution to UNC5221 with high confidence",
+        "Multiple confirmed groups, since several actors collaborated",
+        "Nothing; the Groups field is empty, with UNC5221/UTA0178/UNC5325 named only in prose as Mandiant's own cluster designators",
+        "A redacted field, since the victim was MITRE itself",
+      ],
+      correctIndex: 2,
+      explanation: "Checked directly against the current ATT&CK page, C0029 has no populated Groups field at all. This is a real, current example of a well-documented campaign existing without a confirmed formal group association.",
+    },
+    {
+      question: "Why does a detection built around Impacket/CrackMapExec-style behavior outlast one built around C0029's custom malware (ZIPLINE, BUSHWALK)?",
+      options: [
+        "Because custom malware is always easier to detect",
+        "Because Impacket and CrackMapExec are publicly available tools used across many unrelated intrusions, so a behavior-based detection catches more than one campaign, and doesn't depend on one actor's specific, replaceable custom code",
+        "Because ZIPLINE and BUSHWALK no longer exist",
+        "There's no meaningful difference; both approaches are equally durable",
+      ],
+      correctIndex: 1,
+      explanation: "Custom, campaign-specific malware is a narrow, disposable indicator. Detecting the broader behavior that widely available dual-use tools rely on catches this campaign and the many unrelated ones that reach for the same tooling.",
+    },
+    {
+      question: "What's the right way to treat an empty or thin Groups field on a campaign or software page?",
+      options: [
+        "As a failure of the analysis that should be filled in by guessing",
+        "As information in its own right: it tells you the attribution is genuinely unsettled, not that something went wrong",
+        "As proof the activity isn't a real threat",
+        "As a reason to ignore the campaign entirely",
+      ],
+      correctIndex: 1,
+      explanation: "An empty Groups field, as with C0029, is itself a data point: it reflects the actual, current state of public attribution confidence, not a gap to be papered over with a confident-sounding guess.",
+    },
+  ]}
+/>
+
+## What's Next
+
+[Part 5](/posts/mitre-attck-series-part5) is where Elena, the detection engineer, finally gets her due: turning a technique into telemetry requirements, detection strategies, and tested, validated analytic logic, picking up the Data Sources/Data Components layer Part 1 flagged and set aside.
+
+## References & Further Reading
+
+1. **[MITRE ATT&CK: C0029, Cutting Edge](https://attack.mitre.org/campaigns/C0029/)**, checked live for the techniques, software, and (absent) group attribution discussed above.
+2. **[Bleeping Computer: MITRE Says State Hackers Breached Its Network via Ivanti Zero-Days](https://www.bleepingcomputer.com/news/security/mitre-says-state-hackers-breached-its-network-via-ivanti-zero-days/)**, MITRE's own account of the NERVE network breach.
+3. **[MITRE ATT&CK: Campaigns (overview)](https://attack.mitre.org/campaigns/)**

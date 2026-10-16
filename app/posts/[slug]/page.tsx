@@ -57,6 +57,7 @@ import { TIDOrgChart } from "@/components/mitre/tid-org-chart"
 import { TechniqueTacticBranches } from "@/components/mitre/technique-tactic-branches"
 import { MatrixCompare } from "@/components/mitre/matrix-compare"
 import { ICSTacticCompare } from "@/components/mitre/ics-tactic-compare"
+import { ATTCKObjectsPivot } from "@/components/mitre/attck-objects-pivot"
 import { IntelligenceLifecycle } from "@/components/visualizations/intelligence-lifecycle"
 import { PyramidOfPain } from "@/components/visualizations/pyramid-of-pain"
 import { TTPCampaignTimeline } from "@/components/visualizations/ttp-campaign-timeline"
@@ -144,6 +145,7 @@ const postComponents = {
   TechniqueTacticBranches: TechniqueTacticBranches,
   MatrixCompare: () => <MatrixCompare />,
   ICSTacticCompare: () => <ICSTacticCompare />,
+  ATTCKObjectsPivot: () => <ATTCKObjectsPivot />,
 }
 
 interface PostPageProps {

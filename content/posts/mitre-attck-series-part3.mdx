@@ -1,0 +1,145 @@
+---
+title: "Threat-Informed Defense Series Part 3: Three Matrices, and What Actually Changed When Defense Evasion Split in Two"
+description: "Part 3 of the Threat-Informed Defense series. ATT&CK isn't one matrix, it's three: Enterprise, Mobile, and ICS, built for genuinely different environments. Covers what the April 2026 split of Defense Evasion into Stealth and Defense Impairment actually changes operationally, a real mobile malware family (FluBot) whose techniques span two tactics at once, and two real, publicly documented ICS incidents, TRITON/TRISIS and Industroyer2, mapped to the two tactics that only exist in the ICS matrix."
+date: "2026-10-16"
+author: "Mohamed Habib Jaouadi"
+tags: ["mitre-attack", "threat-informed-defense", "ics-security", "mobile-security", "cti"]
+banner: "/banners/posts/cti.avif"
+bannerAlt: "Abstract threat intelligence network visualization"
+visibility: "public"
+series: "Threat-Informed Defense & MITRE ATT&CK"
+seriesOrder: 3
+---
+
+> **Series Focus:** [Part 2](/posts/mitre-attck-series-part2) worked through why T1078, Valid Accounts, spans four tactics, and flagged that one of those four, Stealth, didn't exist under that name before April 2026. This part covers what actually changed there, and the two other ATT&CK matrices, Mobile and ICS, that most Enterprise-focused teams never open.
+
+<TIDDialogue
+  title="Do we actually need three matrices?"
+  lines={[
+    { speaker: "lead", text: "We're a Windows shop with some SaaS. Do I need to care about Mobile and ICS ATT&CK, or is that someone else's problem?" },
+    { speaker: "cti", text: "Depends what 'someone else's problem' means when your VP's phone has the same corporate email as his laptop." },
+    { speaker: "lead", text: "Fair. But three separate matrices feels like MITRE couldn't commit to one model." },
+    { speaker: "soc", text: "Or it's one model that refused to pretend a factory floor and a phone and a Windows server behave the same way under attack. I'd rather have three honest matrices than one that's quietly wrong for two-thirds of what it claims to cover." },
+    { speaker: "detection", text: "What actually worries me more than three matrices is the one that just changed under us. Defense Evasion got split into two tactics in April. Did that break every coverage layer built before then, or is it just a relabel?" },
+    { speaker: "facilitator", text: "That's today's actual question, then. Three matrices for three environments, and one specific, recent change inside the matrix everyone already uses." },
+  ]}
+/>
+
+**The crux of this part:** which matrix matches a given environment, and does the Stealth/Defense Impairment split change what a defender should actually do, or just what a dashboard calls it?
+
+## Defense Evasion, Split in Two
+
+Enterprise ATT&CK's [April 2026 release (v19)](https://attack.mitre.org/resources/updates/) split the long-standing Defense Evasion tactic into two: **Stealth** (which inherits the old `TA0005` ID) and **Defense Impairment** (a new tactic, `TA0112`). Enterprise ATT&CK now has 15 tactics instead of 14, alongside 222 techniques and 475 sub-techniques in the same release.
+
+The split isn't cosmetic, and it's worth being precise about why, since Elena's worry above is the right one to have:
+
+| | Stealth (TA0005) | Defense Impairment (TA0112) |
+|---|---|---|
+| **What it covers** | Hiding malicious activity inside legitimate-looking behavior | Actively disabling, degrading, or tampering with a defensive control |
+| **The defender's question** | "Could we have seen this if we were looking the right way?" | "Could this have been prevented from disabling our visibility in the first place?" |
+| **Example from Part 2** | T1078, Valid Accounts, used for initial entry. Real credentials don't look malicious; that's Stealth. | Turning off EDR, clearing event logs, uninstalling a security agent. |
+
+The split also absorbed a structural change: the old parent technique [T1562, Impair Defenses](https://attack.mitre.org/techniques/T1562/), along with two of its sub-techniques, was merged into a new technique, [T1685, Disable or Modify Tools](https://attack.mitre.org/techniques/T1685/). And a detail worth sitting with rather than smoothing over: some techniques are now tagged under *both* Stealth and Defense Impairment, because real adversary intent genuinely doesn't sort cleanly, hiding and disabling aren't always separable actions.
+
+What this changes operationally, concretely: a coverage layer built before April 2026 that has "Defense Evasion: covered" as a single line now needs to be read as two separate claims. A detection that catches an adversary clearing Windows event logs (Defense Impairment) tells you nothing about whether you'd catch the same adversary authenticating with a stolen password and blending into normal traffic (Stealth). They were always two different problems. The split just stopped letting one checkmark paper over both.
+
+## Enterprise: the Matrix Most Teams Already Know
+
+Enterprise ATT&CK covers the environment this series has used for both examples so far, Mustang Panda's DLL side-loading in Part 1, Scattered Spider's help-desk social engineering in Part 2, Windows and Linux endpoints, cloud identity, SaaS, containers, and the networks connecting them. If a team's primary exposure is corporate IT and cloud infrastructure, this is where nearly all of the actual work happens, and it's also the matrix with the deepest tooling support, which Part 5 through Part 7 of this series lean on heavily.
+
+## Mobile: Where a Technique Doing Two Jobs Shows Up Again
+
+[FluBot](https://attack.mitre.org/software/S1067) is a good reason Mobile ATT&CK isn't optional for anyone whose employees have corporate email on a personal phone. It's real, documented malware (first observed in Spain in late 2020, spread across Europe via SMS phishing before a 2022 Europol takedown), and it happens to replay Part 2's exact lesson in a different environment:
+
+- **[T1517, Access Notifications](https://attack.mitre.org/techniques/T1517/)**: FluBot reads notification content, including one-time authentication codes, before the user does. This technique is listed under **two tactics simultaneously**, Collection and Credential Access, for the same reason T1078 spans four: reading a notification is one capability, and whether that capability served "gather information" or "steal a credential" depends on what was actually in the notification this time.
+- **[T1453, Abuse Accessibility Features](https://attack.mitre.org/techniques/T1453/)**: FluBot abuses Android's accessibility APIs, meant for users with disabilities, to capture credentials from banking app overlays and resist removal. Also listed under both Collection and Credential Access.
+
+If Part 2's point about T1078 felt like an isolated taxonomy quirk, FluBot is the same structural fact showing up in a completely different matrix, built for a completely different platform. That's a sign it's a real property of how ATT&CK models behavior, not an accident specific to one technique.
+
+Mobile ATT&CK also picked up something new in the April 2026 release: **Detection Strategies**, the structured detection guidance layer Part 5 of this series covers in depth for Enterprise, starting with Initial Access and Execution tactics. Mobile now has 124 Detection Strategies and 211 Analytics behind them, per MITRE's own release numbers, a real step toward Mobile getting the same operational tooling Enterprise has had for longer.
+
+## ICS: Where the Stakes Change From Data to Physical Safety
+
+ICS (Industrial Control Systems) ATT&CK exists because a compromised factory or power grid doesn't just risk a data breach. It risks physical equipment damage, environmental release, or loss of life, and that changes what "impact" means enough to need its own tactics that don't exist anywhere else in ATT&CK:
+
+| Tactic | ID | What it's actually asking |
+|---|---|---|
+| **Impair Process Control** | TA0106 | Is the adversary directly manipulating the industrial process itself, the valves, breakers, setpoints? |
+| **Inhibit Response Function** | TA0107 | Is the adversary disabling the safety systems that would normally catch and correct that manipulation? |
+
+Two real, separately documented incidents map cleanly to these, and the difference between them is the clearest way to see why ICS needed its own tactics at all.
+
+**[TRITON/TRISIS](https://attack.mitre.org/software/S1009)**, discovered in 2017, targeted a Middle Eastern petrochemical plant's Schneider Electric Triconex Safety Instrumented System, the system specifically designed to detect a dangerous condition and shut the process down safely. TRITON used [T0800, Activate Firmware Update Mode](https://attack.mitre.org/techniques/T0800/), tricking the safety controller into a firmware-update state that halts its normal monitoring. The plant kept running while its safety net was quietly disabled. That's Inhibit Response Function by definition: not touching the process, disabling what would have caught a problem with the process.
+
+**[Industroyer2](https://attack.mitre.org/software/S1072)**, used by Sandworm against Ukrainian power infrastructure in 2022 (and a close relative of the technique Sandworm used in the 2015 Ukraine grid attack too), used [T0855, Unauthorized Command Message](https://attack.mitre.org/techniques/T0855/) to send commands directly to substation breakers, instructing them to open outside any legitimate operational reason. That's Impair Process Control: not disabling a safety system, directly manipulating the process the safety system exists to watch over.
+
+Put side by side, the distinction stops being academic: TRITON removed the net without touching the tightrope walker. Industroyer2 pushed the tightrope walker without touching the net. A defense that only watches for one of those two things is blind to the other, which is the entire reason ICS ATT&CK keeps them as separate tactics instead of folding both into one generic "Impact."
+
+ICS ATT&CK also got its own structural news in the April 2026 release: **sub-techniques**, for the first time. Two examples worth knowing: [T1691, Block Operational Technology Message](https://attack.mitre.org/techniques/T1691/) split into `.001` (Command Message) and `.002` (Reporting Message), replacing what used to be two separate, now-deprecated top-level techniques. And [T1694, Insecure Credentials](https://attack.mitre.org/techniques/T1694/) gained `.001`, Default Credentials, for the specific, extremely common case of a device still running its factory password.
+
+## Choosing the Right Matrix
+
+A short, practical rule rather than a long decision tree: ask what's actually running, not what the adversary's ultimate goal was. A phishing email that compromises a cloud identity is Enterprise, even if the attacker's goal was financial. A malicious app abusing Android's accessibility APIs is Mobile, even if it's targeting the same employee. A command sent to a protection relay is ICS, even if it arrived over a corporate network that's otherwise entirely Enterprise territory. The environment the behavior actually touches picks the matrix; the attacker's motive doesn't.
+
+<TIDQuiz
+  title="Part 3 Check"
+  questions={[
+    {
+      question: "What changed, concretely, when Defense Evasion split into Stealth and Defense Impairment?",
+      options: [
+        "Nothing operationally; it's a cosmetic rename",
+        "A single 'Defense Evasion: covered' claim now has to be evaluated as two separate claims, hiding activity versus disabling controls",
+        "Stealth replaced Defense Evasion entirely and Defense Impairment is unrelated",
+        "Only Mobile ATT&CK was affected by the split",
+      ],
+      correctIndex: 1,
+      explanation: "Hiding malicious activity (Stealth) and actively disabling a defensive control (Defense Impairment) are different problems requiring different detections. A coverage claim that doesn't distinguish them was always hiding a gap; the split just stopped letting it.",
+    },
+    {
+      question: "FluBot's T1517 (Access Notifications) is listed under which two tactics at once, mirroring Part 2's T1078 lesson?",
+      options: [
+        "Initial Access and Persistence",
+        "Collection and Credential Access",
+        "Execution and Impact",
+        "Discovery and Lateral Movement",
+      ],
+      correctIndex: 1,
+      explanation: "Like T1078, the capability (reading notification content) doesn't commit to one objective by itself; whether a given instance served Collection or Credential Access depends on what was actually in the notification.",
+    },
+    {
+      question: "What's the key difference between TRITON/TRISIS and Industroyer2's ATT&CK mappings?",
+      options: [
+        "TRITON disabled a safety system (Inhibit Response Function); Industroyer2 directly manipulated grid breakers (Impair Process Control)",
+        "They're the same technique used by different threat actors",
+        "TRITON targeted Mobile devices; Industroyer2 targeted Enterprise networks",
+        "Industroyer2 disabled safety systems; TRITON manipulated process control directly",
+      ],
+      correctIndex: 0,
+      explanation: "TRITON (T0800, Activate Firmware Update Mode) disabled the Triconex safety controller without touching the process itself. Industroyer2 (T0855, Unauthorized Command Message) sent direct commands to substation breakers, manipulating the process directly without disabling a safety function first.",
+    },
+    {
+      question: "What should decide which ATT&CK matrix (Enterprise, Mobile, ICS) applies to a given piece of evidence?",
+      options: [
+        "The adversary's ultimate financial or strategic motive",
+        "Whichever matrix the analyst is most familiar with",
+        "The environment the observed behavior actually touches (endpoint/cloud, mobile OS, or industrial control system)",
+        "The nationality of the threat actor",
+      ],
+      correctIndex: 2,
+      explanation: "A phishing email compromising a cloud identity is Enterprise regardless of motive; a malicious Android app abusing accessibility APIs is Mobile regardless of target. The matrix follows the environment the behavior touches, not why the adversary wanted in.",
+    },
+  ]}
+/>
+
+## What's Next
+
+[Part 4](/posts/mitre-attck-series-part4) moves from the matrices themselves to the objects ATT&CK uses to connect raw CTI to defensible behavior: groups, software, and campaigns, and the discipline of starting from evidence instead of starting from an actor's name.
+
+## References & Further Reading
+
+1. **[MITRE ATT&CK: Updates, April 2026 (v19)](https://attack.mitre.org/resources/updates/)**, the primary source for the Stealth/Defense Impairment split, the 15-tactic Enterprise count, and the ICS sub-technique additions.
+2. **[MITRE ATT&CK: T1685, Disable or Modify Tools](https://attack.mitre.org/techniques/T1685/)**, the technique that absorbed the former T1562 and two of its sub-techniques.
+3. **[MITRE ATT&CK: FluBot (S1067)](https://attack.mitre.org/software/S1067)**, **[T1517](https://attack.mitre.org/techniques/T1517/)**, and **[T1453](https://attack.mitre.org/techniques/T1453/)**.
+4. **[MITRE ATT&CK: TRITON (S1009)](https://attack.mitre.org/software/S1009)** and **[T0800, Activate Firmware Update Mode](https://attack.mitre.org/techniques/T0800/)**.
+5. **[MITRE ATT&CK: Industroyer2 (S1072)](https://attack.mitre.org/software/S1072)** and **[T0855, Unauthorized Command Message](https://attack.mitre.org/techniques/T0855/)**.
+6. **[Dragos: TRISIS/TRITON Analysis](https://www.dragos.com/mitre-attack-for-ics)**, independent technical reporting on the Triconex incident.

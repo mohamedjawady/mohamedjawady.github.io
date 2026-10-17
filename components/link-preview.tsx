@@ -116,7 +116,7 @@ export function LinkPreview({ href, children, className }: LinkPreviewProps) {
   }
 
   return (
-    <div className="relative inline-block">
+    <span className="relative inline-block">
       <Link
         href={href}
         className={`font-medium text-green-500 underline underline-offset-4 hover:text-green-400 transition-colors inline-flex items-center gap-1 ${className || ''}`}
@@ -129,7 +129,7 @@ export function LinkPreview({ href, children, className }: LinkPreviewProps) {
 
       {/* Preview Card */}
       {showPreview && (
-        <div className="absolute z-50 top-full left-0 mt-2 w-80 max-w-sm">
+        <span className="absolute z-50 top-full left-0 mt-2 w-80 max-w-sm block">
           <Card className="border-border bg-background">
             {loading ? (
               <CardContent className="p-4">
@@ -245,8 +245,8 @@ export function LinkPreview({ href, children, className }: LinkPreviewProps) {
               </CardContent>
             )}
           </Card>
-        </div>
+        </span>
       )}
-    </div>
+    </span>
   )
 }

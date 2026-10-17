@@ -1,9 +1,6 @@
-"use client"
-
-import React, { useState } from "react"
+import React from "react"
 import Image from "next/image"
-import { Copy, Check } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { SimpleCopyButton } from "@/components/simple-copy-button"
 import { HillCipher } from "@/components/visualizations/hill-cipher"
 import { WindowsProtectionHierarchy } from "@/components/visualizations/windows-protection-hierarchy"
 import { WindowsAPIFlow } from "@/components/visualizations/windows-api-flow"
@@ -55,61 +52,34 @@ import { LinkPreview } from "@/components/link-preview"
 import { Term } from "@/components/ui/term"
 import { shouldBeCollapsible, shouldBeExpandedByDefault } from "@/lib/code-block-config"
 
-// Simple copy button component for regular code blocks
-function SimpleCopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('Failed to copy text: ', err)
-    }
-  }
-
-  return (
-    <Button
-      size="sm"
-      variant="ghost"
-      className="absolute top-2 right-2 h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-      onClick={copyToClipboard}
-      title={copied ? "Copied!" : "Copy code"}
-    >
-      {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-    </Button>
-  )
-}
-
 export const mdxComponents = {
   h1: ({ children }: { children: React.ReactNode }) => (
-    <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl mb-6">
+    <h1 className="font-serif scroll-m-20 text-4xl lg:text-5xl mb-6">
       {children}
     </h1>
   ),
   h2: ({ children }: { children: React.ReactNode }) => (
-    <h2 className="scroll-m-20 border-b border-border/20 pb-2 text-3xl font-semibold tracking-tight mb-4">
+    <h2 className="font-serif scroll-m-20 border-b border-border/20 pb-2 text-3xl mb-4">
       {children}
     </h2>
   ),
   h3: ({ children }: { children: React.ReactNode }) => (
-    <h3 className="scroll-m-20 text-2xl font-semibold tracking-tight mb-4">
+    <h3 className="font-serif scroll-m-20 text-2xl mb-4">
       {children}
     </h3>
   ),
   h4: ({ children }: { children: React.ReactNode }) => (
-    <h4 className="scroll-m-20 text-xl font-semibold tracking-tight mb-3">
+    <h4 className="font-serif scroll-m-20 text-xl mb-3">
       {children}
     </h4>
   ),
   h5: ({ children }: { children: React.ReactNode }) => (
-    <h5 className="scroll-m-20 text-lg font-semibold tracking-tight mb-3">
+    <h5 className="font-serif scroll-m-20 text-lg mb-3">
       {children}
     </h5>
   ),
   h6: ({ children }: { children: React.ReactNode }) => (
-    <h6 className="scroll-m-20 text-base font-semibold tracking-tight mb-3">
+    <h6 className="font-serif scroll-m-20 text-base mb-3">
       {children}
     </h6>
   ),

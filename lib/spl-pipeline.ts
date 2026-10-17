@@ -26,6 +26,39 @@ export function formatEpoch(epoch: number): string {
   return `${hh}:${mm}:${ss}`
 }
 
+// Splunk's real accepted format for an absolute timestamp literal, e.g.
+// earliest="10/16/2026:06:00:00".
+export function formatSplTimestamp(epoch: number): string {
+  const d = new Date(epoch * 1000)
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0")
+  const da = String(d.getUTCDate()).padStart(2, "0")
+  const yr = d.getUTCFullYear()
+  const hh = String(d.getUTCHours()).padStart(2, "0")
+  const mm = String(d.getUTCMinutes()).padStart(2, "0")
+  const ss = String(d.getUTCSeconds()).padStart(2, "0")
+  return `${mo}/${da}/${yr}:${hh}:${mm}:${ss}`
+}
+
+// Epoch for a given hour on the sample dataset's fixed day, used to build the
+// custom time-range picker's hour options.
+export function hourMark(hour: number): number {
+  return T(hour)
+}
+
+export interface TimeRange {
+  earliest: number | null
+  // exclusive upper bound, matching Splunk's own earliest <= _time < latest semantics
+  latest: number | null
+  // the literal SPL clause to display, e.g. "earliest=-1h latest=now", or "" for all time
+  clause: string
+}
+
+export const ALL_TIME: TimeRange = { earliest: null, latest: null, clause: "" }
+
+export function datasetMaxTime(dataset: Dataset): number {
+  return Math.max(...dataset.rows.map((r) => Number(r._time)))
+}
+
 export const IP_GEO: Record<string, GeoInfo> = {
   "198.51.100.44": { country: "Germany", city: "Frankfurt", lat: 50.1109, lon: 8.6821 },
   "203.0.113.201": { country: "United States", city: "Ashburn", lat: 39.0438, lon: -77.4874 },
@@ -853,12 +886,23 @@ function aggAlias(config: { fn: AggFn; field?: string }): string {
 // Running the full pipeline
 // ---------------------------------------------------------------------------
 
-export function runPipeline(dataset: Dataset, filters: Filter[], stages: PipelineStage[]): StepResult[] {
-  const baseRows = applyFilters(dataset.rows, filters)
+export function runPipeline(
+  dataset: Dataset,
+  timeRange: TimeRange,
+  filters: Filter[],
+  stages: PipelineStage[],
+): StepResult[] {
+  const timeFiltered = dataset.rows.filter((r) => {
+    const t = Number(r._time)
+    if (timeRange.earliest !== null && t < timeRange.earliest) return false
+    if (timeRange.latest !== null && t >= timeRange.latest) return false
+    return true
+  })
+  const baseRows = applyFilters(timeFiltered, filters)
   const steps: StepResult[] = [
     {
       label: "search",
-      spl: `index=${dataset.index} sourcetype=${dataset.sourcetype}${filters.length ? " " + filtersToSpl(filters) : ""}`,
+      spl: `index=${dataset.index} sourcetype=${dataset.sourcetype}${timeRange.clause ? " " + timeRange.clause : ""}${filters.length ? " " + filtersToSpl(filters) : ""}`,
       rows: baseRows,
       fields: dataset.fields,
       isTransforming: false,

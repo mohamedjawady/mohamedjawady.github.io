@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Search, Plus, X, ChevronUp, ChevronDown, Copy, Check, AlertTriangle } from "lucide-react"
+import { Search, Plus, X, ChevronUp, ChevronDown, Copy, Check, AlertTriangle, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DATASETS,
@@ -16,6 +16,10 @@ import {
   isNumericField,
   distinctValues,
   formatEpoch,
+  formatSplTimestamp,
+  hourMark,
+  datasetMaxTime,
+  ALL_TIME,
   aggNeedsField,
   AGG_FN_LABELS,
   type StageType,
@@ -25,7 +29,10 @@ import {
   type EvalDef,
   type Row,
   type StatFnEntry,
+  type TimeRange,
+  type Dataset,
 } from "@/lib/spl-pipeline"
+import { SplVisualization, isVisualizable } from "@/components/tools/spl-viz"
 
 // ---------------------------------------------------------------------------
 // Tiny shared controls, styled to read as a SIEM search console rather than
@@ -131,6 +138,28 @@ const EVAL_KIND_OPTIONS = [
   { value: "strftime", label: "strftime() time" },
   { value: "commas", label: "Comma format" },
 ]
+
+const TIME_PRESET_OPTIONS = [
+  { value: "all", label: "All time" },
+  { value: "1h", label: "Last 1 hour" },
+  { value: "2h", label: "Last 2 hours" },
+  { value: "4h", label: "Last 4 hours" },
+  { value: "custom", label: "Custom range" },
+]
+// The sample data spans roughly 06:00-11:00 on the fixed simulated day.
+const HOUR_OPTIONS = [6, 7, 8, 9, 10, 11].map((h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` }))
+
+function computeTimeRange(preset: string, dataset: Dataset, earliestHour: number, latestHour: number): TimeRange {
+  if (preset === "all") return ALL_TIME
+  if (preset === "1h" || preset === "2h" || preset === "4h") {
+    const hours = { "1h": 1, "2h": 2, "4h": 4 }[preset]!
+    const anchor = datasetMaxTime(dataset)
+    return { earliest: anchor - hours * 3600, latest: anchor + 1, clause: `earliest=-${hours}h latest=now` }
+  }
+  const e = hourMark(earliestHour)
+  const l = hourMark(latestHour)
+  return { earliest: e, latest: l, clause: `earliest="${formatSplTimestamp(e)}" latest="${formatSplTimestamp(l)}"` }
+}
 
 // ---------------------------------------------------------------------------
 // Per-stage config editor
@@ -570,16 +599,27 @@ export function SplPipelineBuilder() {
   const [filters, setFilters] = useState<Filter[]>([])
   const [stages, setStages] = useState<PipelineStage[]>([])
   const [copied, setCopied] = useState(false)
+  const [timePreset, setTimePreset] = useState("all")
+  const [customEarliestHour, setCustomEarliestHour] = useState(6)
+  const [customLatestHour, setCustomLatestHour] = useState(11)
+  const [resultView, setResultView] = useState<"table" | "viz">("table")
 
   const dataset = useMemo(() => getDataset(datasetId), [datasetId])
-  const steps = useMemo(() => runPipeline(dataset, filters, stages), [dataset, filters, stages])
+  const timeRange = useMemo(
+    () => computeTimeRange(timePreset, dataset, customEarliestHour, customLatestHour),
+    [timePreset, dataset, customEarliestHour, customLatestHour],
+  )
+  const steps = useMemo(() => runPipeline(dataset, timeRange, filters, stages), [dataset, timeRange, filters, stages])
   const finalStep = steps[steps.length - 1]
   const fullSplText = steps.map((s) => s.spl).join("\n")
   const elapsed = (0.01 + stages.length * 0.006).toFixed(2)
+  const lastStageType = stages.length ? stages[stages.length - 1].type : undefined
+  const canVisualize = lastStageType !== undefined && isVisualizable(lastStageType)
 
   function switchDataset(id: string) {
     setDatasetId(id)
     setFilters([])
+    setTimePreset("all")
     setStages([])
   }
 
@@ -609,6 +649,7 @@ export function SplPipelineBuilder() {
     const config = defaultConfig(type, lastFields, lastRows)
     if (type === "iplocation") config.field = dataset.ipField ?? ""
     setStages([...stages, { id: nextId(type), type, config }])
+    if (isVisualizable(type)) setResultView("viz")
   }
   function updateStage(id: string, config: any) {
     setStages(stages.map((s) => (s.id === id ? { ...s, config } : s)))
@@ -658,9 +699,30 @@ export function SplPipelineBuilder() {
 
       {/* Search bar */}
       <div className="bg-white px-4 py-3 border-b border-[#d8dadd] space-y-2">
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2 flex-wrap">
           <Search className="w-4 h-4 text-[#5c6773] mt-1.5 shrink-0" />
-          <pre className="flex-1 font-mono text-[13px] text-[#1e2125] whitespace-pre-wrap leading-relaxed">{fullSplText}</pre>
+          <pre className="flex-1 min-w-[200px] font-mono text-[13px] text-[#1e2125] whitespace-pre-wrap leading-relaxed">{fullSplText}</pre>
+          <div className="shrink-0 flex items-center gap-1.5 h-8 px-2 rounded border border-[#c6cace] bg-white">
+            <Clock className="w-3.5 h-3.5 text-[#5c6773]" />
+            <Sel value={timePreset} onChange={setTimePreset} options={TIME_PRESET_OPTIONS} className="h-auto border-0 px-0" />
+            {timePreset === "custom" && (
+              <>
+                <Sel
+                  value={String(customEarliestHour)}
+                  onChange={(v) => setCustomEarliestHour(Number(v))}
+                  options={HOUR_OPTIONS}
+                  className="h-auto border-0 px-0"
+                />
+                <span className="text-[#5c6773]">&ndash;</span>
+                <Sel
+                  value={String(customLatestHour)}
+                  onChange={(v) => setCustomLatestHour(Number(v))}
+                  options={HOUR_OPTIONS}
+                  className="h-auto border-0 px-0"
+                />
+              </>
+            )}
+          </div>
           <button
             onClick={copySpl}
             className="shrink-0 flex items-center gap-1.5 h-8 px-3 rounded bg-[#0a84c4] hover:bg-[#086ba3] text-white text-xs font-semibold transition-colors"
@@ -671,6 +733,14 @@ export function SplPipelineBuilder() {
         </div>
         <div className="text-xs text-[#5c6773] font-mono">
           {finalStep.rows.length} {finalStep.isTransforming ? "results" : "events"} &middot; {elapsed}s &middot; {stages.length + 1} pipeline stage{stages.length ? "s" : ""}
+          {timeRange.clause && (
+            <>
+              {" "}
+              &middot; window: {formatEpoch(timeRange.earliest!)}&ndash;
+              {timePreset !== "custom" && timeRange.latest! > datasetMaxTime(dataset) ? "latest event" : formatEpoch(timeRange.latest!)}
+              {timePreset !== "custom" && " (“now” = this dataset's most recent event, for the simulation)"}
+            </>
+          )}
         </div>
       </div>
 
@@ -782,43 +852,67 @@ export function SplPipelineBuilder() {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-4 px-4 pt-3 border-b border-[#d8dadd]">
-            <div className="text-xs font-semibold text-[#0a84c4] border-b-2 border-[#0a84c4] pb-2">
+            <button
+              onClick={() => setResultView("table")}
+              className={cn(
+                "text-xs font-semibold pb-2 border-b-2",
+                resultView === "table" || !canVisualize ? "text-[#0a84c4] border-[#0a84c4]" : "text-[#5c6773] border-transparent hover:text-[#1e2125]",
+              )}
+            >
               {finalStep.isTransforming ? "Statistics" : "Events"}
-            </div>
-          </div>
-          <div className="overflow-x-auto p-4">
-            {finalStep.rows.length === 0 ? (
-              <p className="text-sm text-[#9aa0a6]">No results. Loosen a filter or remove a command.</p>
-            ) : (
-              <table className="w-full text-xs font-mono">
-                <thead>
-                  <tr className="border-b border-[#d8dadd] bg-[#eef0f2]">
-                    {finalStep.fields.map((f) => (
-                      <th key={f} className="px-3 py-2 text-left font-semibold text-[#1e2125] whitespace-nowrap">
-                        {f}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {finalStep.rows.map((r, i) => (
-                    <tr key={i} className={cn("border-b border-[#eef0f2] last:border-0", i % 2 === 1 && "bg-[#fafbfc]")}>
-                      {finalStep.fields.map((f) => {
-                        const v = r[f]
-                        const formatter = finalStep.formatters[f]
-                        const display = formatter ? formatter(v) : f === "_time" && typeof v === "number" ? formatEpoch(v) : String(v)
-                        return (
-                          <td key={f} className="px-3 py-2 text-[#1e2125] whitespace-nowrap">
-                            {display === "" ? <span className="text-[#c6cace]">(empty)</span> : display}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            </button>
+            {canVisualize && (
+              <button
+                onClick={() => setResultView("viz")}
+                className={cn(
+                  "text-xs font-semibold pb-2 border-b-2",
+                  resultView === "viz" ? "text-[#0a84c4] border-[#0a84c4]" : "text-[#5c6773] border-transparent hover:text-[#1e2125]",
+                )}
+              >
+                Visualization
+              </button>
             )}
           </div>
+
+          {canVisualize && resultView === "viz" ? (
+            <div className="p-4">
+              <SplVisualization step={finalStep} stageType={lastStageType} config={stages[stages.length - 1]?.config} />
+            </div>
+          ) : (
+            <div className="overflow-x-auto p-4">
+              {finalStep.rows.length === 0 ? (
+                <p className="text-sm text-[#9aa0a6]">No results. Loosen a filter or remove a command.</p>
+              ) : (
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-[#d8dadd] bg-[#eef0f2]">
+                      {finalStep.fields.map((f) => (
+                        <th key={f} className="px-3 py-2 text-left font-semibold text-[#1e2125] whitespace-nowrap">
+                          {f}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finalStep.rows.map((r, i) => (
+                      <tr key={i} className={cn("border-b border-[#eef0f2] last:border-0", i % 2 === 1 && "bg-[#fafbfc]")}>
+                        {finalStep.fields.map((f) => {
+                          const v = r[f]
+                          const formatter = finalStep.formatters[f]
+                          const display = formatter ? formatter(v) : f === "_time" && typeof v === "number" ? formatEpoch(v) : String(v)
+                          return (
+                            <td key={f} className="px-3 py-2 text-[#1e2125] whitespace-nowrap">
+                              {display === "" ? <span className="text-[#c6cace]">(empty)</span> : display}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

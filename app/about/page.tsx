@@ -96,7 +96,7 @@ export default function AboutPage() {
                 Download or view my resume to learn more about my experience, education, and skills.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button asChild className="bg-emerald-500 hover:bg-emerald-600 text-black font-semibold">
+                <Button variant="brand" asChild>
                   <a href="/resume.pdf" download="Mohamed_Habib_Jaouadi_Resume.pdf">
                     <Download className="w-4 h-4 mr-2" />
                     Download

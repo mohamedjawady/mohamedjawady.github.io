@@ -110,12 +110,12 @@ export default async function HomePage() {
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-10">
               <Link href="/posts">
-                <Button className="h-12 px-8 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold text-lg">
+                <Button variant="brand" size="lg" className="px-8 text-base">
                   Boot Sequence <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
               <Link href="/about">
-                <Button variant="outline" className="h-12 px-8 border-border hover:border-emerald-500/40 text-lg">
+                <Button variant="outline" size="lg" className="px-8 text-base hover:border-emerald-500/40">
                   <Terminal className="w-5 h-5 mr-2" />
                   `whoami`
                 </Button>
@@ -276,7 +276,7 @@ export default async function HomePage() {
             open.
           </p>
           <Link href="mailto:mohamedhabib.jaouadi@outlook.com">
-            <Button size="lg" className="h-14 px-8 min-w-[200px] bg-foreground text-background hover:bg-emerald-500 hover:text-black font-semibold text-lg">
+            <Button size="lg" className="h-14 px-8 min-w-[200px] text-base bg-foreground text-background hover:bg-emerald-500 hover:text-black">
               <Mail className="w-5 h-5 mr-3" />
               Initialize Contact
             </Button>

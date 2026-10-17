@@ -10,7 +10,7 @@ import { notFound } from "next/navigation"
 import { TableOfContents } from "@/components/table-of-contents"
 import { Metadata } from "next"
 import { BlogPostStructuredData } from "@/components/structured-data"
-import { getCanonicalUrl } from "@/lib/url"
+import { getCanonicalUrl, getImageMimeType } from "@/lib/url"
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
 import rehypeKatex from 'rehype-katex'
@@ -202,7 +202,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
           width: 1200,
           height: 630,
           alt: post.title,
-          type: 'image/png',
+          type: getImageMimeType(post.banner || '/android-chrome-512x512.png'),
         },
       ],
       locale: 'en_US',

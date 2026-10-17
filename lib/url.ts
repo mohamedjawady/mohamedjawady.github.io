@@ -1,4 +1,32 @@
 /**
+ * Infer the MIME type of an image from its file extension, for use in
+ * og:image:type. Crawlers that don't support the actual format (e.g. AVIF
+ * is widely unsupported by social previews) will otherwise either reject
+ * the image outright or try to decode it as whatever type is declared here,
+ * so this must match the file on disk rather than being hardcoded.
+ */
+export function getImageMimeType(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase()
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg'
+    case 'png':
+      return 'image/png'
+    case 'webp':
+      return 'image/webp'
+    case 'avif':
+      return 'image/avif'
+    case 'gif':
+      return 'image/gif'
+    case 'svg':
+      return 'image/svg+xml'
+    default:
+      return 'image/png'
+  }
+}
+
+/**
  * Get the base URL for the current environment
  * Handles both www and non-www domains properly
  */

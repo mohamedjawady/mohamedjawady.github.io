@@ -1,8 +1,8 @@
 import { getVisibleVisualizations, getAllTags } from "@/lib/visualizations"
 import { VisualizationsFilter } from "@/components/visualizations-filter"
-import { Code } from "lucide-react"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
+import { SectionHero } from "@/components/section-hero"
 
 export const metadata: Metadata = {
   title: "Visualizations | Mohamed Habib Jaouadi",
@@ -33,19 +33,17 @@ export default async function VisualizationsPage() {
   const allTags = getAllTags(visualizations)
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
-      <div className="mb-12">
-        <h1 className="text-4xl font-bold font-mono mb-4">Visualizations</h1>
-        <p className="text-muted-foreground text-lg">
-          Interactive visualizations and animations to explore cryptography, algorithms, and cybersecurity concepts
-        </p>
-        <div className="flex items-center gap-2 mt-4 text-sm text-muted-foreground">
-          <Code className="w-4 h-4" />
-          <span>{visualizations.length} interactive visualizations</span>
-        </div>
-      </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <SectionHero
+        eyebrow="See the mechanism"
+        title="Visualizations"
+        description="Interactive visualizations and animations to explore cryptography, algorithms, and cybersecurity concepts."
+        stats={[{ label: `${visualizations.length} interactive visualizations` }]}
+      />
 
-      <VisualizationsFilter visualizations={visualizations} allTags={allTags} />
+      <div className="max-w-6xl mx-auto px-4 py-12">
+        <VisualizationsFilter visualizations={visualizations} allTags={allTags} />
+      </div>
     </div>
   )
 }

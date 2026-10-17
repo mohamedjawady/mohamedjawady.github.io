@@ -1,47 +1,61 @@
+import { Metadata } from "next"
 import { getAllStudyDecks, getAllCategories, getAllTags } from '@/lib/study-decks'
 import { StudyDecksFilter } from '@/components/study-decks-filter'
+import { SectionHero } from "@/components/section-hero"
+import { getCanonicalUrl } from "@/lib/url"
+
+export const metadata: Metadata = {
+  title: "Study Decks | Mohamed Habib Jaouadi",
+  description: "Interactive flashcards to help you master key concepts from your notes, with spaced repetition and progress tracking.",
+  openGraph: {
+    title: "Study Decks | Mohamed Habib Jaouadi",
+    description: "Interactive flashcards to help you master key concepts from your notes, with spaced repetition and progress tracking.",
+    url: getCanonicalUrl("/study-decks"),
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Study Decks | Mohamed Habib Jaouadi",
+    description: "Interactive flashcards to help you master key concepts from your notes, with spaced repetition and progress tracking.",
+  },
+}
 
 export default function StudyDecksPage() {
   const decks = getAllStudyDecks()
   const categories = getAllCategories()
   const tags = getAllTags()
+  const totalCards = decks.reduce((sum, deck) => sum + deck.totalCards, 0)
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Study Decks</h1>
-          <p className="text-muted-foreground text-lg">
-            Interactive flashcards to help you master key concepts from your notes. 
-            Practice with spaced repetition and track your progress.
-          </p>
-        </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <SectionHero
+        eyebrow="Spaced repetition"
+        title="Study Decks"
+        description="Interactive flashcards to help you master key concepts from your notes. Practice with spaced repetition and track your progress."
+      />
 
+      <div className="max-w-6xl mx-auto px-4 py-12 space-y-10">
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold">{decks.length}</div>
+            <div className="text-2xl font-bold font-mono">{decks.length}</div>
             <div className="text-sm text-muted-foreground">Total Decks</div>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold">
-              {decks.reduce((sum, deck) => sum + deck.totalCards, 0)}
-            </div>
+            <div className="text-2xl font-bold font-mono">{totalCards}</div>
             <div className="text-sm text-muted-foreground">Total Cards</div>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold">{categories.length}</div>
+            <div className="text-2xl font-bold font-mono">{categories.length}</div>
             <div className="text-sm text-muted-foreground">Categories</div>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold">{tags.length}</div>
+            <div className="text-2xl font-bold font-mono">{tags.length}</div>
             <div className="text-sm text-muted-foreground">Topics</div>
           </div>
         </div>
 
         {/* Filter and Display Decks */}
-        <StudyDecksFilter 
+        <StudyDecksFilter
           decks={decks}
           categories={categories}
           tags={tags}
@@ -49,9 +63,4 @@ export default function StudyDecksPage() {
       </div>
     </div>
   )
-}
-
-export const metadata = {
-  title: 'Study Decks - Interactive Learning',
-  description: 'Master key concepts with interactive flashcards and spaced repetition learning.',
 }

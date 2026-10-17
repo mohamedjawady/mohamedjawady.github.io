@@ -34,7 +34,7 @@ export default function AttackMatrixPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">MITRE ATT&CK Matrix</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">MITRE ATT&CK Matrix</h1>
         <p className="text-muted-foreground text-lg">
           The full Enterprise ATT&CK matrix, sourced from MITRE&apos;s official STIX data. Click cells to color and
           annotate techniques for an actor, campaign, or detection gap analysis, then export to SVG, PNG, or JPEG.

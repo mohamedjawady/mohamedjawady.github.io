@@ -34,7 +34,7 @@ export default function DiamondModelPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Diamond Model Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Diamond Model Builder</h1>
         <p className="text-muted-foreground text-lg">
           The four core features of an intrusion event: Adversary, Capability, Infrastructure, and Victim, linked by
           the socio-political and technical axes. Edit each feature, add meta-data, and export to SVG, PNG, or JPEG.

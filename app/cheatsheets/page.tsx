@@ -3,7 +3,7 @@ import { Metadata } from "next"
 import { getAllCheatsheets, getVisibleCheatsheets } from "@/lib/cheatsheets"
 import { getCanonicalUrl } from "@/lib/url"
 import { CheatsheetsClient } from "./cheatsheets-client"
-import { HeroBackground } from "@/components/hero-background"
+import { SectionHero } from "@/components/section-hero"
 
 export const metadata: Metadata = {
   title: "Cheatsheets | Mohamed Habib Jaouadi",
@@ -30,24 +30,15 @@ export default async function CheatsheetsPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header Section */}
-      <section className="relative pt-32 pb-20 px-4 overflow-hidden border-b border-border/20">
-        <HeroBackground />
-        
-        <div className="relative z-10 max-w-4xl mx-auto text-center">
-
-          
-          <h1 className="text-4xl md:text-6xl font-bold font-mono tracking-tighter mb-6">
-            <span className="text-emerald-500">Cheat</span>
-            <span className="text-foreground">sheets</span>
-          </h1>
-          
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Quick reference guides and cheatsheets to help you work more efficiently. 
-            From programming languages to cybersecurity tools, find the information you need at a glance.
-          </p>
-        </div>
-      </section>
+      <SectionHero
+        eyebrow="Quick Reference"
+        title={
+          <>
+            <span className="text-emerald-600 dark:text-emerald-400">Cheat</span>sheets
+          </>
+        }
+        description="Quick reference guides to help you work more efficiently. From programming languages to cybersecurity tools, find the information you need at a glance."
+      />
 
       <div className="max-w-7xl mx-auto px-4 py-12">
         <Suspense fallback={<div>Loading cheatsheets...</div>}>

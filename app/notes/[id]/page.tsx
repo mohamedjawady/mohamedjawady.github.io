@@ -147,7 +147,7 @@ export default async function NotePage({ params }: NotePageProps) {
               </Badge>
             </div>
             
-            <h1 className="text-4xl font-bold tracking-tight">{note.title}</h1>
+            <h1 className="font-serif text-4xl md:text-5xl leading-tight">{note.title}</h1>
             
             <div className="space-y-2">
               <div className="text-xl text-muted-foreground">

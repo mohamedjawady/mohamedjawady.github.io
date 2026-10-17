@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Shield, Code, Network, Bug, Target, Wrench, Download, Eye, Github, Linkedin, Mail } from "lucide-react"
-import { HeroBackground } from "@/components/hero-background"
+import { SectionHero } from "@/components/section-hero"
 import { BentoGrid, BentoGridItem } from "@/components/bento-grid"
 
 export default function AboutPage() {
@@ -23,31 +23,26 @@ export default function AboutPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header Section */}
-      <section className="relative pt-32 pb-20 px-4 overflow-hidden border-b border-border/20">
-        <HeroBackground />
-        
-        <div className="relative z-10 max-w-4xl mx-auto text-center">
-
-          
-          <h1 className="text-4xl md:text-6xl font-bold font-mono tracking-tighter mb-8">
-            <span className="text-foreground">About</span>{" "}
-            <span className="text-emerald-500">Me</span>
-          </h1>
-          
-          <div className="prose prose-slate dark:prose-invert max-w-2xl mx-auto text-lg text-muted-foreground leading-relaxed text-left">
-            <p className="mb-6">
-              My name is Mohamed Habib Jaouadi and I have always been a cybersecurity enthusiast who has a passion for understanding how systems work, how systems fail, and how to build better systems.
-            </p>
-            <p className="mb-6">
-              I began my journey in cybersecurity focused on malware analysis. This curiosity has since evolved into offensive security, threat hunting, and secure software development. I have learned by doing, usually doing something destructive to aid in understanding complex systems, and by sharing that knowledge with my security community along the way.
-            </p>
-            <p>
-              This blog will function as my notebook, and will serve as a place to document my findings, techniques, tools, and learning experiences. Whether that experience is finding a way to reverse engineer a new malware sample, learning about different network protocols, or building a new security tool, I want to share both the process and the outcome.
-            </p>
-          </div>
+      <SectionHero
+        eyebrow="Mohamed Habib Jaouadi · SOC Analyst"
+        title={
+          <>
+            About <span className="text-emerald-600 dark:text-emerald-400">Me</span>
+          </>
+        }
+      >
+        <div className="prose prose-slate dark:prose-invert max-w-2xl mx-auto text-lg text-muted-foreground leading-relaxed text-left mt-8">
+          <p className="mb-6">
+            My name is Mohamed Habib Jaouadi and I have always been a cybersecurity enthusiast who has a passion for understanding how systems work, how systems fail, and how to build better systems.
+          </p>
+          <p className="mb-6">
+            I began my journey in cybersecurity focused on malware analysis. This curiosity has since evolved into offensive security, threat hunting, and secure software development. I have learned by doing, usually doing something destructive to aid in understanding complex systems, and by sharing that knowledge with my security community along the way.
+          </p>
+          <p>
+            This blog will function as my notebook, and will serve as a place to document my findings, techniques, tools, and learning experiences. Whether that experience is finding a way to reverse engineer a new malware sample, learning about different network protocols, or building a new security tool, I want to share both the process and the outcome.
+          </p>
         </div>
-      </section>
+      </SectionHero>
 
       <div className="max-w-6xl mx-auto px-4 py-20">
         {/* Skills - Bento Grid */}

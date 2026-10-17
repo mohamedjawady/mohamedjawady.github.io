@@ -34,7 +34,7 @@ export default function OodaLoopPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">OODA Loop Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">OODA Loop Builder</h1>
         <p className="text-muted-foreground text-lg">
           John Boyd&apos;s decision cycle: Observe, Orient, Decide, Act, looping continuously. Edit each phase and
           export to SVG, PNG, or JPEG. Everything runs locally in your browser, nothing is uploaded.

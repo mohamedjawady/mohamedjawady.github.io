@@ -34,7 +34,7 @@ export default function AdmiraltyCodePage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Admiralty Code Tool</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Admiralty Code Tool</h1>
         <p className="text-muted-foreground text-lg">
           The NATO Admiralty System (STANAG 2511) for grading raw intelligence: source reliability (A-F) against
           information credibility (1-6). Click a cell to select a rating, record why, and export to SVG, PNG, or

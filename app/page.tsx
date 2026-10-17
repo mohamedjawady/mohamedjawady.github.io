@@ -94,7 +94,7 @@ export default async function HomePage() {
         <div className="relative z-10 max-w-6xl mx-auto px-4 py-20 md:py-28 grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-14 items-center">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 mb-5">
-              Mohamed Habib Jaouadi &middot; Cyber Threat Intelligence Analyst
+              Mohamed Habib Jaouadi &middot; SOC Analyst
             </p>
 
             <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl leading-[1.05] mb-6">

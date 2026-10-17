@@ -104,7 +104,7 @@ export default async function CheatsheetPage({ params }: CheatsheetPageProps) {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h1 className="text-4xl font-bold leading-tight">
+          <h1 className="font-serif text-4xl md:text-5xl leading-tight">
             {cheatsheet.title}
           </h1>
           <div className="flex items-center gap-1 text-muted-foreground">

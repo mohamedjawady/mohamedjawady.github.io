@@ -34,7 +34,7 @@ export default function UnifiedKillChainPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Unified Kill Chain Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Unified Kill Chain Builder</h1>
         <p className="text-muted-foreground text-lg">
           Paul Pols&apos; 18-phase merge of the Cyber Kill Chain, MITRE ATT&amp;CK, and the Diamond Model, grouped
           into In, Through, and Out. Edit phases, connect them, and export to SVG, PNG, or JPEG. Everything runs

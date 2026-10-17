@@ -34,7 +34,7 @@ export default function F3eadPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">F3EAD Cycle Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">F3EAD Cycle Builder</h1>
         <p className="text-muted-foreground text-lg">
           The Find, Fix, Finish, Exploit, Analyze, Disseminate cycle used to fuse operations and intelligence. Edit
           each phase and export to SVG, PNG, or JPEG. Everything runs locally in your browser, nothing is uploaded.

@@ -288,13 +288,13 @@ export default async function PostPage({ params }: PostPageProps) {
 
         <div className="relative max-w-[90rem] mx-auto px-6 pt-14 pb-10">
           {post.series && (
-            <p className="font-mono text-sm text-emerald-600 dark:text-emerald-400 mb-3">
+            <p className="font-mono text-xs uppercase tracking-[0.15em] text-emerald-600 dark:text-emerald-400 mb-4">
               {post.series}
               {typeof post.seriesOrder === "number" && ` · Part ${post.seriesOrder}`}
             </p>
           )}
 
-          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-4 max-w-3xl">
+          <h1 className="font-serif text-3xl md:text-5xl leading-tight mb-4 max-w-3xl">
             {post.title}
           </h1>
 

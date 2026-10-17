@@ -34,7 +34,7 @@ export default function DiagramBuilderPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Free-Form Diagram Canvas</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Free-Form Diagram Canvas</h1>
         <p className="text-muted-foreground text-lg">
           Looking for a specific model? Kill Chain, Diamond Model, Unified Kill Chain, Attack Tree, OODA Loop,
           F3EAD, and Bow-Tie each have their own dedicated tool. This canvas is for mixing them, switch templates

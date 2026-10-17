@@ -34,7 +34,7 @@ export default function AttackTreePage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Attack Tree Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Attack Tree Builder</h1>
         <p className="text-muted-foreground text-lg">
           Break an attacker&apos;s goal down into AND/OR sub-goals and concrete leaf attacks. Set gates per node, use
           Auto Layout to tidy the tree after editing, and export to SVG, PNG, or JPEG. Everything runs locally in

@@ -34,7 +34,7 @@ export default function CoaMatrixPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Courses of Action Matrix</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Courses of Action Matrix</h1>
         <p className="text-muted-foreground text-lg">
           The seven Ds (Discover, Detect, Deny, Disrupt, Degrade, Deceive, Destroy) against the seven kill chain
           phases. Seeded with a worked C2-domain example: click a cell to describe your own control and paint it for

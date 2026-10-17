@@ -34,7 +34,7 @@ export default function BowTiePage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Bow-Tie Risk Diagram Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Bow-Tie Risk Diagram Builder</h1>
         <p className="text-muted-foreground text-lg">
           Threat causes and their preventive barriers on the left, a central top event, consequences and their
           mitigative barriers on the right. Seeded with a ransomware example. Edit labels and barriers, and export

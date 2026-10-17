@@ -3,7 +3,7 @@ import { PostsFilter } from "@/components/posts-filter"
 import { PostCard } from "@/components/post-card"
 import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
-import { HeroBackground } from "@/components/hero-background"
+import { SectionHero } from "@/components/section-hero"
 
 export const metadata: Metadata = {
   title: "All Posts | Mohamed Habib Jaouadi",
@@ -36,23 +36,15 @@ export default async function PostsPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header Section */}
-      <section className="relative pt-32 pb-20 px-4 overflow-hidden border-b border-border/20">
-        <HeroBackground />
-        
-        <div className="relative z-10 max-w-4xl mx-auto text-center">
-
-          
-          <h1 className="text-4xl md:text-6xl font-bold font-mono tracking-tighter mb-6">
-            <span className="text-foreground">All</span>{" "}
-            <span className="text-emerald-500">Posts</span>
-          </h1>
-          
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            {publicPosts.length} published posts documenting my journey in cybersecurity and development
-          </p>
-        </div>
-      </section>
+      <SectionHero
+        eyebrow="Archive"
+        title={
+          <>
+            All <span className="text-emerald-600 dark:text-emerald-400">Posts</span>
+          </>
+        }
+        description={`${publicPosts.length} published posts documenting my journey in cybersecurity and development.`}
+      />
 
       <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Published Posts Section */}

@@ -35,7 +35,7 @@ export default function SplBuilderPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Splunk SPL Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Splunk SPL Builder</h1>
         <p className="text-muted-foreground text-lg">
           Pick a dataset, add search filters, and chain as many commands together as you want, fields, stats,
           chart, eval, iplocation, and more. Every stage is a real transform over the previous one's output, so the

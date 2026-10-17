@@ -34,7 +34,7 @@ export default function KillChainPage() {
       </Link>
 
       <div className="mb-8">
-        <h1 className="text-4xl font-bold font-mono mb-4">Cyber Kill Chain Builder</h1>
+        <h1 className="font-serif text-4xl md:text-5xl mb-4">Cyber Kill Chain Builder</h1>
         <p className="text-muted-foreground text-lg">
           Lockheed Martin&apos;s 7-phase intrusion model: Reconnaissance, Weaponization, Delivery, Exploitation,
           Installation, Command &amp; Control, and Actions on Objectives. Edit phases, connect them, and export to

@@ -7,6 +7,7 @@ import {
   DATASETS,
   getDataset,
   runPipeline,
+  repairStages,
   defaultConfig,
   STAGE_TYPES,
   STAGE_LABELS,
@@ -652,17 +653,19 @@ export function SplPipelineBuilder() {
     if (isVisualizable(type)) setResultView("viz")
   }
   function updateStage(id: string, config: any) {
-    setStages(stages.map((s) => (s.id === id ? { ...s, config } : s)))
+    const next = stages.map((s) => (s.id === id ? { ...s, config } : s))
+    setStages(repairStages(dataset, timeRange, filters, next))
   }
   function removeStage(id: string) {
-    setStages(stages.filter((s) => s.id !== id))
+    const next = stages.filter((s) => s.id !== id)
+    setStages(repairStages(dataset, timeRange, filters, next))
   }
   function moveStage(index: number, dir: -1 | 1) {
     const target = index + dir
     if (target < 0 || target >= stages.length) return
     const arr = [...stages]
     ;[arr[index], arr[target]] = [arr[target], arr[index]]
-    setStages(arr)
+    setStages(repairStages(dataset, timeRange, filters, arr))
   }
 
   function copySpl() {

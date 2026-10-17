@@ -19,6 +19,7 @@ function T(h: number, m = 0, s = 0): number {
 }
 
 export function formatEpoch(epoch: number): string {
+  if (!Number.isFinite(epoch)) return "(no _time)"
   const d = new Date(epoch * 1000)
   const hh = String(d.getUTCHours()).padStart(2, "0")
   const mm = String(d.getUTCMinutes()).padStart(2, "0")
@@ -736,6 +737,12 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
       const limit: number = config.limit
       const by: string = config.by
       const order = type === "top" ? "desc" : "asc"
+      // "count" and "percent" are the stat columns top/rare always adds. If the
+      // field being topped (or grouped by) happens to already be named that,
+      // e.g. a "count" field produced by an earlier stats command, a plain
+      // row.count = ... write would silently clobber the field's own value.
+      const countKey = field === "count" || by === "count" ? "occurrence_count" : "count"
+      const percentKey = field === "percent" || by === "percent" ? "occurrence_percent" : "percent"
       const buildRows = (groupRows: Row[], byVal?: CellValue) => {
         const counts = new Map<CellValue, number>()
         for (const r of groupRows) counts.set(r[field], (counts.get(r[field]) ?? 0) + 1)
@@ -747,8 +754,8 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
           const row: Row = {}
           if (byVal !== undefined) row[by] = byVal
           row[field] = a.v
-          row.count = a.c
-          row.percent = a.pct
+          row[countKey] = a.c
+          row[percentKey] = a.pct
           return row
         })
       }
@@ -787,6 +794,13 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
       return { rows: out }
     }
     case "timechart": {
+      if (rows.length && !("_time" in rows[0])) {
+        return {
+          rows,
+          warning:
+            "timechart needs the original _time field. Transforming commands earlier in the pipeline (top, rare, stats, chart, addtotals, geostats) don't carry it forward, so timechart has nothing to bin on. Put it directly after the search or filters, before those commands.",
+        }
+      }
       const spanSeconds = spanToSeconds(config.span)
       const binned: Row[] = rows.map((r) => ({ ...r, _time: binTime(Number(r._time), spanSeconds) }))
       const by: string = config.by
@@ -813,6 +827,13 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
     case "bin": {
       const field: string = config.field
       if (field === "_time") {
+        if (rows.length && !("_time" in rows[0])) {
+          return {
+            rows,
+            warning:
+              "bin span=... _time needs the original _time field, which earlier transforming commands (top, rare, stats, chart, addtotals, geostats) don't carry forward.",
+          }
+        }
         const spanSeconds = spanToSeconds(config.span)
         return { rows: rows.map((r) => ({ ...r, _time: binTime(Number(r._time), spanSeconds) })) }
       }
@@ -886,19 +907,23 @@ function aggAlias(config: { fn: AggFn; field?: string }): string {
 // Running the full pipeline
 // ---------------------------------------------------------------------------
 
-export function runPipeline(
-  dataset: Dataset,
-  timeRange: TimeRange,
-  filters: Filter[],
-  stages: PipelineStage[],
-): StepResult[] {
+function baseRowsFor(dataset: Dataset, timeRange: TimeRange, filters: Filter[]): Row[] {
   const timeFiltered = dataset.rows.filter((r) => {
     const t = Number(r._time)
     if (timeRange.earliest !== null && t < timeRange.earliest) return false
     if (timeRange.latest !== null && t >= timeRange.latest) return false
     return true
   })
-  const baseRows = applyFilters(timeFiltered, filters)
+  return applyFilters(timeFiltered, filters)
+}
+
+export function runPipeline(
+  dataset: Dataset,
+  timeRange: TimeRange,
+  filters: Filter[],
+  stages: PipelineStage[],
+): StepResult[] {
+  const baseRows = baseRowsFor(dataset, timeRange, filters)
   const steps: StepResult[] = [
     {
       label: "search",
@@ -933,4 +958,77 @@ export function runPipeline(
     })
   }
   return steps
+}
+
+// ---------------------------------------------------------------------------
+// Repairing stale field references
+// ---------------------------------------------------------------------------
+//
+// A stage's config is only ever validated against the fields available when
+// the user picks them. If an earlier stage is removed, reordered, or edited
+// in a way that changes its output fields, a later stage can end up pointing
+// at a field that no longer exists, for example "top" still set to a "count"
+// field that only existed while a since-removed "stats" stage produced it.
+// Left alone, that silently degrades to Number(undefined) => NaN cascading
+// through the rest of the pipeline. repairStages re-derives the pipeline
+// stage by stage and resets just the stages whose referenced fields have
+// gone stale, so the UI and the computed output never drift apart.
+
+function referencedFields(type: StageType, config: any): string[] {
+  switch (type) {
+    case "fields":
+    case "table":
+    case "dedup":
+      return config.fields ?? []
+    case "rename":
+      return (config.mappings ?? []).map((m: any) => m.from)
+    case "sort":
+      return (config.keys ?? []).map((k: any) => k.field)
+    case "fieldformat":
+    case "iplocation":
+    case "gauge":
+    case "bin":
+      return [config.field]
+    case "stats":
+      return [...(config.fns ?? []).map((f: StatFnEntry) => f.field).filter((f: unknown): f is string => Boolean(f)), ...(config.by ?? [])]
+    case "top":
+    case "rare":
+      return [config.field, config.by]
+    case "chart":
+    case "geostats":
+      return [config.field, config.over, config.by]
+    case "timechart":
+      return [config.field, config.by]
+    case "eval":
+      return (config.defs ?? []).flatMap((d: EvalDef) => {
+        if (d.kind === "arith") return [d.a, d.b]
+        if (d.kind === "round" || d.kind === "commas" || d.kind === "case2") return [d.field]
+        if (d.kind === "concat") return [d.a, d.b]
+        return []
+      })
+    default:
+      return []
+  }
+}
+
+function defaultConfigForRepair(type: StageType, fields: string[], rows: Row[], dataset: Dataset): any {
+  const config = defaultConfig(type, fields, rows)
+  if (type === "iplocation") config.field = dataset.ipField ?? ""
+  return config
+}
+
+export function repairStages(dataset: Dataset, timeRange: TimeRange, filters: Filter[], stages: PipelineStage[]): PipelineStage[] {
+  let rows = baseRowsFor(dataset, timeRange, filters)
+  let fields = dataset.fields
+  const repaired: PipelineStage[] = []
+  for (const stage of stages) {
+    const refs = referencedFields(stage.type, stage.config).filter((f): f is string => Boolean(f))
+    const stale = refs.some((f) => !fields.includes(f))
+    const config = stale ? defaultConfigForRepair(stage.type, fields, rows, dataset) : stage.config
+    const result = applyStage(stage.type, config, rows)
+    rows = result.rows
+    fields = rows.length ? Object.keys(rows[0]) : fields
+    repaired.push({ ...stage, config })
+  }
+  return repaired
 }

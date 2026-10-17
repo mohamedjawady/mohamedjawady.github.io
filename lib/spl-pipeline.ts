@@ -391,32 +391,37 @@ export function nextId(prefix: string): string {
 export function defaultConfig(type: StageType, fields: string[], rows: Row[]): any {
   const numeric = numericFieldsOf(rows)
   const firstField = fields[0] ?? ""
+  // _time is technically numeric and is almost always the first field, but it's
+  // a poor default for "pick a field to group/sort/format by": every event has a
+  // unique value, so grouping or deduping on it degenerates to one row per event.
+  const firstNonTime = fields.find((f) => f !== "_time") ?? firstField
   const firstNumeric = numeric[0] ?? firstField
+  const firstNumericNonTime = numeric.find((f) => f !== "_time") ?? numeric[0] ?? firstNonTime
   switch (type) {
     case "fields":
       return { mode: "keep", fields: fields.slice(0, Math.min(3, fields.length)) }
     case "table":
       return { fields: fields.slice(0, Math.min(4, fields.length)) }
     case "dedup":
-      return { fields: [firstField] }
+      return { fields: [firstNonTime] }
     case "rename":
-      return { mappings: [{ id: nextId("rn"), from: firstField, to: firstField ? `${firstField}_renamed` : "" }] }
+      return { mappings: [{ id: nextId("rn"), from: firstNonTime, to: firstNonTime ? `${firstNonTime}_renamed` : "" }] }
     case "sort":
       return { keys: [{ id: nextId("sk"), field: firstNumeric, dir: "desc" as const }] }
     case "fieldformat":
-      return { field: firstNumeric }
+      return { field: firstNumericNonTime }
     case "stats":
       return {
         fns: [{ id: nextId("fn"), fn: "count" as AggFn, field: undefined, alias: "count" }],
-        by: fields.includes("user") ? ["user"] : [firstField],
+        by: fields.includes("user") ? ["user"] : [firstNonTime],
       }
     case "addtotals":
       return { row: true, col: false, fieldname: "Total" }
     case "top":
     case "rare":
-      return { field: firstField, limit: 3, by: "" }
+      return { field: firstNonTime, limit: 3, by: "" }
     case "chart":
-      return { fn: "count" as AggFn, field: undefined, over: firstField, by: "" }
+      return { fn: "count" as AggFn, field: undefined, over: firstNonTime, by: "" }
     case "timechart":
       return { fn: "count" as AggFn, field: undefined, span: "1h", by: "" }
     case "bin":
@@ -424,7 +429,7 @@ export function defaultConfig(type: StageType, fields: string[], rows: Row[]): a
     case "eval":
       return {
         defs: [
-          { id: nextId("ev"), kind: "round", newField: "rounded", field: firstNumeric, decimals: 2 } as EvalDef,
+          { id: nextId("ev"), kind: "round", newField: "rounded", field: firstNumericNonTime, decimals: 2 } as EvalDef,
         ],
       }
     case "iplocation":
@@ -432,7 +437,7 @@ export function defaultConfig(type: StageType, fields: string[], rows: Row[]): a
     case "geostats":
       return { fn: "count" as AggFn, field: undefined, by: "" }
     case "gauge":
-      return { field: firstNumeric, t0: 0, t1: 50, t2: 150, t3: 300 }
+      return { field: firstNumericNonTime, t0: 0, t1: 50, t2: 150, t3: 300 }
     default:
       return {}
   }
@@ -863,18 +868,23 @@ export function runPipeline(dataset: Dataset, filters: Filter[], stages: Pipelin
 
   let currentRows = baseRows
   let formatters: Record<string, (v: CellValue) => string> = {}
+  let transformed = false
   for (const stage of stages) {
     const result = applyStage(stage.type, stage.config, currentRows)
     currentRows = result.rows
     const fields = currentRows.length ? Object.keys(currentRows[0]) : steps[steps.length - 1].fields
     if (result.formatter) formatters = { ...formatters, [result.formatter.field]: result.formatter.fn }
+    // Once a transforming command has run, the pipeline can never go back to raw
+    // events, so every later stage stays "transforming" even if it doesn't itself
+    // aggregate (e.g. a sort or eval after a stats).
+    transformed = transformed || TRANSFORMING.has(stage.type)
     steps.push({
       label: stage.type,
       spl: stageToSpl(stage.type, stage.config),
       rows: currentRows,
       fields,
       warning: result.warning,
-      isTransforming: TRANSFORMING.has(stage.type),
+      isTransforming: transformed,
       formatters,
     })
   }

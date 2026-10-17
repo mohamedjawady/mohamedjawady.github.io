@@ -24,6 +24,7 @@ import {
   type AggFn,
   type EvalDef,
   type Row,
+  type StatFnEntry,
 } from "@/lib/spl-pipeline"
 
 // ---------------------------------------------------------------------------
@@ -273,7 +274,14 @@ function StageConfigEditor({
               </div>
             ))}
             <button
-              onClick={() => addListItem(config, "fns", { id: nextId("fn"), fn: "count", field: undefined, alias: "count" }, onChange)}
+              onClick={() => {
+                const existingAliases = config.fns.map((f: StatFnEntry) => f.alias)
+                const numericNonTime = numericFields.filter((f) => f !== "_time")
+                const nextFn: AggFn = numericNonTime.length ? "sum" : "dc"
+                const nextField = numericNonTime[0] ?? fields.find((f) => f !== "_time") ?? fields[0]
+                const alias = uniqueName(`${nextFn}_${nextField}`, existingAliases)
+                addListItem(config, "fns", { id: nextId("fn"), fn: nextFn, field: nextField, alias }, onChange)
+              }}
               className="flex items-center gap-1 text-xs text-[#0a84c4] hover:underline"
             >
               <Plus className="w-3.5 h-3.5" /> Add function

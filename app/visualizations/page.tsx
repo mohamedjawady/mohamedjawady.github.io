@@ -5,10 +5,10 @@ import { getCanonicalUrl } from "@/lib/url"
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Visualizations | 0xHabib",
+  title: "Visualizations | Mohamed Habib Jaouadi",
   description: "Interactive visualizations and animations for cryptography, algorithms, and cybersecurity concepts.",
   openGraph: {
-    title: "Visualizations | 0xHabib",
+    title: "Visualizations | Mohamed Habib Jaouadi",
     description: "Interactive visualizations and animations for cryptography, algorithms, and cybersecurity concepts.",
     url: getCanonicalUrl("/visualizations"),
     images: [
@@ -16,13 +16,13 @@ export const metadata: Metadata = {
         url: getCanonicalUrl('/android-chrome-512x512.png'),
         width: 512,
         height: 512,
-        alt: "Visualizations - 0xHabib",
+        alt: "Visualizations - Mohamed Habib Jaouadi",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Visualizations | 0xHabib",
+    title: "Visualizations | Mohamed Habib Jaouadi",
     description: "Interactive visualizations and animations for cryptography, algorithms, and cybersecurity concepts.",
     images: [getCanonicalUrl('/android-chrome-512x512.png')],
   },

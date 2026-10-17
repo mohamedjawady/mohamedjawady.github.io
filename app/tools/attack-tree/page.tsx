@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Attack Tree Builder | 0xHabib",
+  title: "Attack Tree Builder | Mohamed Habib Jaouadi",
   description:
     "Build Schneier-style attack trees with AND/OR gates from a root goal down to concrete leaf attacks, with automatic tree layout. Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Attack Tree Builder | 0xHabib",
+    title: "Attack Tree Builder | Mohamed Habib Jaouadi",
     description:
       "Build Schneier-style attack trees with AND/OR gates from a root goal down to concrete leaf attacks, with automatic tree layout. Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/attack-tree"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Attack Tree Builder | 0xHabib",
+    title: "Attack Tree Builder | Mohamed Habib Jaouadi",
     description:
       "Build Schneier-style attack trees with AND/OR gates from a root goal down to concrete leaf attacks, with automatic tree layout. Export as SVG, PNG, or JPEG.",
   },

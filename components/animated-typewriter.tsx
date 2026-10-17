@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from "react"
 
 const TITLES = [
-  "0xHabib",
   "Mohamed Habib Jaouadi"
 ]
 

@@ -5,16 +5,16 @@ import { ToolCard } from "@/components/tool-card"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Tools | 0xHabib",
+  title: "Tools | Mohamed Habib Jaouadi",
   description: "Interactive tools for cyber threat intelligence analysts: kill chains, structured models, decision cycles, risk diagrams, and scoring matrices.",
   openGraph: {
-    title: "Tools | 0xHabib",
+    title: "Tools | Mohamed Habib Jaouadi",
     description: "Interactive tools for cyber threat intelligence analysts: kill chains, structured models, decision cycles, risk diagrams, and scoring matrices.",
     url: getCanonicalUrl("/tools"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tools | 0xHabib",
+    title: "Tools | Mohamed Habib Jaouadi",
     description: "Interactive tools for cyber threat intelligence analysts: kill chains, structured models, decision cycles, risk diagrams, and scoring matrices.",
   },
 }

@@ -33,7 +33,7 @@ export function BlogPostStructuredData({
     },
     publisher: {
       '@type': 'Organization',
-      name: '0xHabib',
+      name: 'Mohamed Habib Jaouadi',
       url: baseUrl,
     },
     datePublished: datePublished,
@@ -83,9 +83,7 @@ export function WebsiteStructuredData({ name, description, url }: WebsiteStructu
       url: baseUrl,
     },
     sameAs: [
-      'https://twitter.com/0xhabib',
-      'https://github.com/0xhabib',
-      'https://linkedin.com/in/0xhabib',
+      'https://www.linkedin.com/in/mohamedjawady/',
     ],
   }
 

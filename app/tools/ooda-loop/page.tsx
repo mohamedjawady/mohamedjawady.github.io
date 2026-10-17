@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "OODA Loop Builder | 0xHabib",
+  title: "OODA Loop Builder | Mohamed Habib Jaouadi",
   description:
     "Build Boyd's OODA decision cycle: Observe, Orient, Decide, Act. Edit each phase and export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "OODA Loop Builder | 0xHabib",
+    title: "OODA Loop Builder | Mohamed Habib Jaouadi",
     description:
       "Build Boyd's OODA decision cycle: Observe, Orient, Decide, Act. Edit each phase and export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/ooda-loop"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "OODA Loop Builder | 0xHabib",
+    title: "OODA Loop Builder | Mohamed Habib Jaouadi",
     description:
       "Build Boyd's OODA decision cycle: Observe, Orient, Decide, Act. Edit each phase and export as SVG, PNG, or JPEG.",
   },

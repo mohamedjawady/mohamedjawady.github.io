@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Free-Form Diagram Canvas | 0xHabib",
+  title: "Free-Form Diagram Canvas | Mohamed Habib Jaouadi",
   description:
     "A blank, general-purpose canvas that switches between every model, kill chain, diamond model, attack tree, and more, so you can mix and match on one diagram. Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Free-Form Diagram Canvas | 0xHabib",
+    title: "Free-Form Diagram Canvas | Mohamed Habib Jaouadi",
     description:
       "A blank, general-purpose canvas that switches between every model, kill chain, diamond model, attack tree, and more, so you can mix and match on one diagram. Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/diagram-builder"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Free-Form Diagram Canvas | 0xHabib",
+    title: "Free-Form Diagram Canvas | Mohamed Habib Jaouadi",
     description:
       "A blank, general-purpose canvas that switches between every model, kill chain, diamond model, attack tree, and more, so you can mix and match on one diagram. Export as SVG, PNG, or JPEG.",
   },

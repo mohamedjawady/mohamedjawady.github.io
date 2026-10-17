@@ -181,20 +181,20 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
   const postUrl = getCanonicalUrl(`/posts/${slug}`)
 
   return {
-    title: `${post.title}${post.visibility === 'draft' ? ' [DRAFT]' : ''} | 0xHabib`,
+    title: `${post.title}${post.visibility === 'draft' ? ' [DRAFT]' : ''} | Mohamed Habib Jaouadi`,
     description: post.visibility === 'draft'
       ? `[DRAFT] ${post.description || 'Work-in-progress post content'}`
       : (post.description || ''),
     keywords: post.tags,
-    authors: [{ name: post.author || '0xHabib' }],
+    authors: [{ name: post.author || 'Mohamed Habib Jaouadi' }],
     openGraph: {
       type: 'article',
       title: post.title,
       description: post.description,
       url: postUrl,
-      siteName: '0xHabib',
+      siteName: 'Mohamed Habib Jaouadi',
       publishedTime: post.date,
-      authors: [post.author || '0xHabib'],
+      authors: [post.author || 'Mohamed Habib Jaouadi'],
       tags: post.tags,
       images: [
         {
@@ -211,7 +211,6 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
       card: 'summary_large_image',
       title: post.title,
       description: post.description,
-      creator: '@0xhabib',
       images: [ogImageUrl],
     },
     alternates: {
@@ -219,7 +218,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
     },
     // Additional meta tags for better social sharing
     other: {
-      'article:author': post.author || '0xHabib',
+      'article:author': post.author || 'Mohamed Habib Jaouadi',
       'article:published_time': post.date,
       'article:section': 'Technology',
       'article:tag': post.tags.join(', '),
@@ -253,7 +252,7 @@ export default async function PostPage({ params }: PostPageProps) {
       <BlogPostStructuredData
         title={post.title}
         description={post.description || ''}
-        author={post.author || '0xHabib'}
+        author={post.author || 'Mohamed Habib Jaouadi'}
         datePublished={post.date}
         url={postUrl}
         tags={post.tags}

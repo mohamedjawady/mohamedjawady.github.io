@@ -6,10 +6,10 @@ import { CheatsheetsClient } from "./cheatsheets-client"
 import { HeroBackground } from "@/components/hero-background"
 
 export const metadata: Metadata = {
-  title: "Cheatsheets | 0xHabib",
+  title: "Cheatsheets | Mohamed Habib Jaouadi",
   description: "Quick reference guides and cheatsheets for programming, cybersecurity, and development tools.",
   openGraph: {
-    title: "Cheatsheets | 0xHabib",
+    title: "Cheatsheets | Mohamed Habib Jaouadi",
     description: "Quick reference guides and cheatsheets for programming, cybersecurity, and development tools.",
     type: "website",
     url: getCanonicalUrl("/cheatsheets"),
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Cheatsheets | 0xHabib",
+    title: "Cheatsheets | Mohamed Habib Jaouadi",
     description: "Quick reference guides and cheatsheets for programming, cybersecurity, and development tools.",
     images: [getCanonicalUrl('/android-chrome-512x512.png')],
   },

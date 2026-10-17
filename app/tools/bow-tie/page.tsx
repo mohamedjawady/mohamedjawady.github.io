@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Bow-Tie Risk Diagram Builder | 0xHabib",
+  title: "Bow-Tie Risk Diagram Builder | Mohamed Habib Jaouadi",
   description:
     "Build bow-tie risk diagrams: threat causes and their preventive barriers on the left, a central top event, consequences and their mitigative barriers on the right. Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Bow-Tie Risk Diagram Builder | 0xHabib",
+    title: "Bow-Tie Risk Diagram Builder | Mohamed Habib Jaouadi",
     description:
       "Build bow-tie risk diagrams: threat causes and their preventive barriers on the left, a central top event, consequences and their mitigative barriers on the right. Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/bow-tie"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Bow-Tie Risk Diagram Builder | 0xHabib",
+    title: "Bow-Tie Risk Diagram Builder | Mohamed Habib Jaouadi",
     description:
       "Build bow-tie risk diagrams: threat causes and their preventive barriers on the left, a central top event, consequences and their mitigative barriers on the right. Export as SVG, PNG, or JPEG.",
   },

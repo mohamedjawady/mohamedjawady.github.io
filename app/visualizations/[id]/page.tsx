@@ -131,15 +131,15 @@ export async function generateMetadata({ params }: VisualizationPageProps): Prom
 
   if (!visualization || visualization.visibility === 'private') {
     return {
-      title: "Visualization Not Found | 0xHabib",
+      title: "Visualization Not Found | Mohamed Habib Jaouadi",
     }
   }
 
   return {
-    title: `${visualization.title} | 0xHabib`,
+    title: `${visualization.title} | Mohamed Habib Jaouadi`,
     description: visualization.description,
     openGraph: {
-      title: `${visualization.title} | 0xHabib`,
+      title: `${visualization.title} | Mohamed Habib Jaouadi`,
       description: visualization.description,
       url: getCanonicalUrl(`/visualizations/${id}`),
       images: [
@@ -147,13 +147,13 @@ export async function generateMetadata({ params }: VisualizationPageProps): Prom
           url: getCanonicalUrl('/android-chrome-512x512.png'),
           width: 512,
           height: 512,
-          alt: `${visualization.title} - 0xHabib`,
+          alt: `${visualization.title} - Mohamed Habib Jaouadi`,
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${visualization.title} | 0xHabib`,
+      title: `${visualization.title} | Mohamed Habib Jaouadi`,
       description: visualization.description,
       images: [getCanonicalUrl('/android-chrome-512x512.png')],
     },

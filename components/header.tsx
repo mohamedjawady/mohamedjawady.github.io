@@ -29,13 +29,8 @@ export function Header() {
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center space-x-2 group">
             <Terminal className="w-6 h-6 text-emerald-500" />
-            <span className="font-bold font-mono text-xl relative">
-              <span className="inline-block">
-                0x<span className="text-emerald-500">H</span>
-              </span>
-              <span className="text-emerald-500 inline-block opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-in-out">
-                abib
-              </span>
+            <span className="font-bold font-mono text-lg sm:text-xl">
+              Mohamed <span className="text-emerald-500">Habib Jaouadi</span>
             </span>
           </Link>
 

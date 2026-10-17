@@ -27,13 +27,13 @@ export async function generateMetadata({ params }: NotePageProps): Promise<Metad
 
   if (!note) {
     return {
-      title: 'Note Not Found | 0xhabib',
+      title: 'Note Not Found | Mohamed Habib Jaouadi',
       description: 'The requested note could not be found.',
     }
   }
 
   return {
-    title: `${note.title} | Learning Notes | 0xhabib`,
+    title: `${note.title} | Learning Notes | Mohamed Habib Jaouadi`,
     description: note.description,
     keywords: `${note.tags.join(', ')}, ${note.category}, ${note.type}, learning notes`,
     openGraph: {

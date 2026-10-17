@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Unified Kill Chain Builder | 0xHabib",
+  title: "Unified Kill Chain Builder | Mohamed Habib Jaouadi",
   description:
     "Build Paul Pols' 18-phase Unified Kill Chain, grouped into In (Initial Foothold), Through (Network Propagation), and Out (Action on Objectives). Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Unified Kill Chain Builder | 0xHabib",
+    title: "Unified Kill Chain Builder | Mohamed Habib Jaouadi",
     description:
       "Build Paul Pols' 18-phase Unified Kill Chain, grouped into In (Initial Foothold), Through (Network Propagation), and Out (Action on Objectives). Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/unified-kill-chain"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Unified Kill Chain Builder | 0xHabib",
+    title: "Unified Kill Chain Builder | Mohamed Habib Jaouadi",
     description:
       "Build Paul Pols' 18-phase Unified Kill Chain, grouped into In (Initial Foothold), Through (Network Propagation), and Out (Action on Objectives). Export as SVG, PNG, or JPEG.",
   },

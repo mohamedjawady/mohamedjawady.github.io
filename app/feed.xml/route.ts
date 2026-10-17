@@ -43,7 +43,7 @@ export async function GET() {
   const rss = `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>0xHabib - Mohamed Habib Jaouadi</title>
+    <title>Mohamed Habib Jaouadi</title>
     <description>Engineering insights, system design, and technical deep dives by Mohamed Habib Jaouadi</description>
     <link>${escapeXml(getCanonicalUrl(''))}</link>
     <atom:link href="${escapeXml(getCanonicalUrl('/feed.xml'))}" rel="self" type="application/rss+xml" />
@@ -55,7 +55,7 @@ export async function GET() {
     <ttl>60</ttl>
     <image>
       <url>${escapeXml(getCanonicalUrl('/favicon.ico'))}</url>
-      <title>0xHabib</title>
+      <title>Mohamed Habib Jaouadi</title>
       <link>${escapeXml(getCanonicalUrl(''))}</link>
     </image>
     ${rssItems}

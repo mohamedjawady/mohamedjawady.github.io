@@ -6,10 +6,10 @@ import { Metadata } from "next"
 import { HeroBackground } from "@/components/hero-background"
 
 export const metadata: Metadata = {
-  title: "All Posts | 0xHabib",
+  title: "All Posts | Mohamed Habib Jaouadi",
   description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
   openGraph: {
-    title: "All Posts | 0xHabib",
+    title: "All Posts | Mohamed Habib Jaouadi",
     description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
     url: getCanonicalUrl("/posts"),
     images: [
@@ -17,13 +17,13 @@ export const metadata: Metadata = {
         url: getCanonicalUrl('/android-chrome-512x512.png'),
         width: 512,
         height: 512,
-        alt: "All Posts - 0xHabib",
+        alt: "All Posts - Mohamed Habib Jaouadi",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "All Posts | 0xHabib",
+    title: "All Posts | Mohamed Habib Jaouadi",
     description: "Browse all blog posts about cybersecurity, malware analysis, reverse engineering, and more.",
     images: [getCanonicalUrl('/android-chrome-512x512.png')],
   },

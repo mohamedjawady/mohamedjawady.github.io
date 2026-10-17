@@ -5,18 +5,18 @@ import { CoaMatrixTool } from "@/components/tools/coa-matrix-tool"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Courses of Action Matrix | 0xHabib",
+  title: "Courses of Action Matrix | Mohamed Habib Jaouadi",
   description:
     "Build a Courses of Action Matrix: the seven Ds (Discover, Detect, Deny, Disrupt, Degrade, Deceive, Destroy) against the kill chain, with per-cell notes and coverage coloring. Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Courses of Action Matrix | 0xHabib",
+    title: "Courses of Action Matrix | Mohamed Habib Jaouadi",
     description:
       "Build a Courses of Action Matrix: the seven Ds against the kill chain, with per-cell notes and coverage coloring. Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/coa-matrix"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Courses of Action Matrix | 0xHabib",
+    title: "Courses of Action Matrix | Mohamed Habib Jaouadi",
     description:
       "Build a Courses of Action Matrix: the seven Ds against the kill chain, with per-cell notes and coverage coloring. Export as SVG, PNG, or JPEG.",
   },

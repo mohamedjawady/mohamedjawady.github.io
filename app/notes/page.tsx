@@ -4,11 +4,11 @@ import { getVisibleNotes, getUniqueCategories, getUniqueTypes, getUniqueTags, ge
 import { HeroBackground } from "@/components/hero-background"
 
 export const metadata: Metadata = {
-  title: 'Learning Notes | 0xhabib',
+  title: 'Learning Notes | Mohamed Habib Jaouadi',
   description: 'My personal collection of notes from books, courses, videos, and other learning materials. Organized by category, type, and difficulty level.',
   keywords: 'learning notes, book notes, course notes, study materials, programming notes, cybersecurity notes',
   openGraph: {
-    title: 'Learning Notes | 0xhabib',
+    title: 'Learning Notes | Mohamed Habib Jaouadi',
     description: 'My personal collection of notes from books, courses, videos, and other learning materials.',
     type: 'website',
     url: '/notes',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Learning Notes | 0xhabib',
+    title: 'Learning Notes | Mohamed Habib Jaouadi',
     description: 'My personal collection of notes from books, courses, videos, and other learning materials.',
     images: ['/android-chrome-512x512.png'],
   },

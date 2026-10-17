@@ -6,18 +6,18 @@ import { DATASETS } from "@/lib/spl-pipeline"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Splunk SPL Builder | 0xHabib",
+  title: "Splunk SPL Builder | Mohamed Habib Jaouadi",
   description:
     "Build a real, combinable SPL pipeline against sample security log data, in a Splunk-style search console. Chain field selection, stats, transforming commands, eval, and geospatial commands, and see the actual output at every stage.",
   openGraph: {
-    title: "Splunk SPL Builder | 0xHabib",
+    title: "Splunk SPL Builder | Mohamed Habib Jaouadi",
     description:
       "Build a real, combinable SPL pipeline against sample security log data, in a Splunk-style search console. Chain field selection, stats, transforming commands, eval, and geospatial commands, and see the actual output at every stage.",
     url: getCanonicalUrl("/tools/spl-builder"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Splunk SPL Builder | 0xHabib",
+    title: "Splunk SPL Builder | Mohamed Habib Jaouadi",
     description:
       "Build a real, combinable SPL pipeline against sample security log data, in a Splunk-style search console. Chain field selection, stats, transforming commands, eval, and geospatial commands, and see the actual output at every stage.",
   },

@@ -5,18 +5,18 @@ import { AdmiraltyCodeTool } from "@/components/tools/admiralty-code-tool"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Admiralty Code Tool | 0xHabib",
+  title: "Admiralty Code Tool | Mohamed Habib Jaouadi",
   description:
     "Grade source reliability (A-F) and information credibility (1-6) with the NATO Admiralty System, with notes per rating. Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Admiralty Code Tool | 0xHabib",
+    title: "Admiralty Code Tool | Mohamed Habib Jaouadi",
     description:
       "Grade source reliability (A-F) and information credibility (1-6) with the NATO Admiralty System, with notes per rating. Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/admiralty-code"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Admiralty Code Tool | 0xHabib",
+    title: "Admiralty Code Tool | Mohamed Habib Jaouadi",
     description:
       "Grade source reliability (A-F) and information credibility (1-6) with the NATO Admiralty System, with notes per rating. Export as SVG, PNG, or JPEG.",
   },

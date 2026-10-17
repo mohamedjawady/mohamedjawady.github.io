@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Cyber Kill Chain Builder | 0xHabib",
+  title: "Cyber Kill Chain Builder | Mohamed Habib Jaouadi",
   description:
     "Build and export Lockheed Martin's 7-phase Cyber Kill Chain, from Reconnaissance to Actions on Objectives, as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Cyber Kill Chain Builder | 0xHabib",
+    title: "Cyber Kill Chain Builder | Mohamed Habib Jaouadi",
     description:
       "Build and export Lockheed Martin's 7-phase Cyber Kill Chain, from Reconnaissance to Actions on Objectives, as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/kill-chain"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Cyber Kill Chain Builder | 0xHabib",
+    title: "Cyber Kill Chain Builder | Mohamed Habib Jaouadi",
     description:
       "Build and export Lockheed Martin's 7-phase Cyber Kill Chain, from Reconnaissance to Actions on Objectives, as SVG, PNG, or JPEG.",
   },

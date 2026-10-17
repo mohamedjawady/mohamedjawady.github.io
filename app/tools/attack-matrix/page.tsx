@@ -5,18 +5,18 @@ import { AttackMatrix } from "@/components/tools/attack-matrix"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "MITRE ATT&CK Matrix | 0xHabib",
+  title: "MITRE ATT&CK Matrix | Mohamed Habib Jaouadi",
   description:
     "Interactive MITRE ATT&CK Enterprise matrix. Color and annotate techniques to map adversary behavior, then export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "MITRE ATT&CK Matrix | 0xHabib",
+    title: "MITRE ATT&CK Matrix | Mohamed Habib Jaouadi",
     description:
       "Interactive MITRE ATT&CK Enterprise matrix. Color and annotate techniques to map adversary behavior, then export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/attack-matrix"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "MITRE ATT&CK Matrix | 0xHabib",
+    title: "MITRE ATT&CK Matrix | Mohamed Habib Jaouadi",
     description:
       "Interactive MITRE ATT&CK Enterprise matrix. Color and annotate techniques to map adversary behavior, then export as SVG, PNG, or JPEG.",
   },

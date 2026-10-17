@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "Diamond Model Builder | 0xHabib",
+  title: "Diamond Model Builder | Mohamed Habib Jaouadi",
   description:
     "Build the Diamond Model of Intrusion Analysis: Adversary, Capability, Infrastructure, and Victim, connected by the socio-political and technical axes. Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "Diamond Model Builder | 0xHabib",
+    title: "Diamond Model Builder | Mohamed Habib Jaouadi",
     description:
       "Build the Diamond Model of Intrusion Analysis: Adversary, Capability, Infrastructure, and Victim, connected by the socio-political and technical axes. Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/diamond-model"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "Diamond Model Builder | 0xHabib",
+    title: "Diamond Model Builder | Mohamed Habib Jaouadi",
     description:
       "Build the Diamond Model of Intrusion Analysis: Adversary, Capability, Infrastructure, and Victim, connected by the socio-political and technical axes. Export as SVG, PNG, or JPEG.",
   },

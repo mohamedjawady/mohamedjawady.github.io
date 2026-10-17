@@ -5,18 +5,18 @@ import { CtiDiagramBuilder } from "@/components/tools/cti-diagram-builder"
 import { getCanonicalUrl } from "@/lib/url"
 
 export const metadata: Metadata = {
-  title: "F3EAD Cycle Builder | 0xHabib",
+  title: "F3EAD Cycle Builder | Mohamed Habib Jaouadi",
   description:
     "Build the F3EAD intelligence-operations fusion cycle: Find, Fix, Finish, Exploit, Analyze, Disseminate. Export as SVG, PNG, or JPEG.",
   openGraph: {
-    title: "F3EAD Cycle Builder | 0xHabib",
+    title: "F3EAD Cycle Builder | Mohamed Habib Jaouadi",
     description:
       "Build the F3EAD intelligence-operations fusion cycle: Find, Fix, Finish, Exploit, Analyze, Disseminate. Export as SVG, PNG, or JPEG.",
     url: getCanonicalUrl("/tools/f3ead"),
   },
   twitter: {
     card: "summary_large_image",
-    title: "F3EAD Cycle Builder | 0xHabib",
+    title: "F3EAD Cycle Builder | Mohamed Habib Jaouadi",
     description:
       "Build the F3EAD intelligence-operations fusion cycle: Find, Fix, Finish, Exploit, Analyze, Disseminate. Export as SVG, PNG, or JPEG.",
   },

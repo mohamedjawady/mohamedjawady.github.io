@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: CheatsheetPageProps): Promise
   }
 
   return {
-    title: `${cheatsheet.title} | Cheatsheets | 0xHabib`,
+    title: `${cheatsheet.title} | Cheatsheets | Mohamed Habib Jaouadi`,
     description: cheatsheet.description,
     openGraph: {
       title: cheatsheet.title,

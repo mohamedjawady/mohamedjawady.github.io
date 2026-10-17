@@ -20,7 +20,7 @@ const jetbrainsMono = JetBrains_Mono({
 const baseUrl = getCanonicalUrl('')
 
 export const metadata: Metadata = {
-  title: "0xHabib - Cybersecurity Learning Journey",
+  title: "Mohamed Habib Jaouadi - Cybersecurity Learning Journey",
   description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
   keywords: ["cybersecurity", "malware analysis", "reverse engineering", "networking", "golang", "threat hunting"],
   authors: [{ name: "Mohamed Habib Jaouadi" }],
@@ -40,23 +40,22 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: baseUrl,
-    title: "0xHabib - Cybersecurity Learning Journey",
+    title: "Mohamed Habib Jaouadi - Cybersecurity Learning Journey",
     description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
-    siteName: "0xHabib",
+    siteName: "Mohamed Habib Jaouadi",
     images: [
       {
         url: "/android-chrome-512x512.png",
         width: 512,
         height: 512,
-        alt: "0xHabib - Cybersecurity Learning Journey",
+        alt: "Mohamed Habib Jaouadi - Cybersecurity Learning Journey",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "0xHabib - Cybersecurity Learning Journey",
+    title: "Mohamed Habib Jaouadi - Cybersecurity Learning Journey",
     description: "Documenting what I break, build, and learn in security, malware analysis, and networking.",
-    creator: "@0xhabib",
     images: ["/android-chrome-512x512.png"],
   },
   robots: {
@@ -75,7 +74,7 @@ export const metadata: Metadata = {
       'application/rss+xml': [
         {
           url: '/feed.xml',
-          title: '0xHabib RSS Feed'
+          title: 'Mohamed Habib Jaouadi RSS Feed'
         }
       ]
     }
@@ -113,7 +112,7 @@ export default function RootLayout({
                 <div className="max-w-6xl mx-auto text-center space-y-4">
                   <p className="text-muted-foreground">
                     Built with Love.
-                    <span className="text-emerald-500 font-mono"> 0xHabib </span>© {new Date().getFullYear()}
+                    <span className="text-emerald-500 font-mono"> Mohamed Habib Jaouadi </span>© {new Date().getFullYear()}
                   </p>
                   <p className="text-xs text-muted-foreground/70">
                     Anonymous analytics are collected for performance monitoring and site improvement purposes.

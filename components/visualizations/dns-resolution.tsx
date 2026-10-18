@@ -228,9 +228,9 @@ export function DNSResolution() {
             <Globe className="h-6 w-6 text-blue-600" />
             Interactive DNS Resolution Network Graph
           </CardTitle>
-          <div className="flex items-center gap-4">
-            <Button 
-              onClick={startAnimation} 
+          <div className="flex flex-wrap items-center gap-4">
+            <Button
+              onClick={startAnimation}
               disabled={state.isAnimating}
               className="flex items-center gap-2"
             >

@@ -122,8 +122,8 @@ export function StudyCardComponent({
       {/* Study Card */}
       <Card className="min-h-[400px] relative">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Badge className={typeColors[currentCard.type]}>
                 {currentCard.type}
               </Badge>

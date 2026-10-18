@@ -56,7 +56,7 @@ export function NetworkDefensibilityNotes() {
         </h2>
         <p className="text-muted-foreground">Based on Richard Bejtlich's framework, a defensible network must be:</p>
         
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -275,7 +275,7 @@ export function NetworkDefensibilityNotes() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Zeek (formerly Bro)</CardTitle>
@@ -487,7 +487,7 @@ export function NetworkDefensibilityNotes() {
             <CardTitle>Data Processing Workflows</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-3">
                 <h4 className="font-semibold flex items-center gap-2">
                   <Network className="h-4 w-4" />
@@ -554,7 +554,7 @@ export function NetworkDefensibilityNotes() {
         </h2>
 
         <div className="grid gap-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div>
               <h3 className="font-semibold mb-3 flex items-center gap-2">
                 <Database className="h-4 w-4" />

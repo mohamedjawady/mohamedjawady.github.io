@@ -353,7 +353,7 @@ export default async function PostPage({ params }: PostPageProps) {
               </aside>
 
               {/* Post Content */}
-              <article className="prose prose-slate dark:prose-invert prose-lg max-w-[70ch] mx-auto min-w-0">
+              <article className="prose prose-slate dark:prose-invert prose-lg max-w-[70ch] mx-auto min-w-0 w-full break-words">
                 <MDXRemote
                   source={post.content}
                   components={postComponents}

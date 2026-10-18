@@ -105,12 +105,12 @@ export function LinkPreview({ href, children, className }: LinkPreviewProps) {
     return (
       <a
         href={href}
-        className={`font-medium text-green-500 underline underline-offset-4 hover:text-green-400 transition-colors inline-flex items-center gap-1 ${className || ''}`}
+        className={`font-medium text-green-500 underline underline-offset-4 hover:text-green-400 transition-colors break-words ${className || ''}`}
         target={href?.startsWith("http") ? "_blank" : undefined}
         rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
       >
         {children}
-        {href?.startsWith("http") && <ExternalLink className="w-3 h-3" />}
+        {href?.startsWith("http") && <ExternalLink className="w-3 h-3 inline-block ml-1 align-baseline" />}
       </a>
     )
   }
@@ -119,12 +119,12 @@ export function LinkPreview({ href, children, className }: LinkPreviewProps) {
     <span className="relative inline-block">
       <Link
         href={href}
-        className={`font-medium text-green-500 underline underline-offset-4 hover:text-green-400 transition-colors inline-flex items-center gap-1 ${className || ''}`}
+        className={`font-medium text-green-500 underline underline-offset-4 hover:text-green-400 transition-colors break-words ${className || ''}`}
         onMouseEnter={() => setShowPreview(true)}
         onMouseLeave={() => setShowPreview(false)}
       >
         {children}
-        <Eye className="w-3 h-3" />
+        <Eye className="w-3 h-3 inline-block ml-1 align-baseline" />
       </Link>
 
       {/* Preview Card */}

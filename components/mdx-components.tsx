@@ -136,7 +136,7 @@ export const mdxComponents = {
     // For inline code (no className with language)
     if (!className || !className.includes('language-')) {
       return (
-        <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-medium border border-border/50" {...props}>
+        <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-medium border border-border/50 break-words" {...props}>
           {children}
         </code>
       )

@@ -162,7 +162,7 @@ export function SecurityOperationsWorkflowNotes() {
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             <WorkflowStep
               step="Event Collection"
               description="Strategic collection of security-relevant events from endpoints and network devices"
@@ -238,7 +238,7 @@ export function SecurityOperationsWorkflowNotes() {
         </TabsContent>
 
         <TabsContent value="alerts" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -373,7 +373,7 @@ export function SecurityOperationsWorkflowNotes() {
         </TabsContent>
 
         <TabsContent value="investigation" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -457,7 +457,7 @@ export function SecurityOperationsWorkflowNotes() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <h4 className="font-medium mb-2">Recommended Reading</h4>
               <ul className="space-y-1 text-sm">

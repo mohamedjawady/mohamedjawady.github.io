@@ -248,9 +248,9 @@ export function WindowsAPIFlow() {
           Understanding this flow is crucial for malware development and evasion techniques.
         </p>
         
-        <div className="flex justify-center gap-4">
-          <Button 
-            onClick={startAnimation} 
+        <div className="flex flex-wrap justify-center gap-4">
+          <Button
+            onClick={startAnimation}
             disabled={isPlaying}
             className="bg-blue-500 hover:bg-blue-600"
           >

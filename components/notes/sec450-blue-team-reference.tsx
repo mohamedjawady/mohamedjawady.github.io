@@ -58,7 +58,7 @@ function ConceptCard({ title, description, keyPoints, note }: { title: string; d
           {keyPoints.map((point, i) => (
             <li key={i} className="flex items-start gap-2 text-sm">
               <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
-              <span>{point}</span>
+              <span className="min-w-0 break-words">{point}</span>
             </li>
           ))}
         </ul>

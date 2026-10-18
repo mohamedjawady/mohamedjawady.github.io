@@ -266,13 +266,13 @@ export function FiniteAutomatonVisualizer() {
                         value={inputString}
                         onChange={(e) => { setInputString(e.target.value); reset(); }}
                         placeholder="Enter string (e.g., 'aab', 'bab')"
-                        className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-sm font-mono"
+                        className="flex-1 min-w-0 px-3 py-2 rounded-md border border-border bg-background text-sm font-mono"
                         disabled={isRunning}
                     />
-                    <Button onClick={runAutomaton} disabled={isRunning || !inputString.trim()} size="sm">
+                    <Button onClick={runAutomaton} disabled={isRunning || !inputString.trim()} size="sm" className="flex-shrink-0">
                         <Play className="w-4 h-4 mr-1" /> Run
                     </Button>
-                    <Button onClick={reset} variant="outline" size="sm">
+                    <Button onClick={reset} variant="outline" size="sm" className="flex-shrink-0">
                         <RotateCcw className="w-4 h-4" />
                     </Button>
                 </div>

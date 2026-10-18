@@ -60,7 +60,7 @@ frame contains "search"                # Content-based filtering`
       </Alert>
 
       {/* Three Levels Overview */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <Card className="border-green-200 dark:border-green-800">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
@@ -144,7 +144,7 @@ frame contains "search"                # Content-based filtering`
           <CardDescription>Layer 3/4 network flow analysis</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <h4 className="font-semibold mb-2">Data Elements</h4>
               <ul className="text-sm space-y-1 text-muted-foreground">
@@ -207,7 +207,7 @@ frame contains "search"                # Content-based filtering`
             </AlertDescription>
           </Alert>
           
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <h4 className="font-semibold mb-2">Generated Log Files</h4>
               <ul className="text-sm space-y-1 text-muted-foreground">
@@ -242,7 +242,7 @@ frame contains "search"                # Content-based filtering`
           <CardDescription>Tools for comprehensive packet analysis</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <h4 className="font-semibold mb-2 flex items-center gap-2">
                 <Eye className="h-4 w-4" />
@@ -283,7 +283,7 @@ frame contains "search"                # Content-based filtering`
           <CardDescription>Essential display filters for efficient analysis</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -317,7 +317,7 @@ frame contains "search"                # Content-based filtering`
           <CardDescription>Best practices for comprehensive network monitoring</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <h4 className="font-semibold text-green-600">Collection Strategy</h4>
               <ul className="text-sm space-y-1 text-muted-foreground">

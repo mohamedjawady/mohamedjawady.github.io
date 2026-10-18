@@ -34,7 +34,7 @@ export const ProtectedProcessBypass = () => {
         <div className="w-full max-w-4xl mx-auto space-y-6 p-4">
             <Card className="bg-slate-900 border-slate-800 text-slate-100 shadow-xl">
                 <CardHeader>
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-wrap justify-between items-center gap-4">
                         <div className="space-y-1">
                             <CardTitle className="flex items-center gap-2">
                                 <Shield className={step < 3 ? "text-emerald-400" : "text-red-400"} />

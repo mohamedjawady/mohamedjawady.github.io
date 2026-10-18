@@ -230,7 +230,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
           </div>
 
           {/* Data-Information-Intelligence Hierarchy */}
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <HierarchyCard
               level="Data"
               definition="Raw data collected from environment"
@@ -280,7 +280,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <h4 className="font-medium text-red-600 dark:text-red-400">Intent</h4>
                   <p className="text-sm text-muted-foreground">Malicious actor's desire to target your organization</p>
@@ -320,7 +320,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
           </div>
 
           {/* TIP Functions */}
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <ConceptCard
               title="Core TIP Functions"
               description="Essential capabilities that every threat intelligence platform should provide"
@@ -405,7 +405,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               <CardTitle>MISP Terminology & Workflow</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-4">
                   <div>
                     <h4 className="font-medium mb-2">Core Entities</h4>
@@ -441,7 +441,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
           </div>
 
           {/* SIEM Core Functions */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             <ConceptCard
               title="Data Collection"
               description="Ingesting and processing diverse log sources"
@@ -518,7 +518,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
                 <p className="text-sm text-muted-foreground">
                   A SIEM use case answers "What is the SIEM doing for us?" by providing documented, actionable items.
                 </p>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <h4 className="font-medium mb-2">Essential Documentation</h4>
                     <ul className="space-y-1 text-sm">
@@ -603,7 +603,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
           </div>
 
           {/* Automation vs Orchestration */}
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -651,7 +651,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               <CardTitle>SOAR Platform Benefits</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <h4 className="font-medium mb-2 text-green-600 dark:text-green-400">Operational Improvements</h4>
                   <ul className="space-y-1 text-sm">
@@ -680,7 +680,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
               <CardTitle>SOAR Automation Examples</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <h4 className="font-medium text-red-600 dark:text-red-400">Malware Detection</h4>
                   <ul className="text-sm space-y-1">
@@ -777,7 +777,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
                   <div className="text-center p-4 border rounded-lg">
                     <Database className="w-8 h-8 mx-auto mb-2 text-blue-500" />
                     <h4 className="font-medium">SIEM</h4>
@@ -832,7 +832,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
                     </div>
                   </div>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <h4 className="font-medium mb-2">Critical Integration Points</h4>
                     <ul className="space-y-1 text-sm">
@@ -857,7 +857,7 @@ export default function CyberThreatIntelligenceSiemIntegrationNotes() {
           </Card>
 
           {/* Implementation Best Practices */}
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>Implementation Strategy</CardTitle>

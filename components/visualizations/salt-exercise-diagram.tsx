@@ -143,7 +143,7 @@ export function SaltExerciseDiagram() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {/* Step Progress Bar */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                         {steps.map((s, index) => (
                             <div key={s.id} className="flex items-center">
                                 <button

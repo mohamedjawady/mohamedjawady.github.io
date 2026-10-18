@@ -167,7 +167,7 @@ export function NetworkDefensibilityNotes() {
           NSM focuses on collecting and analyzing network traffic to understand communication patterns and detect malicious activity.
         </p>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -377,7 +377,7 @@ export function NetworkDefensibilityNotes() {
           CSM focuses on endpoint and host-based monitoring to understand what's happening on individual systems.
         </p>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -448,7 +448,7 @@ export function NetworkDefensibilityNotes() {
           Data Centralization Strategy
         </h2>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-red-700 dark:text-red-300">
@@ -553,7 +553,7 @@ export function NetworkDefensibilityNotes() {
           Tools & Technologies
         </h2>
 
-        <div className="grid gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div>
               <h3 className="font-semibold mb-3 flex items-center gap-2">
@@ -675,7 +675,7 @@ export function NetworkDefensibilityNotes() {
                 A specialized tool for parsing Windows XML Event Log (EVTX) files for security analysis and threat hunting.
               </p>
               <div className="flex items-center gap-2 p-2 bg-muted/50 rounded font-mono text-sm">
-                <span className="flex-1">https://github.com/mohamedjawady/Enhanced-EVTX-Parser</span>
+                <span className="flex-1 min-w-0 break-all">https://github.com/mohamedjawady/Enhanced-EVTX-Parser</span>
                 <CopyButton text="https://github.com/mohamedjawady/Enhanced-EVTX-Parser" id="evtx-parser-link" />
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">

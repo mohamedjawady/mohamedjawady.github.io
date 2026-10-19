@@ -1000,8 +1000,11 @@ function referencedFields(type: StageType, config: any): string[] {
     case "timechart":
       return [config.field, config.by]
     case "eval":
+      // arith and concat operands can be numeric/text literals typed directly
+      // (e.g. `count * 2`), not only fields picked from a dropdown -- a
+      // literal must never be treated as a stale field reference.
       return (config.defs ?? []).flatMap((d: EvalDef) => {
-        if (d.kind === "arith") return [d.a, d.b]
+        if (d.kind === "arith") return [d.a, d.b].filter((x) => Number.isNaN(Number(x)))
         if (d.kind === "round" || d.kind === "commas" || d.kind === "case2") return [d.field]
         if (d.kind === "concat") return [d.a, d.b]
         return []
@@ -1031,4 +1034,422 @@ export function repairStages(dataset: Dataset, timeRange: TimeRange, filters: Fi
     repaired.push({ ...stage, config })
   }
   return repaired
+}
+
+// ---------------------------------------------------------------------------
+// Freeform SPL parsing
+// ---------------------------------------------------------------------------
+//
+// Lets a user type (or paste) a real SPL-shaped query instead of only using
+// the guided per-command editors above. It is a best-effort, teaching-focused
+// parser, not a full SPL grammar: it understands the base search's field=value
+// terms and the syntax of every command in STAGE_TYPES, in the common forms
+// shown throughout the SPL tutorial on this site. Anything it cannot map onto
+// the simulator's small set of sample fields and stage shapes is reported in
+// `issues` and skipped, rather than silently misinterpreted or crashing.
+
+export interface ParsedQuery {
+  filters: Filter[]
+  stages: PipelineStage[]
+  issues: string[]
+}
+
+// Splits on `delim` at the top level only: a run of characters inside double
+// quotes, or inside parentheses outside of quotes, is never split, so
+// `stats dc(src_ip) as n, count by field` and `rename a AS "b, c"` both split
+// where a human would expect.
+function splitTopLevel(text: string, delim: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let inQuote = false
+  let current = ""
+  for (const c of text) {
+    if (c === '"') inQuote = !inQuote
+    if (!inQuote) {
+      if (c === "(") depth++
+      if (c === ")") depth = Math.max(0, depth - 1)
+    }
+    if (c === delim && depth === 0 && !inQuote) {
+      parts.push(current)
+      current = ""
+    } else {
+      current += c
+    }
+  }
+  parts.push(current)
+  return parts
+}
+
+// Splits the base search into its space-separated terms, keeping a quoted
+// value (e.g. `sourcetype="stream:http"`) as one token.
+function tokenizeTerms(text: string): string[] {
+  const terms: string[] = []
+  let current = ""
+  let inQuote = false
+  for (const c of text) {
+    if (c === '"') inQuote = !inQuote
+    if (c === " " && !inQuote) {
+      if (current) terms.push(current)
+      current = ""
+    } else {
+      current += c
+    }
+  }
+  if (current) terms.push(current)
+  return terms
+}
+
+function parseFieldList(s: string): string[] {
+  return s.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean)
+}
+
+const AGG_FN_NAMES: Record<string, AggFn> = {
+  count: "count",
+  dc: "dc",
+  sum: "sum",
+  avg: "avg",
+  min: "min",
+  max: "max",
+  values: "values",
+  list: "list",
+}
+
+function parseAggExpr(s: string): { fn: AggFn; field?: string } | null {
+  const m = s.trim().match(/^([a-zA-Z_]+)(?:\(([^)]*)\))?$/)
+  if (!m) return null
+  let fn = AGG_FN_NAMES[m[1].toLowerCase()]
+  if (!fn) return null
+  const field = m[2]?.trim() || undefined
+  if (fn === "count" && field) fn = "count_field"
+  return { fn, field }
+}
+
+function parseStatsCommand(args: string): { fns: StatFnEntry[]; by: string[] } | null {
+  const byMatch = args.match(/\bby\b([\s\S]*)$/i)
+  const fnsPart = byMatch ? args.slice(0, byMatch.index) : args
+  const by = byMatch ? parseFieldList(byMatch[1]) : []
+  const fns: StatFnEntry[] = []
+  const fnTerms = splitTopLevel(fnsPart, ",").map((s) => s.trim()).filter(Boolean)
+  if (!fnTerms.length) return null
+  for (const term of fnTerms) {
+    const m = term.match(/^([a-zA-Z_]+)(?:\(([^)]*)\))?\s*(?:as\s+(.+))?$/i)
+    if (!m) return null
+    const [, fnRaw, fieldRaw, aliasRaw] = m
+    let fn = AGG_FN_NAMES[fnRaw.toLowerCase()]
+    if (!fn) return null
+    const field = fieldRaw?.trim() || undefined
+    if (fn === "count" && field) fn = "count_field"
+    const alias = aliasRaw?.trim().replace(/^"(.*)"$/, "$1") || aggToSpl(fn, field)
+    fns.push({ id: nextId("fn"), fn, field, alias })
+  }
+  return { fns, by }
+}
+
+function parseTopRare(args: string): { field: string; limit: number; by: string } | null {
+  let rest = args
+  let by = ""
+  let limit = 10
+  const byMatch = rest.match(/\bby\s+(\S+)/i)
+  if (byMatch) {
+    by = byMatch[1]
+    rest = rest.replace(byMatch[0], "")
+  }
+  const limitMatch = rest.match(/\blimit\s*=\s*(\d+)/i)
+  if (limitMatch) {
+    limit = Number(limitMatch[1])
+    rest = rest.replace(limitMatch[0], "")
+  }
+  const remaining = rest.trim().split(/\s+/).filter(Boolean)
+  if (remaining.length !== 1) return null
+  return { field: remaining[0], limit, by }
+}
+
+function parseChart(args: string): { fn: AggFn; field?: string; over: string; by: string } | null {
+  const overMatch = args.match(/\bover\s+(\S+)/i)
+  if (!overMatch) return null
+  const byMatch = args.match(/\bby\s+(\S+)/i)
+  const agg = parseAggExpr(args.slice(0, overMatch.index))
+  if (!agg) return null
+  return { ...agg, over: overMatch[1], by: byMatch ? byMatch[1] : "" }
+}
+
+function parseTimechart(args: string): { fn: AggFn; field?: string; span: string; by: string } | null {
+  const spanMatch = args.match(/\bspan\s*=\s*(\S+)/i)
+  const span = spanMatch ? spanMatch[1] : "1h"
+  let rest = spanMatch ? args.replace(spanMatch[0], "") : args
+  const byMatch = rest.match(/\bby\s+(\S+)/i)
+  const by = byMatch ? byMatch[1] : ""
+  if (byMatch) rest = rest.replace(byMatch[0], "")
+  rest = rest.replace(/\blimit\s*=\s*\d+/i, "")
+  const agg = parseAggExpr(rest.trim())
+  if (!agg) return null
+  return { ...agg, span, by }
+}
+
+function parseBin(args: string): { field: string; span: string } | null {
+  const spanMatch = args.match(/\bspan\s*=\s*(\S+)/i)
+  if (!spanMatch) return null
+  const field = args.replace(spanMatch[0], "").trim().split(/\s+/).filter(Boolean)[0]
+  if (!field) return null
+  return { field, span: spanMatch[1] }
+}
+
+function parseRename(args: string): { mappings: { id: string; from: string; to: string }[] } | null {
+  const parts = splitTopLevel(args, ",")
+  const mappings: { id: string; from: string; to: string }[] = []
+  for (const p of parts) {
+    const m = p.trim().match(/^(\S+)\s+as\s+"?([^"]+?)"?$/i)
+    if (!m) return null
+    mappings.push({ id: nextId("rn"), from: m[1], to: m[2].trim() })
+  }
+  return mappings.length ? { mappings } : null
+}
+
+function parseSort(args: string): { keys: { id: string; field: string; dir: "asc" | "desc" }[] } | null {
+  const cleaned = args.replace(/([+-])\s+/g, "$1").trim()
+  const tokens = cleaned.split(/\s+/).filter((t) => t && t !== "0")
+  const keys: { id: string; field: string; dir: "asc" | "desc" }[] = []
+  for (const t of tokens) {
+    const m = t.match(/^([+-])?(.+)$/)
+    if (!m) return null
+    keys.push({ id: nextId("sk"), field: m[2], dir: m[1] === "+" ? "asc" : "desc" })
+  }
+  return keys.length ? { keys } : null
+}
+
+function parseFieldformat(args: string): { field: string } | null {
+  const m = args.match(/^(\S+?)\s*=/)
+  return m ? { field: m[1] } : null
+}
+
+function parseAddtotals(args: string): { row: boolean; col: boolean; fieldname: string } {
+  const rowMatch = args.match(/\brow\s*=\s*(true|false)/i)
+  const colMatch = args.match(/\bcol\s*=\s*(true|false)/i)
+  const fnMatch = args.match(/\bfieldname\s*=\s*"([^"]+)"/i)
+  return {
+    row: rowMatch ? rowMatch[1].toLowerCase() === "true" : true,
+    col: colMatch ? colMatch[1].toLowerCase() === "true" : false,
+    fieldname: fnMatch ? fnMatch[1] : "Total",
+  }
+}
+
+function parseIplocation(args: string): { field: string } {
+  return { field: args.trim().split(/\s+/)[0] ?? "" }
+}
+
+function parseGeostats(args: string): { fn: AggFn; field?: string; by: string } | null {
+  let rest = args.replace(/\blatfield\s*=\s*\S+/i, "").replace(/\blongfield\s*=\s*\S+/i, "")
+  const byMatch = rest.match(/\bby\s+(\S+)/i)
+  const by = byMatch ? byMatch[1] : ""
+  if (byMatch) rest = rest.replace(byMatch[0], "")
+  const agg = parseAggExpr(rest.trim())
+  if (!agg) return null
+  return { ...agg, by }
+}
+
+function parseGauge(args: string): { field: string; t0: number; t1: number; t2: number; t3: number } | null {
+  const tokens = args.trim().split(/\s+/).filter(Boolean)
+  if (tokens.length < 5) return null
+  const [field, a, b, c, d] = tokens
+  const nums = [a, b, c, d].map(Number)
+  if (nums.some((n) => Number.isNaN(n))) return null
+  return { field, t0: nums[0], t1: nums[1], t2: nums[2], t3: nums[3] }
+}
+
+// Recognizes the handful of `eval` expression shapes the tutorial and the
+// guided editor both use. Anything else is reported back as unparsed rather
+// than guessed at.
+function parseEvalExpr(newField: string, expr: string): EvalDef | null {
+  const e = expr.trim()
+  let m: RegExpMatchArray | null
+  if ((m = e.match(/^round\(\s*([\w.]+)\s*,\s*(\d+)\s*\)$/i))) {
+    return { id: nextId("ev"), kind: "round", newField, field: m[1], decimals: Number(m[2]) }
+  }
+  if ((m = e.match(/^tostring\(\s*([\w.]+)\s*,\s*"commas"\s*\)$/i))) {
+    return { id: nextId("ev"), kind: "commas", newField, field: m[1] }
+  }
+  if ((m = e.match(/^strftime\(\s*_time\s*,\s*"([^"]+)"\s*\)$/i))) {
+    const allowed = ["%H:%M", "%H:%M:%S", "%b %d, %I:%M %p"] as const
+    const fmt = (allowed as readonly string[]).includes(m[1]) ? (m[1] as (typeof allowed)[number]) : "%H:%M"
+    return { id: nextId("ev"), kind: "strftime", newField, format: fmt }
+  }
+  if ((m = e.match(/^([\w.]+)\s*\.\s*"([^"]*)"\s*\.\s*([\w.]+)$/))) {
+    return { id: nextId("ev"), kind: "concat", newField, a: m[1], sep: m[2], b: m[3] }
+  }
+  if (
+    (m = e.match(/^case\(\s*([\w.]+)\s*(=|!=|>|<)\s*"?([^",)]+?)"?\s*,\s*"([^"]*)"\s*,\s*1=1\s*,\s*"([^"]*)"\s*\)$/i))
+  ) {
+    return { id: nextId("ev"), kind: "case2", newField, field: m[1], op: m[2] as "=" | "!=" | ">" | "<", value: m[3], thenLabel: m[4], elseLabel: m[5] }
+  }
+  if ((m = e.match(/^([\w.]+)\s*([+\-*/])\s*([\w.]+)$/))) {
+    return { id: nextId("ev"), kind: "arith", newField, a: m[1], op: m[2] as "+" | "-" | "*" | "/", b: m[3] }
+  }
+  return null
+}
+
+function parseEval(args: string): { defs: EvalDef[]; unparsed: string[] } {
+  const defs: EvalDef[] = []
+  const unparsed: string[] = []
+  for (const part of splitTopLevel(args, ",")) {
+    const eq = part.indexOf("=")
+    if (eq === -1) {
+      if (part.trim()) unparsed.push(part.trim())
+      continue
+    }
+    const newField = part.slice(0, eq).trim()
+    const def = newField ? parseEvalExpr(newField, part.slice(eq + 1)) : null
+    if (def) defs.push(def)
+    else unparsed.push(part.trim())
+  }
+  return { defs, unparsed }
+}
+
+interface ParsedCommand {
+  type: StageType
+  config: any
+  unparsed?: string[]
+}
+
+const COMMAND_PARSERS: Record<string, (args: string) => ParsedCommand | null> = {
+  fields: (args) => {
+    const exclude = /^-\s*/.test(args.trim())
+    const fields = parseFieldList(args.replace(/^-\s*/, ""))
+    return fields.length ? { type: "fields", config: { mode: exclude ? "exclude" : "keep", fields } } : null
+  },
+  table: (args) => {
+    const fields = parseFieldList(args)
+    return fields.length ? { type: "table", config: { fields } } : null
+  },
+  dedup: (args) => {
+    const fields = parseFieldList(args)
+    return fields.length ? { type: "dedup", config: { fields } } : null
+  },
+  rename: (args) => {
+    const r = parseRename(args)
+    return r ? { type: "rename", config: r } : null
+  },
+  sort: (args) => {
+    const r = parseSort(args)
+    return r ? { type: "sort", config: r } : null
+  },
+  fieldformat: (args) => {
+    const r = parseFieldformat(args)
+    return r ? { type: "fieldformat", config: r } : null
+  },
+  stats: (args) => {
+    const r = parseStatsCommand(args)
+    return r ? { type: "stats", config: r } : null
+  },
+  addtotals: (args) => ({ type: "addtotals", config: parseAddtotals(args) }),
+  top: (args) => {
+    const r = parseTopRare(args)
+    return r ? { type: "top", config: r } : null
+  },
+  rare: (args) => {
+    const r = parseTopRare(args)
+    return r ? { type: "rare", config: r } : null
+  },
+  chart: (args) => {
+    const r = parseChart(args)
+    return r ? { type: "chart", config: r } : null
+  },
+  timechart: (args) => {
+    const r = parseTimechart(args)
+    return r ? { type: "timechart", config: r } : null
+  },
+  bin: (args) => {
+    const r = parseBin(args)
+    return r ? { type: "bin", config: r } : null
+  },
+  eval: (args) => {
+    const r = parseEval(args)
+    return { type: "eval", config: { defs: r.defs }, unparsed: r.unparsed }
+  },
+  iplocation: (args) => ({ type: "iplocation", config: parseIplocation(args) }),
+  geostats: (args) => {
+    const r = parseGeostats(args)
+    return r ? { type: "geostats", config: r } : null
+  },
+  gauge: (args) => {
+    const r = parseGauge(args)
+    return r ? { type: "gauge", config: r } : null
+  },
+}
+
+/**
+ * Parses a freeform SPL-shaped query into the filters and pipeline stages
+ * this simulator can execute. Best-effort: anything it cannot map is listed
+ * in `issues` and skipped rather than guessed at or crashed on.
+ */
+export function parseSplQuery(text: string, dataset: Dataset): ParsedQuery {
+  const issues: string[] = []
+  const filters: Filter[] = []
+  const stages: PipelineStage[] = []
+  const trimmed = text.trim()
+  if (!trimmed) return { filters, stages, issues }
+
+  const segments = splitTopLevel(trimmed, "|").map((s) => s.trim())
+  // A leading `|` (e.g. starting straight with `| stats ...`) just means "no
+  // base-search filters, pipe the whole dataset in" -- segments[0] is simply
+  // empty in that case, which tokenizeTerms turns into zero filters below. A
+  // genuinely unsupported generating command (tstats, inputlookup, ...) as
+  // that first command is instead caught later, by the same "isn't a command
+  // this simulator implements" check every other pipeline stage goes through.
+  const commandSegments = segments.slice(1)
+  const baseSearch = segments[0] ?? ""
+  {
+    for (const term of tokenizeTerms(baseSearch)) {
+      if (!term) continue
+      const m = term.match(/^(NOT\s+)?([A-Za-z_][\w.]*)\s*(!=|=)\s*(.+)$/i)
+      if (!m) {
+        if (/^\(|\)$/.test(term) || term.toUpperCase() === "OR") {
+          issues.push(`Grouping and OR in the base search ("${term}") aren't supported here; only ANDed field=value terms are applied.`)
+        } else {
+          issues.push(`Keyword term "${term}" was ignored — this simulator only matches field=value, not free text.`)
+        }
+        continue
+      }
+      const [, notPrefix, field, opRaw, rawValue] = m
+      const value = rawValue.replace(/^"(.*)"$/, "$1")
+      const lower = field.toLowerCase()
+      if (lower === "index" || lower === "sourcetype") continue
+      if (lower === "earliest" || lower === "latest") {
+        issues.push(`"${term}" was ignored — set the time range with the picker above instead.`)
+        continue
+      }
+      if (!dataset.fields.includes(field)) {
+        issues.push(`"${field}" isn't a field in the ${dataset.label} dataset, so "${term}" was ignored.`)
+        continue
+      }
+      let op: "=" | "!=" = opRaw === "!=" ? "!=" : "="
+      if (notPrefix) op = op === "=" ? "!=" : "="
+      filters.push({ field, op, value })
+    }
+  }
+
+  for (const seg of commandSegments) {
+    if (!seg) continue
+    const m = seg.match(/^(\S+)([\s\S]*)$/)
+    if (!m) continue
+    const cmd = m[1].toLowerCase()
+    const args = m[2].trim()
+    const parser = COMMAND_PARSERS[cmd]
+    if (!parser) {
+      issues.push(`"${cmd}" isn't a command this simulator implements (supported: ${STAGE_TYPES.join(", ")}). That part of the query was skipped.`)
+      continue
+    }
+    const result = parser(args)
+    if (!result) {
+      issues.push(`Couldn't parse "| ${cmd} ${args}" — check the syntax against the examples in the tutorial. That command was skipped.`)
+      continue
+    }
+    if (result.unparsed?.length) {
+      issues.push(
+        `In "| eval", couldn't parse: ${result.unparsed.join(", ")}. Supported forms: arithmetic (a op b), round(f,n), case(f op "v","then",1=1,"else"), concatenation (a . "sep" . b), strftime(_time,"fmt"), tostring(f,"commas").`,
+      )
+    }
+    stages.push({ id: nextId(result.type), type: result.type, config: result.config })
+  }
+
+  return { filters, stages, issues }
 }

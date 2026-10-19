@@ -1,0 +1,708 @@
+---
+title: "BOTSv1 Walkthrough: Web Site Defacement by Po1s0n1vy"
+description: "A full Splunk investigation of the BOTSv1 Scenario 1 dataset: a Joomla brute force, an account takeover, remote code execution, and a web defacement, with every query, its breakdown, and the evidence it returned."
+date: "2026-08-24"
+author: "Mohamed Habib Jaouadi"
+tags: ["splunk", "botsv1", "threat-hunting", "incident-response", "mitre-attck", "ctf-writeup", "spl"]
+series: "Splunk Enterprise: SPL and the BOTSv1 Investigation"
+seriesOrder: 2
+visibility: "public"
+---
+
+This is an investigation report and SPL study log for Splunk's **Boss of the SOC v1 (BOTSv1)**, Scenario 1. If you haven't already, [Part 1 of this series](/posts/splunk-enterprise-spl-tutorial) teaches the SPL used here from first principles — this post is what that tutorial's Part 10 was pointing toward.
+
+Score: **17/17 correct, 10,541 points.**
+
+## 1. Executive summary
+
+**Verdict: `imreallynotbatman.com` was compromised.** The attacker, tracked as Po1s0n1vy, gained administrative access to the Joomla CMS, executed an uploaded binary on the web server, and defaced the site.
+
+| Stage | What happened | Key evidence |
+|---|---|---|
+| Vulnerability scanning | `40.80.148.42` scanned the Joomla site with Acunetix, including SQL injection probes | `Acunetix-*` request headers; `sleep(3)` time-based SQLi payloads in `stream:http` |
+| Credential brute force | `23.22.63.114` submitted 412 distinct passwords against the `admin` account | 412 login POSTs from this IP |
+| Account takeover | `batman` was found as the password, then used from `40.80.148.42` **92.17 s** later | `batman` is the only password submitted twice, once from each IP |
+| Code execution | `3791.exe` ran from the Joomla web root as `NT AUTHORITY\IUSR` via `cmd.exe /c` | Sysmon EventCode 1 on `we1149srv` |
+| Defacement | The web server fetched `poisonivy-is-coming-for-you-batman.jpeg` from `prankglassinebracket.jumpingcrab.com:1337` (`23.22.63.114`) | Three `fgt_utm` events, category *Malicious Websites* |
+
+**Main analytic takeaway:** the attacker split roles across two hosts — `23.22.63.114` for brute force and payload hosting, `40.80.148.42` for scanning and the successful login. Any detection or block list that covers only one of them misses half of the operation.
+
+## 2. Scope and environment
+
+| Item | Value |
+|---|---|
+| Platform | Splunk Enterprise, `bots.splunk.com` (BOTSv1, 2015 dataset) |
+| Index | `botsv1` |
+| Time range used | All time (events are from 2016-08-10) |
+| Display time zone | UTC (the Sysmon raw `SystemTime` matches Splunk's displayed `_time`) |
+| Victim web server | `192.168.250.70` (host `we1149srv.waynecorpinc.local`), IIS 8.5 with PHP 5.5.38, Joomla |
+| Victim site | `imreallynotbatman.com` |
+| Threat actor | Po1s0n1vy |
+| Scenario brief | GCPD reports the site was defaced; confirm whether it was compromised |
+
+## 3. Method and evidence conventions
+
+Each question below follows the same structure: **Objective** (what it asks), **Reasoning** (why this data source answers it), **Query**, **Query breakdown**, **Evidence**, then **Finding** and the answer.
+
+Evidence quality is stated explicitly throughout:
+
+| Label | Meaning |
+|---|---|
+| **Splunk-verified** | I ran the query and have the output |
+| **Walkthrough-assisted** | Discovery step taken from a public walkthrough; not reproduced in my own Splunk |
+| **OSINT** | Obtained from outside Splunk (ThreatMiner, VirusTotal) |
+| **Platform-accepted** | The scoring platform marked the answer correct |
+
+## 4. Data sources
+
+| Sourcetype | Content | Fields used |
+|---|---|---|
+| `stream:http` | Full HTTP request and response metadata captured on the wire | `src_ip`, `dest_ip`, `http_method`, `form_data`, `src_headers`, `uri_path`, `part_filename{}` |
+| `suricata` | IDS alerts and HTTP metadata | `alert.signature`, `http.http_method`, `fileinfo.filename` |
+| `fgt_utm` | Fortinet FortiGate UTM / firewall logs | `srcip`, `dstip`, `dest`, `url`, `category` |
+| `XmlWinEventLog:Microsoft-Windows-Sysmon/Operational` | Endpoint telemetry | `EventCode`, `Image`, `CommandLine`, `ParentImage`, `ParentCommandLine`, `User`, `MD5`, `SHA256` |
+
+Why each one matters: `stream:http` shows **what the client sent**, including the POST body in `form_data`, which is what brute-force and scanner analysis needs. `fgt_utm` shows **what the server initiated outward**, which is the signal for the defacement. Sysmon shows **what executed on the host**, which proves an upload became code execution.
+
+## 5. SPL reference used in this investigation
+
+### 5.1 Anatomy of a search
+
+```spl
+index=botsv1 sourcetype="stream:http" http_method=POST      <- base search (retrieves events)
+| rex field=form_data "passwd=(?<Password>[^&]+)"            <- pipeline: each command transforms results
+| stats count BY Password
+| sort - count
+```
+
+Everything before the first `|` is the **base search**. It decides which events Splunk reads from disk, so put the most selective terms there (`index`, `sourcetype`, specific IPs). Each `|` passes the result set to the next command, and order matters: filter early, format last. [Part 1](/posts/splunk-enterprise-spl-tutorial) covers this in depth, including which fields a transforming command like `stats` throws away.
+
+### 5.2 Search terms and wildcards
+
+| Syntax | Meaning |
+|---|---|
+| `imreallynotbatman.com` | Bare keyword: matches events whose raw text contains the term |
+| `field=value` | Exact match on a field |
+| `field="*a*b*"` | Wildcard; `*username*passwd*` means "`username` then later `passwd`" in that order |
+| `NOT field=value` | Exclusion |
+| `(a OR b)` | Grouping |
+
+Wildcards at the **start** of a term (`*foo`) force Splunk to scan more data and are slower. They're acceptable here because the dataset is small, but in production, anchor the search with `index`, `sourcetype` and a time range first.
+
+### 5.3 Commands used in this report
+
+| Command | Purpose | Example from this report |
+|---|---|---|
+| `search` | Filter the current results | `search Password=batman` |
+| `table` | Keep only the named columns, in that order | `table _time src_ip Password` |
+| `stats` | Aggregate (like SQL `GROUP BY`) | `stats count BY src_ip` |
+| `sort` | Order results. `- field` = descending. `sort 0` removes the default 10,000-row cap | `sort 0 _time` |
+| `head N` | Keep the first N results | `head 1` |
+| `rex` | Extract a field with a regular expression | `rex field=form_data "passwd=(?<Password>[^&]+)"` |
+| `eval` | Create or modify a field | `eval pwlen=len(Password)` |
+| `lookup` | Enrich results from a lookup table | `lookup coldplay.csv song as pass OUTPUTNEW song` |
+
+### 5.4 The regular expression used throughout
+
+```
+passwd=(?<Password>[^&]+)
+```
+
+| Part | Meaning |
+|---|---|
+| `passwd=` | Literal text; the match starts here |
+| `( ... )` | Capture group |
+| `?<Password>` | Name the capture group; it becomes the field `Password` |
+| `[^&]` | Any character that is **not** `&` |
+| `+` | One or more of the previous item |
+
+Result: capture everything after `passwd=` up to the next `&`, or to the end of the string if `passwd` is the last parameter. The alternative `\w+` stops at the first non-word character, so a password such as `p@ss!` would be truncated; `[^&]+` avoids that.
+
+### 5.5 Two timestamp facts
+
+`_time` is stored as **epoch seconds**, so `max(_time) - min(_time)` is a duration in seconds. `strftime` returns text, so format times **after** doing arithmetic, never before.
+
+## 6. Investigation
+
+Questions are grouped by attack phase, in the order the evidence unfolds. Question numbers match the scoring platform (Q7 and Q13 don't exist).
+
+### Phase 1 — Reconnaissance and scanning
+
+#### Q1 — Scanner source IP
+
+**Objective:** identify the IPv4 address scanning `imreallynotbatman.com` for web application vulnerabilities.
+
+**Reasoning:** a scanner produces a large volume of requests from one source, but volume alone proves nothing, so confirm with attack evidence.
+
+```spl
+index=botsv1 imreallynotbatman.com
+```
+
+| Clause | Purpose |
+|---|---|
+| `index=botsv1` | Restrict to the BOTSv1 dataset |
+| `imreallynotbatman.com` | Keyword search for the target site |
+
+**Method:** open the `src_ip` field in the left pane. One address, `40.80.148.42`, dominates. To avoid assuming "busiest = attacker," I filtered to that IP and checked Suricata alert signatures (`index=botsv1 imreallynotbatman.com src_ip="40.80.148.42" sourcetype="suricata"`), which show web-attack signatures.
+
+**Evidence:**
+- Splunk-verified: POST events from `40.80.148.42` carry SQL injection payloads such as `(select(0)from(select(sleep(3)))v)/*'+(select(0)from(select(sleep(3)))v)+'"+...`, and `if(now()=sysdate(),sleep(3),0)`, aimed at `/joomla/index.php/component/search/`.
+- Walkthrough-assisted: the Suricata signature check.
+
+**Source-IP volume (Splunk-verified, 78,683 events):**
+
+```spl
+index=botsv1 imreallynotbatman.com | stats count BY src_ip | sort - count | head 5
+```
+
+| src_ip | events |
+|---|---|
+| 40.80.148.42 | 38,416 |
+| 192.168.250.70 | 11,493 (the web server's own responses) |
+| 23.22.63.114 | 2,884 |
+
+**Answer: `40.80.148.42`**
+
+#### Q2 — Scanner vendor
+
+**Objective:** name the company that built the scanner.
+
+**Reasoning:** scanners often identify themselves in HTTP request headers. `src_headers` stores the raw request headers in `stream:http`.
+
+**Evidence (Splunk-verified):** the same POST events contain these request headers:
+
+```
+Acunetix-Product: WVS/10.0 (Acunetix Web Vulnerability Scanner - Free Edition)
+Acunetix-Scanning-agreement: Third Party Scanning PROHIBITED
+Acunetix-User-agreement: http://www.acunetix.com/wvs/disc.htm
+```
+
+**Finding:** the free edition of the Acunetix Web Vulnerability Scanner was used. Its default headers were not removed, and they appear on every scanner request, so they're a cheap, reliable detection pivot.
+
+**Confirmation query (Splunk-verified):**
+
+```spl
+index=botsv1 sourcetype="stream:http" src_headers="*Acunetix*" | stats count BY src_ip | sort - count
+```
+
+All **15,895** requests carrying an Acunetix header come from a single source, `40.80.148.42`.
+
+**Answer: `Acunetix`**
+
+#### Q3 — Content management system
+
+**Objective:** identify the CMS.
+
+**Evidence (Splunk-verified):** URIs begin with `/joomla/` (for example `/joomla/index.php/component/search/`). Joomla component names appear in requests (`com_search`, `com_login`). Response headers show `Server: Microsoft-IIS/8.5`, `X-Powered-By: PHP/5.5.38`.
+
+```spl
+index=botsv1 imreallynotbatman.com sourcetype="stream:http" | stats count BY uri_path | sort - count | head 8
+```
+
+The top paths are `/joomla/index.php/component/search/` (16,667), `/joomla/administrator/index.php` (1,269), `/joomla/index.php` (803) and `/joomla/index.php/component/mailto/` (494). `/administrator/` is Joomla's admin login. The `/windows/win.ini` and `/boot.ini` requests further down are scanner path-traversal probes.
+
+**Answer: `Joomla`**
+
+### Phase 2 — Credential brute force and account takeover
+
+#### Q8 — Brute-force source IP
+
+**Objective:** identify the IPv4 address brute-forcing the site's login.
+
+**Reasoning:** a web login brute force is a series of HTTP **POST** requests to the login form, each with a different password. So: `stream:http`, method POST, destination the web server, body containing the login fields.
+
+**Step 1 — all POSTs to the web server**
+
+```spl
+index=botsv1 imreallynotbatman.com dest_ip="192.168.250.70" sourcetype="stream:http" http_method=POST
+```
+
+Returned **15,560** events. Too broad: it includes scanner POSTs to the search component, which are SQL injection probes, not logins.
+
+**Step 2 — isolate login attempts and count by source**
+
+```spl
+index=botsv1 imreallynotbatman.com dest_ip="192.168.250.70" sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
+| stats count BY src_ip
+| sort - count
+```
+
+| Clause | Purpose |
+|---|---|
+| `dest_ip="192.168.250.70"` | Only traffic **to** the web server |
+| `sourcetype="stream:http"` | HTTP metadata, which includes the POST body in `form_data` |
+| `http_method=POST` | Form submissions only |
+| `form_data="*username*passwd*"` | Keeps requests whose body contains a `username` then a `passwd` parameter — i.e. login forms, excluding search forms and scanner probes |
+| `stats count BY src_ip` | One row per source IP with its event count |
+| `sort - count` | Highest count first |
+
+**Evidence (derived from my own Q14 and Q16 results — 412 events with `src_ip=23.22.63.114`, 413 login POSTs in total, and `batman` also submitted from `40.80.148.42`):**
+
+| src_ip | login POSTs |
+|---|---|
+| 23.22.63.114 | 412 |
+| 40.80.148.42 | 1 |
+
+**Finding:** `23.22.63.114` sent 412 of the 413 login POSTs. The single request from `40.80.148.42` is the later successful login (Q16, Q18).
+
+**Limitation:** `*username*passwd*` requires `username` to appear before `passwd` in the string. In this dataset `username` is always first, so nothing is missed here, but a reversed order would be excluded.
+
+**Answer: `23.22.63.114`**
+
+#### Q14 — First brute-force password
+
+**Objective:** find the first password the attacker tried.
+
+**Reasoning:** the first password is the earliest login attempt, so sorting by time is enough and no regex is needed.
+
+```spl
+index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" http_method=POST form_data="*username*passwd*" src_ip="23.22.63.114"
+| sort 0 _time
+| head 1
+| table _time src_ip form_data
+```
+
+| Clause | Purpose |
+|---|---|
+| `src_ip="23.22.63.114"` | Only the brute-forcer's requests |
+| `sort 0 _time` | Oldest first. `0` removes the default 10,000-row limit on `sort` |
+| `head 1` | Keep only the first row |
+| `table ...` | Show the time, source and raw form body |
+
+**Evidence (Splunk-verified):**
+
+| _time | src_ip | form_data |
+|---|---|---|
+| 2016-08-10 21:45:21.226 | 23.22.63.114 | `username=admin&task=login&return=aW5kZXgucGhw&option=com_login&passwd=12345678&9d873c2becd118318849d13cf18b60ff=1` |
+
+**Findings on tradecraft** (from reading the 412 `form_data` values): the target account is always `admin`, only `passwd` changes — a dictionary attack. Every request carries a different 32-character hex parameter, which is Joomla's per-request CSRF token: the tool fetches a fresh login page before each attempt, indicating a purpose-built script, not a simple replay. The position of `passwd` within the body varies from request to request, which is why a regex must never assume a fixed order.
+
+**Answer: `12345678`**
+
+#### Q15 — Six-character Coldplay password
+
+**Objective:** among the attempted passwords, find the six-character one that is a Coldplay song.
+
+**Reasoning:** extract the password into a field, filter by length, then compare against the lab-provided list `coldplay.csv`.
+
+```spl
+index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*" src_ip="23.22.63.114"
+| rex field=form_data "passwd=(?<Password>[^&]+)"
+| eval lenpword=len(Password)
+| search lenpword=6
+| eval pass=lower(Password)
+| lookup coldplay.csv song as pass OUTPUTNEW song
+| search song=*
+| table _time src_ip Password song
+```
+
+| Clause | Purpose |
+|---|---|
+| `rex field=form_data "passwd=(?<Password>[^&]+)"` | Creates the field `Password` |
+| `eval lenpword=len(Password)` | New numeric field holding the password length |
+| `search lenpword=6` | Keep six-character passwords only |
+| `eval pass=lower(Password)` | Lowercase copy, so a case difference can't break the match |
+| `lookup coldplay.csv song as pass OUTPUTNEW song` | For each row, look in the CSV's `song` column for a value equal to `pass`. If found, add the field `song`; otherwise `song` stays empty |
+| `search song=*` | Keep only rows where the lookup matched |
+| `table ...` | Final presentation |
+
+**Evidence (Splunk-verified):**
+
+| _time | src_ip | Password | song |
+|---|---|---|---|
+| 2016-08-10 21:45:30.867 | 23.22.63.114 | yellow | yellow |
+
+**Answer: `yellow`**
+
+#### Q16 — Correct admin password
+
+**Objective:** identify the password that actually worked.
+
+**Reasoning:** once a brute force finds a valid password, the attacker uses it — so the working password is submitted **again**, making it the only password with a count above 1. The `src_ip` filter is deliberately omitted, because the successful login may come from a different host.
+
+```spl
+index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
+| rex field=form_data "passwd=(?<Password>[^&]+)"
+| stats count values(src_ip) AS src_ips BY Password
+| sort - count
+```
+
+**Evidence (Splunk-verified):**
+
+| Password | count | src_ips |
+|---|---|---|
+| batman | 2 | 23.22.63.114, 40.80.148.42 |
+| (every other password) | 1 | 23.22.63.114 |
+
+**Finding:** `batman` was submitted once by the brute-forcer and once by `40.80.148.42`, the IP that scanned the site in Q1. This is the pivot that connects the two hosts. Both belong to the same operation — the link is by shared credential and timing, not a common infrastructure indicator, so confidence is moderate to high, not certain.
+
+**Answer: `batman`**
+
+#### Q17 — Average password length
+
+**Objective:** average length of the passwords tried.
+
+```spl
+index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
+| rex field=form_data "passwd=(?<Password>[^&]+)"
+| eval pwlen=len(Password)
+| stats avg(pwlen) AS avg_len
+| eval avg_len=round(avg_len, 0)
+```
+
+**Evidence (Splunk-verified):** 413 events, `avg_len = 6`.
+
+**Note:** this averages over events, so `batman` is counted twice. With 413 events, one duplicate can't move a mean of about 6 to a different whole number.
+
+**Answer: `6`**
+
+#### Q18 — Time from password discovery to compromised login
+
+**Objective:** seconds between the brute force reaching the correct password and the attacker logging in with it.
+
+**Reasoning:** `batman` exists in exactly two events (Q16): the brute-force attempt and the later login. The interval between them is the answer.
+
+```spl
+index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
+| rex field=form_data "passwd=(?<Password>[^&]+)"
+| search Password=batman
+| stats min(_time) AS first_try max(_time) AS second_try
+| eval seconds=round(second_try - first_try, 2)
+| eval first_try=strftime(first_try, "%F %T.%3N"), second_try=strftime(second_try, "%F %T.%3N")
+```
+
+An alternative is `| transaction Password | table duration` — same result, much slower on large datasets; `stats` is the usual choice.
+
+**Evidence (Splunk-verified):**
+
+| first_try | second_try | seconds |
+|---|---|---|
+| 2016-08-10 21:46:33.689 | 2016-08-10 21:48:05.858 | 92.17 |
+
+**Finding:** about a minute and a half passed between the brute force hitting the valid password and the interactive login from the second host — consistent with the attacker reviewing the results and then logging in manually.
+
+**Answer: `92.17`**
+
+#### Q19 — Unique passwords attempted
+
+**Objective:** number of distinct passwords tried.
+
+```spl
+index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
+| rex field=form_data "passwd=(?<Password>[^&]+)"
+| stats dc(Password) AS unique_passwords
+```
+
+**Evidence (Splunk-verified):** `unique_passwords = 412`, from 413 events (the one duplicate is `batman`).
+
+**Answer: `412`**
+
+### Phase 3 — Exploitation: code execution on the web server
+
+#### Q9 — Uploaded executable
+
+**Objective:** name the executable the attacker uploaded.
+
+**Reasoning:** a file upload to a web application is an HTTP POST with a multipart body. Look for `.exe` in POSTs to the web server, then prove the file actually **ran** with endpoint telemetry.
+
+**Step 1 — candidate executables in uploads** (Splunk-verified)
+
+```spl
+index=botsv1 sourcetype=suricata (dest=imreallynotbatman.com OR dest=192.168.250.70) http.http_method=POST .exe
+```
+
+Appending `| stats count BY fileinfo.filename` gives:
+
+| fileinfo.filename | count |
+|---|---|
+| `/_vti_bin/shtml.exe` | 2 |
+| `3791.exe` | 1 |
+
+`/_vti_bin/shtml.exe` is a FrontPage Server Extensions path that vulnerability scanners probe for — consistent with the Acunetix traffic, but I didn't open those two events. `3791.exe` is the file name that isn't a probe path, and Step 2 shows it actually ran.
+
+**Step 2 — confirm execution** (Splunk-verified)
+
+```spl
+index=botsv1 3791.exe sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1 CommandLine="3791.exe"
+```
+
+**Evidence (1 event):**
+
+| Field | Value |
+|---|---|
+| _time | 2016-08-10 21:56:18 UTC |
+| host | we1149srv (the web server) |
+| Image | `C:\inetpub\wwwroot\joomla\3791.exe` |
+| CommandLine | `3791.exe` |
+| CurrentDirectory | `C:\inetpub\wwwroot\joomla\` |
+| User | `NT AUTHORITY\IUSR` (IIS anonymous account) |
+| ParentImage | `C:\Windows\SysWOW64\cmd.exe` |
+| ParentCommandLine | `cmd.exe /c "3791.exe 2>&1"` |
+| IntegrityLevel | High |
+
+**Finding:** the binary sits **inside the Joomla web root**, was started through `cmd.exe /c` with stderr redirected to stdout, and ran under the IIS service identity. A web application launching a shell that runs an executable it holds in its own web directory is not normal administration — it indicates remote code execution through the application.
+
+**Answer: `3791.exe`**
+
+#### Q10 — MD5 of the executable
+
+**Objective:** MD5 hash of `3791.exe`.
+
+**Reasoning:** Sysmon computes file hashes at process creation and stores them in the same event as Q9.
+
+```spl
+index=botsv1 3791.exe sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1 CommandLine="3791.exe"
+| table _time host Image CommandLine MD5 SHA256
+```
+
+**Evidence (Splunk-verified):**
+
+| Hash | Value |
+|---|---|
+| MD5 | `AAE3F5A29935E6ABCC2C2754D12A9AF0` |
+| SHA1 | `65DF73D77324D008C83C3E57B445DF0FD43A3A51` |
+| SHA256 | `EC78C938D8453739CA2A370B9C275971EC46CAF6E479DE2B2D04E97CC47FA45D` |
+| IMPHASH | `481F47BBB2C9C21E108D65F52B04C448` |
+
+Hash comparison is case-insensitive, so the lowercase form is accepted by the platform.
+
+**Answer: `aae3f5a29935e6abcc2c2754d12a9af0`**
+
+### Phase 4 — Defacement and attacker infrastructure
+
+#### Q4 — Defacement file
+
+**Objective:** name of the file that defaced the site.
+
+**Reasoning:** the web server (`192.168.250.70`) normally only **receives** requests. Outbound connections from it to the internet are the anomaly.
+
+```spl
+index=botsv1 sourcetype=fgt_utm "192.168.250.70" NOT dest="192.168.250.70" category="Malicious Websites"
+```
+
+| Clause | Purpose |
+|---|---|
+| `sourcetype=fgt_utm` | Firewall/UTM logs, which record URLs and categories |
+| `"192.168.250.70"` | Events mentioning the web server |
+| `NOT dest="192.168.250.70"` | Exclude traffic **to** the server, leaving traffic **from** it |
+| `category="Malicious Websites"` | The firewall's own classification of the destination |
+
+**Evidence (Splunk-verified):** three events, each with `url = prankglassinebracket.jumpingcrab.com:1337/poisonivy-is-coming-for-you-batman.jpeg`.
+
+**Finding:** the server fetched an image named for the actor and the target from a host the firewall already classed as malicious. That image is the defacement content.
+
+**Answer: `poisonivy-is-coming-for-you-batman.jpeg`** (Platform-accepted)
+
+#### Q5 — Attack FQDN (dynamic DNS)
+
+**Objective:** the fully qualified domain name associated with the attack.
+
+```spl
+index=botsv1 sourcetype="fgt_utm" "prankglassinebracket.jumpingcrab.com"
+| table _time srcip dstip dest url category
+```
+
+(The hostname was first identified by running the Q4 query and reading the `url` field.)
+
+**Evidence (Splunk-verified, 3 events):**
+
+| _time | srcip | dstip | dest | url | category |
+|---|---|---|---|---|---|
+| 2016-08-10 22:06:21 | 192.168.250.70 | 23.22.63.114 | 23.22.63.114 | prankglassinebracket.jumpingcrab.com:1337/poisonivy-is-coming-for-you-batman.jpeg | Malicious Websites |
+| 2016-08-10 22:13:46 | 192.168.250.70 | 23.22.63.114 | 23.22.63.114 | same | Malicious Websites |
+| 2016-08-10 22:19:10 | 192.168.250.70 | 23.22.63.114 | 23.22.63.114 | same | Malicious Websites |
+
+**Finding:** the FQDN is `prankglassinebracket.jumpingcrab.com`. The `:1337` is a port and `/poisonivy-...jpeg` is a path, neither part of the domain name. `jumpingcrab.com` is a dynamic DNS domain, letting an attacker repoint a hostname at a new IP without registering one. The non-standard port 1337 is itself a detection signal. The web server fetched the image three times over about 13 minutes (22:06, 22:13, 22:19) — repeated activity, not a single request.
+
+**Answer: `prankglassinebracket.jumpingcrab.com`**
+
+#### Q6 — IP address of the pre-staged infrastructure
+
+**Objective:** the IPv4 address Po1s0n1vy tied to domains pre-staged against Wayne Enterprises.
+
+**Reasoning:** the same three events from Q5 show where the hostname resolved. `dstip` is the answer.
+
+**Evidence (Splunk-verified):** `dstip = 23.22.63.114` in all three events.
+
+**Finding:** `23.22.63.114` is also the brute-force source (Q8). The same address both served the defacement content and drove the login attack.
+
+**Answer: `23.22.63.114`**
+
+### Phase 5 — Attribution and threat-intel enrichment
+
+#### Q11 — Spear-phishing malware hash (OSINT)
+
+**Objective:** SHA256 of the custom malware tied to the group's initial attack infrastructure.
+
+**Method (no SPL):** look up the attacker IP `23.22.63.114` on ThreatMiner and open its malware samples (three MD5s are listed). Check each MD5 on VirusTotal, keeping the sample whose relations or behavior link it to `23.22.63.114` or the dynamic-DNS domain. Read the SHA256 from the VirusTotal details tab.
+
+**Answer: `9709473ab351387aab9e816eff3910b9f28a7a70202e250ed46dba8f820f34a8`** (OSINT; Platform-accepted. I did not record which of the three MD5s matched.)
+
+**CTI note:** this IP therefore serves three roles in one operation — brute-force source, defacement content host, and malware infrastructure. Pivoting on a single indicator reached all three.
+
+#### Q12 — Hex code associated with the malware
+
+**Method:** open the same sample's VirusTotal page and read the **Community** tab.
+
+**Answer (OSINT; Platform-accepted):**
+
+```
+53 74 65 76 65 20 42 72 61 6e 74 27 73 20 42 65 61 72 64 20 69 73 20 61 20 70 6f 77 65 72 66 75 6c 20 74 68 69 6e 67 2e 20 46 69 6e 64 20 74 68 69 73 20 6d 65 73 73 61 67 65 20 61 6e 64 20 61 73 6b 20 68 69 6d 20 74 6f 20 62 75 79 20 79 6f 75 20 61 20 62 65 65 72 21 21 21
+```
+
+Decoded to ASCII (checked): `Steve Brant's Beard is a powerful thing. Find this message and ask him to buy you a beer!!!`
+
+## 7. Consolidated timeline
+
+All times are UTC, 2016-08-10.
+
+| Time | Source | Event |
+|---|---|---|
+| 21:45:21 | `stream:http` | First brute-force login (`admin` / `12345678`) from `23.22.63.114` |
+| 21:45:29–21:45:31 | `stream:http` | Dense burst of attempts, within seconds of each other (automated) |
+| 21:46:33 | `stream:http` | `batman` submitted by the brute-forcer |
+| 21:48:05 | `stream:http` | `batman` submitted from `40.80.148.42` (92.17 s later): login |
+| 21:56:18 | Sysmon | `3791.exe` executed from the Joomla web root as `IUSR` on `we1149srv` |
+| 22:06:21 | `fgt_utm` | Web server fetches the defacement image from `23.22.63.114:1337` (1st) |
+| 22:13:46 | `fgt_utm` | 2nd fetch |
+| 22:19:10 | `fgt_utm` | 3rd fetch |
+| 22:22:26–22:22:27 | `stream:http` | Acunetix SQL injection probes from `40.80.148.42` still arriving |
+
+**Note:** scanner traffic is present at 22:22, after the defacement fetches. Scanning therefore continued alongside later stages and wasn't strictly confined to a first phase. I did not establish when scanning began.
+
+## 8. Indicators of compromise
+
+Indicators are defanged for safe sharing.
+
+| Type | Indicator | Role |
+|---|---|---|
+| IPv4 | `40.80[.]148.42` | Acunetix scanning source; used the valid `batman` credential |
+| IPv4 | `23.22.63[.]114` | Brute-force source; defacement content host; malware infrastructure |
+| FQDN | `prankglassinebracket[.]jumpingcrab[.]com` | Dynamic-DNS name resolving to `23.22.63[.]114` |
+| URL | `hxxp://prankglassinebracket[.]jumpingcrab[.]com:1337/poisonivy-is-coming-for-you-batman.jpeg` | Defacement image |
+| File name | `3791.exe` | Uploaded and executed binary |
+| MD5 | `aae3f5a29935e6abcc2c2754d12a9af0` | `3791.exe` |
+| SHA1 | `65df73d77324d008c83c3e57b445df0fd43a3a51` | `3791.exe` |
+| SHA256 | `ec78c938d8453739ca2a370b9c275971ec46caf6e479de2b2d04e97cc47fa45d` | `3791.exe` |
+| Imphash | `481f47bbb2c9c21e108d65f52b04c448` | `3791.exe` |
+| SHA256 | `9709473ab351387aab9e816eff3910b9f28a7a70202e250ed46dba8f820f34a8` | Spear-phishing malware tied to the same infrastructure (OSINT) |
+| HTTP header | `Acunetix-Product: WVS/10.0` | Scanner fingerprint |
+| Credential | `admin` / `batman` | Compromised Joomla admin account |
+| Port | TCP `1337` | Non-standard port used for content delivery |
+
+## 9. MITRE ATT&CK mapping
+
+Mapping is my analytic assessment from the evidence above.
+
+| Tactic | Technique | Evidence | Confidence |
+|---|---|---|---|
+| Reconnaissance | T1595.002 Active Scanning: Vulnerability Scanning | Acunetix traffic from `40.80.148.42` | High |
+| Initial Access | T1190 Exploit Public-Facing Application | SQL injection probes against Joomla search; code execution later | Medium (probes are observed, a successful exploit isn't shown) |
+| Credential Access | T1110.001 Brute Force: Password Guessing | 412 passwords against `admin` | High |
+| Initial Access / Persistence | T1078 Valid Accounts | `batman` used for the admin login | High |
+| Execution | T1059.003 Command and Scripting Interpreter: Windows Command Shell | `cmd.exe /c "3791.exe 2>&1"` | High |
+| Command and Control | T1105 Ingress Tool Transfer | `3791.exe` uploaded to the server | Medium (upload seen in Suricata metadata; the upload request itself wasn't inspected) |
+| Resource Development | T1583.001 Acquire Infrastructure: Domains | Dynamic-DNS hostname used | Medium |
+| Impact | T1491.002 Defacement: External Defacement | Defacement image pulled onto the public site | High |
+
+I did not map T1505.003 (Web Shell), because I have no evidence that a web shell was installed. The cause of execution is only known to be the application running `cmd.exe`.
+
+## 10. Detection and hardening recommendations
+
+> The searches below are drafts I have **not** run against this dataset. Thresholds need tuning on real baselines.
+
+### 10.1 Detections
+
+**Brute force against a web login** — many login POSTs from one source in a short window:
+
+```spl
+index=* sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
+| bin _time span=1m
+| stats count BY _time src_ip dest_ip
+| where count > 20
+```
+
+**Success after another source's guesses** — a password submitted by two different IPs:
+
+```spl
+index=* sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
+| rex field=form_data "passwd=(?<Password>[^&]+)"
+| stats dc(src_ip) AS sources count BY Password dest_ip
+| where sources > 1
+```
+
+(In production, key on the *account* plus the authentication result, not the raw password, which many log sources don't retain.)
+
+**Web server spawning a shell** — a worker-process identity starting `cmd.exe` or running from the web root:
+
+```spl
+index=* sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  (ParentImage="*\\cmd.exe" OR Image="C:\\inetpub\\wwwroot\\*") User="NT AUTHORITY\\IUSR"
+```
+
+**Server-initiated outbound traffic** — a web server should not browse the internet:
+
+```spl
+index=* sourcetype="fgt_utm" srcip="192.168.250.70" NOT dstip="192.168.*"
+| stats count values(url) BY srcip dstip category
+```
+
+**Scanner fingerprint** — known scanner headers:
+
+```spl
+index=* sourcetype="stream:http" src_headers="*Acunetix*"
+| stats count BY src_ip dest_ip
+```
+
+### 10.2 Hardening
+
+- Rate-limit and lock out repeated failed admin logins; require MFA for the Joomla back end.
+- Restrict `/administrator` to management IP ranges.
+- Make the web root non-executable and block uploads of executable file types.
+- Deny outbound internet access from the web server, except for required destinations.
+- Alert or block on non-standard outbound ports and on dynamic-DNS domains.
+- Add the indicators in section 8 to blocking and hunting lists, covering **both** IP addresses.
+
+## 11. Limitations and lessons learned
+
+**Limitations**
+- Only the Suricata alert-signature check in Q1 comes from a public walkthrough and wasn't run by me. Every other Splunk query in this report was re-run on 2026-10-18 and matches.
+- Q11 and Q12 rely on external lookups not captured in this note.
+- The origin of the initial code execution isn't established (no web shell or exploit request was identified).
+- When the scanning began wasn't determined.
+- The `*username*passwd*` filter assumes that order inside the form body.
+
+**Lessons learned (SPL and method)**
+- A broad query is a starting point, not an answer. The 15,560-event POST search had to be narrowed with `form_data` to isolate real logins.
+- Don't assume field order in a request body. Use one `rex` per field, and `[^&]+` instead of `\w+`.
+- `sort` has a default 10,000-row cap; use `sort 0` when order matters.
+- Do arithmetic on `_time` while it's numeric, and format it with `strftime` last.
+- Prefer `stats` over `transaction` for durations.
+- Hunt on what the **server initiates** as well as what it receives: the outbound fetch exposed the defacement.
+- An indicator that appears in several roles (here `23.22.63.114`) is the strongest pivot. Always check what else touched it.
+
+## 12. Answer summary
+
+| Q | Answer | Evidence type |
+|---|---|---|
+| 1 | `40.80.148.42` | Splunk-verified |
+| 2 | Acunetix | Splunk-verified |
+| 3 | Joomla | Splunk-verified |
+| 4 | `poisonivy-is-coming-for-you-batman.jpeg` | Splunk-verified, Platform-accepted |
+| 5 | `prankglassinebracket.jumpingcrab.com` | Splunk-verified |
+| 6 | `23.22.63.114` | Splunk-verified |
+| 8 | `23.22.63.114` | Splunk-verified |
+| 9 | `3791.exe` | Splunk-verified |
+| 10 | `aae3f5a29935e6abcc2c2754d12a9af0` | Splunk-verified |
+| 11 | `9709473ab351387aab9e816eff3910b9f28a7a70202e250ed46dba8f820f34a8` | OSINT, Platform-accepted |
+| 12 | Hex string (section Q12) | OSINT, Platform-accepted |
+| 14 | `12345678` | Splunk-verified |
+| 15 | `yellow` | Splunk-verified |
+| 16 | `batman` | Splunk-verified |
+| 17 | `6` | Splunk-verified |
+| 18 | `92.17` | Splunk-verified |
+| 19 | `412` | Splunk-verified |
+
+**Score: 17/17 correct, 10,541 points.**
+
+If you want to practice the underlying commands before attempting a scenario like this yourself, [Part 1 of this series](/posts/splunk-enterprise-spl-tutorial) walks through every SPL idea used above, including a sandbox you can run queries against directly in the browser.

@@ -45,6 +45,8 @@ import { GolliathParserPipeline } from "@/components/visualizations/golliath-par
 import { GolliathGrammarRouter } from "@/components/visualizations/golliath-grammar-router"
 import { GolliathBenchmark } from "@/components/visualizations/golliath-benchmark"
 import { GolliathCountryMap } from "@/components/visualizations/golliath-country-map"
+import { SplPipelineOrder } from "@/components/visualizations/spl-pipeline-order"
+import { SplPipelineBuilder } from "@/components/tools/spl-pipeline-builder"
 import { LinuxSystemCallsCheatsheet } from "@/components/cheatsheets/linux-system-calls"
 import GdbDebuggingCheatsheet from "@/components/cheatsheets/gdb-debugging"
 import { CollapsibleCode } from "@/components/ui/collapsible-code"
@@ -232,6 +234,8 @@ export const mdxComponents = {
   GolliathGrammarRouter: () => <GolliathGrammarRouter />,
   GolliathBenchmark: () => <GolliathBenchmark />,
   GolliathCountryMap: () => <GolliathCountryMap />,
+  SplPipelineOrder: () => <SplPipelineOrder />,
+  SplPipelineBuilder: () => <SplPipelineBuilder />,
   // Cheatsheet Components
   LinuxSystemCallsCheatsheet: () => <LinuxSystemCallsCheatsheet />,
   GdbDebuggingCheatsheet: () => <GdbDebuggingCheatsheet />,

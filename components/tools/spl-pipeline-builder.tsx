@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { Search, Plus, X, ChevronUp, ChevronDown, Copy, Check, AlertTriangle, Clock } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Search, Plus, X, ChevronUp, ChevronDown, Copy, Check, AlertTriangle, Clock, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DATASETS,
@@ -9,6 +9,7 @@ import {
   runPipeline,
   repairStages,
   defaultConfig,
+  parseSplQuery,
   STAGE_TYPES,
   STAGE_LABELS,
   STAGE_GROUP_ORDER,
@@ -617,24 +618,51 @@ export function SplPipelineBuilder() {
   const lastStageType = stages.length ? stages[stages.length - 1].type : undefined
   const canVisualize = lastStageType !== undefined && isVisualizable(lastStageType)
 
+  // Free-text editing of the query. `queryText` mirrors `fullSplText` whenever
+  // the guided editors below change it, until the user starts typing their own
+  // query ("dirty"), at which point only clicking Run (or Ctrl/Cmd+Enter)
+  // parses it back into filters + stages -- which the SAME guided editors then
+  // render, so both ways of building a query stay interchangeable.
+  const [queryText, setQueryText] = useState(fullSplText)
+  const [dirty, setDirty] = useState(false)
+  const [queryIssues, setQueryIssues] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!dirty) setQueryText(fullSplText)
+  }, [fullSplText, dirty])
+
+  function runQueryText() {
+    const parsed = parseSplQuery(queryText, dataset)
+    const repaired = repairStages(dataset, timeRange, parsed.filters, parsed.stages)
+    setFilters(parsed.filters)
+    setStages(repaired)
+    setQueryIssues(parsed.issues)
+    setDirty(false)
+  }
+
   function switchDataset(id: string) {
     setDatasetId(id)
     setFilters([])
     setTimePreset("all")
     setStages([])
+    setQueryIssues([])
+    setDirty(false)
   }
 
   function addFilter() {
     const field = dataset.fields.find((f) => f !== "_time") ?? dataset.fields[0]
     setFilters([...filters, { field, op: "=", value: String(distinctValues(dataset.rows, field)[0] ?? "") }])
+    setDirty(false)
   }
   function updateFilter(i: number, next: Filter) {
     const arr = [...filters]
     arr[i] = next
     setFilters(arr)
+    setDirty(false)
   }
   function removeFilter(i: number) {
     setFilters(filters.filter((_, idx) => idx !== i))
+    setDirty(false)
   }
 
   function fieldsBeforeStage(index: number) {
@@ -651,14 +679,17 @@ export function SplPipelineBuilder() {
     if (type === "iplocation") config.field = dataset.ipField ?? ""
     setStages([...stages, { id: nextId(type), type, config }])
     if (isVisualizable(type)) setResultView("viz")
+    setDirty(false)
   }
   function updateStage(id: string, config: any) {
     const next = stages.map((s) => (s.id === id ? { ...s, config } : s))
     setStages(repairStages(dataset, timeRange, filters, next))
+    setDirty(false)
   }
   function removeStage(id: string) {
     const next = stages.filter((s) => s.id !== id)
     setStages(repairStages(dataset, timeRange, filters, next))
+    setDirty(false)
   }
   function moveStage(index: number, dir: -1 | 1) {
     const target = index + dir
@@ -666,6 +697,7 @@ export function SplPipelineBuilder() {
     const arr = [...stages]
     ;[arr[index], arr[target]] = [arr[target], arr[index]]
     setStages(repairStages(dataset, timeRange, filters, arr))
+    setDirty(false)
   }
 
   function copySpl() {
@@ -700,11 +732,35 @@ export function SplPipelineBuilder() {
         <span className="text-xs text-[#5c6773] ml-2">{dataset.description}</span>
       </div>
 
-      {/* Search bar */}
+      {/* Search bar — freely editable: write or paste your own SPL and click Run */}
       <div className="bg-white px-4 py-3 border-b border-[#d8dadd] space-y-2">
         <div className="flex items-start gap-2 flex-wrap">
           <Search className="w-4 h-4 text-[#5c6773] mt-1.5 shrink-0" />
-          <pre className="flex-1 min-w-[200px] font-mono text-[13px] text-[#1e2125] whitespace-pre-wrap leading-relaxed">{fullSplText}</pre>
+          <textarea
+            value={queryText}
+            onChange={(e) => {
+              setQueryText(e.target.value)
+              setDirty(true)
+            }}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runQueryText()
+            }}
+            spellCheck={false}
+            rows={Math.min(10, Math.max(2, queryText.split("\n").length))}
+            placeholder={`index=${dataset.index} sourcetype=${dataset.sourcetype} field=value\n| stats count by field`}
+            className="flex-1 min-w-[200px] font-mono text-[13px] text-[#1e2125] leading-relaxed bg-white border border-[#c6cace] rounded px-2 py-1.5 resize-y focus:outline-none focus:ring-1 focus:ring-[#0a84c4]"
+          />
+          <button
+            onClick={runQueryText}
+            title="Parse and run this query (Ctrl/Cmd+Enter)"
+            className={cn(
+              "shrink-0 flex items-center gap-1.5 h-8 px-3 rounded text-white text-xs font-semibold transition-colors",
+              dirty ? "bg-[#1e8e3e] hover:bg-[#166b2e]" : "bg-[#5c6773] hover:bg-[#4a535c]",
+            )}
+          >
+            <Play className="w-3.5 h-3.5" />
+            {dirty ? "Run" : "Re-run"}
+          </button>
           <div className="shrink-0 flex items-center gap-1.5 h-8 px-2 rounded border border-[#c6cace] bg-white">
             <Clock className="w-3.5 h-3.5 text-[#5c6773]" />
             <Sel value={timePreset} onChange={setTimePreset} options={TIME_PRESET_OPTIONS} className="h-auto border-0 px-0" />
@@ -744,7 +800,22 @@ export function SplPipelineBuilder() {
               {timePreset !== "custom" && " (“now” = this dataset's most recent event, for the simulation)"}
             </>
           )}
+          {dirty && <span className="text-amber-600"> &middot; edited — click Run to apply</span>}
         </div>
+        {queryIssues.length > 0 && (
+          <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <ul className="space-y-0.5">
+              {queryIssues.map((issue, i) => (
+                <li key={i}>{issue}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="text-[11px] text-[#9aa0a6]">
+          Write or paste SPL directly, or use the guided commands below — both stay in sync. This runs against the small sample
+          datasets above, not real Splunk, so field names (not index/sourcetype) are what connect a query to data here.
+        </p>
       </div>
 
       {/* Filters */}

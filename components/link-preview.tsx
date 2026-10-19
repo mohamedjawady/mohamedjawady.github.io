@@ -71,6 +71,20 @@ const getDifficultyColor = (difficulty?: string) => {
   }
 }
 
+// This is a static export with no server, so there is no per-link API to call.
+// Every link's preview data instead lives in one JSON file, prebuilt at
+// compile time (see app/preview-index.json/route.ts) and fetched once here,
+// then shared by every LinkPreview instance on the page.
+let previewIndexPromise: Promise<Record<string, ContentPreview>> | null = null
+function getPreviewIndex(): Promise<Record<string, ContentPreview>> {
+  if (!previewIndexPromise) {
+    previewIndexPromise = fetch('/preview-index.json')
+      .then((res) => (res.ok ? res.json() : {}))
+      .catch(() => ({}))
+  }
+  return previewIndexPromise
+}
+
 export function LinkPreview({ href, children, className }: LinkPreviewProps) {
   const [preview, setPreview] = useState<ContentPreview | null>(null)
   const [loading, setLoading] = useState(false)
@@ -82,22 +96,20 @@ export function LinkPreview({ href, children, className }: LinkPreviewProps) {
   useEffect(() => {
     if (!isInternal || !parsedUrl || !showPreview) return
 
-    const fetchPreview = async () => {
-      setLoading(true)
-      try {
-        const response = await fetch(`/api/preview?type=${parsedUrl.type}&id=${parsedUrl.id}`)
-        if (response.ok) {
-          const data = await response.json()
-          setPreview(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch preview:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
+    let cancelled = false
+    setLoading(true)
+    getPreviewIndex()
+      .then((index) => {
+        if (cancelled) return
+        setPreview(index[`${parsedUrl.type}:${parsedUrl.id}`] ?? null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
 
-    fetchPreview()
+    return () => {
+      cancelled = true
+    }
   }, [isInternal, parsedUrl, showPreview])
 
   // For external links or non-previewable content, return regular link

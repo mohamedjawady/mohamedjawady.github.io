@@ -9,7 +9,7 @@ seriesOrder: 2
 visibility: "public"
 ---
 
-This is an investigation report and SPL study log for Splunk's **Boss of the SOC v1 (BOTSv1)**, Scenario 1. If you haven't already, [Part 1 of this series](/posts/splunk-enterprise-spl-tutorial) teaches the SPL used here from first principles — this post is what that tutorial's Part 10 was pointing toward.
+This is an investigation report and SPL study log for Splunk's **Boss of the SOC v1 (BOTSv1)**, Scenario 1. If you haven't already, [Part 1 of this series](/posts/splunk-enterprise-spl-tutorial) teaches the SPL used here from first principles; this post is what that tutorial's Part 10 was pointing toward.
 
 Score: **17/17 correct, 10,541 points.**
 
@@ -25,7 +25,7 @@ Score: **17/17 correct, 10,541 points.**
 | Code execution | `3791.exe` ran from the Joomla web root as `NT AUTHORITY\IUSR` via `cmd.exe /c` | Sysmon EventCode 1 on `we1149srv` |
 | Defacement | The web server fetched `poisonivy-is-coming-for-you-batman.jpeg` from `prankglassinebracket.jumpingcrab.com:1337` (`23.22.63.114`) | Three `fgt_utm` events, category *Malicious Websites* |
 
-**Main analytic takeaway:** the attacker split roles across two hosts — `23.22.63.114` for brute force and payload hosting, `40.80.148.42` for scanning and the successful login. Any detection or block list that covers only one of them misses half of the operation.
+**Main analytic takeaway:** the attacker split roles across two hosts; `23.22.63.114` for brute force and payload hosting, `40.80.148.42` for scanning and the successful login. Any detection or block list that covers only one of them misses half of the operation.
 
 ## 2. Scope and environment
 
@@ -126,9 +126,9 @@ Result: capture everything after `passwd=` up to the next `&`, or to the end of 
 
 Questions are grouped by attack phase, in the order the evidence unfolds. Question numbers match the scoring platform (Q7 and Q13 don't exist).
 
-### Phase 1 — Reconnaissance and scanning
+### Phase 1: Reconnaissance and scanning
 
-#### Q1 — Scanner source IP
+#### Q1: Scanner source IP
 
 **Objective:** identify the IPv4 address scanning `imreallynotbatman.com` for web application vulnerabilities.
 
@@ -163,7 +163,7 @@ index=botsv1 imreallynotbatman.com | stats count BY src_ip | sort - count | head
 
 **Answer: `40.80.148.42`**
 
-#### Q2 — Scanner vendor
+#### Q2: Scanner vendor
 
 **Objective:** name the company that built the scanner.
 
@@ -189,7 +189,7 @@ All **15,895** requests carrying an Acunetix header come from a single source, `
 
 **Answer: `Acunetix`**
 
-#### Q3 — Content management system
+#### Q3: Content management system
 
 **Objective:** identify the CMS.
 
@@ -203,15 +203,15 @@ The top paths are `/joomla/index.php/component/search/` (16,667), `/joomla/admin
 
 **Answer: `Joomla`**
 
-### Phase 2 — Credential brute force and account takeover
+### Phase 2: Credential brute force and account takeover
 
-#### Q8 — Brute-force source IP
+#### Q8: Brute-force source IP
 
 **Objective:** identify the IPv4 address brute-forcing the site's login.
 
 **Reasoning:** a web login brute force is a series of HTTP **POST** requests to the login form, each with a different password. So: `stream:http`, method POST, destination the web server, body containing the login fields.
 
-**Step 1 — all POSTs to the web server**
+**Step 1; all POSTs to the web server**
 
 ```spl
 index=botsv1 imreallynotbatman.com dest_ip="192.168.250.70" sourcetype="stream:http" http_method=POST
@@ -219,7 +219,7 @@ index=botsv1 imreallynotbatman.com dest_ip="192.168.250.70" sourcetype="stream:h
 
 Returned **15,560** events. Too broad: it includes scanner POSTs to the search component, which are SQL injection probes, not logins.
 
-**Step 2 — isolate login attempts and count by source**
+**Step 2; isolate login attempts and count by source**
 
 ```spl
 index=botsv1 imreallynotbatman.com dest_ip="192.168.250.70" sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
@@ -232,11 +232,11 @@ index=botsv1 imreallynotbatman.com dest_ip="192.168.250.70" sourcetype="stream:h
 | `dest_ip="192.168.250.70"` | Only traffic **to** the web server |
 | `sourcetype="stream:http"` | HTTP metadata, which includes the POST body in `form_data` |
 | `http_method=POST` | Form submissions only |
-| `form_data="*username*passwd*"` | Keeps requests whose body contains a `username` then a `passwd` parameter — i.e. login forms, excluding search forms and scanner probes |
+| `form_data="*username*passwd*"` | Keeps requests whose body contains a `username` then a `passwd` parameter; i.e. login forms, excluding search forms and scanner probes |
 | `stats count BY src_ip` | One row per source IP with its event count |
 | `sort - count` | Highest count first |
 
-**Evidence (derived from my own Q14 and Q16 results — 412 events with `src_ip=23.22.63.114`, 413 login POSTs in total, and `batman` also submitted from `40.80.148.42`):**
+**Evidence (derived from my own Q14 and Q16 results; 412 events with `src_ip=23.22.63.114`, 413 login POSTs in total, and `batman` also submitted from `40.80.148.42`):**
 
 | src_ip | login POSTs |
 |---|---|
@@ -249,7 +249,7 @@ index=botsv1 imreallynotbatman.com dest_ip="192.168.250.70" sourcetype="stream:h
 
 **Answer: `23.22.63.114`**
 
-#### Q14 — First brute-force password
+#### Q14: First brute-force password
 
 **Objective:** find the first password the attacker tried.
 
@@ -275,11 +275,11 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" http_method=POST 
 |---|---|---|
 | 2016-08-10 21:45:21.226 | 23.22.63.114 | `username=admin&task=login&return=aW5kZXgucGhw&option=com_login&passwd=12345678&9d873c2becd118318849d13cf18b60ff=1` |
 
-**Findings on tradecraft** (from reading the 412 `form_data` values): the target account is always `admin`, only `passwd` changes — a dictionary attack. Every request carries a different 32-character hex parameter, which is Joomla's per-request CSRF token: the tool fetches a fresh login page before each attempt, indicating a purpose-built script, not a simple replay. The position of `passwd` within the body varies from request to request, which is why a regex must never assume a fixed order.
+**Findings on tradecraft** (from reading the 412 `form_data` values): the target account is always `admin`, only `passwd` changes; a dictionary attack. Every request carries a different 32-character hex parameter, which is Joomla's per-request CSRF token: the tool fetches a fresh login page before each attempt, indicating a purpose-built script, not a simple replay. The position of `passwd` within the body varies from request to request, which is why a regex must never assume a fixed order.
 
 **Answer: `12345678`**
 
-#### Q15 — Six-character Coldplay password
+#### Q15: Six-character Coldplay password
 
 **Objective:** among the attempted passwords, find the six-character one that is a Coldplay song.
 
@@ -314,11 +314,11 @@ index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*pass
 
 **Answer: `yellow`**
 
-#### Q16 — Correct admin password
+#### Q16: Correct admin password
 
 **Objective:** identify the password that actually worked.
 
-**Reasoning:** once a brute force finds a valid password, the attacker uses it — so the working password is submitted **again**, making it the only password with a count above 1. The `src_ip` filter is deliberately omitted, because the successful login may come from a different host.
+**Reasoning:** once a brute force finds a valid password, the attacker uses it; so the working password is submitted **again**, making it the only password with a count above 1. The `src_ip` filter is deliberately omitted, because the successful login may come from a different host.
 
 ```spl
 index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
@@ -334,11 +334,11 @@ index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*pass
 | batman | 2 | 23.22.63.114, 40.80.148.42 |
 | (every other password) | 1 | 23.22.63.114 |
 
-**Finding:** `batman` was submitted once by the brute-forcer and once by `40.80.148.42`, the IP that scanned the site in Q1. This is the pivot that connects the two hosts. Both belong to the same operation — the link is by shared credential and timing, not a common infrastructure indicator, so confidence is moderate to high, not certain.
+**Finding:** `batman` was submitted once by the brute-forcer and once by `40.80.148.42`, the IP that scanned the site in Q1. This is the pivot that connects the two hosts. Both belong to the same operation; the link is by shared credential and timing, not a common infrastructure indicator, so confidence is moderate to high, not certain.
 
 **Answer: `batman`**
 
-#### Q17 — Average password length
+#### Q17: Average password length
 
 **Objective:** average length of the passwords tried.
 
@@ -356,7 +356,7 @@ index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*pass
 
 **Answer: `6`**
 
-#### Q18 — Time from password discovery to compromised login
+#### Q18: Time from password discovery to compromised login
 
 **Objective:** seconds between the brute force reaching the correct password and the attacker logging in with it.
 
@@ -371,7 +371,7 @@ index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*pass
 | eval first_try=strftime(first_try, "%F %T.%3N"), second_try=strftime(second_try, "%F %T.%3N")
 ```
 
-An alternative is `| transaction Password | table duration` — same result, much slower on large datasets; `stats` is the usual choice.
+An alternative is `| transaction Password | table duration`; same result, much slower on large datasets; `stats` is the usual choice.
 
 **Evidence (Splunk-verified):**
 
@@ -379,11 +379,11 @@ An alternative is `| transaction Password | table duration` — same result, muc
 |---|---|---|
 | 2016-08-10 21:46:33.689 | 2016-08-10 21:48:05.858 | 92.17 |
 
-**Finding:** about a minute and a half passed between the brute force hitting the valid password and the interactive login from the second host — consistent with the attacker reviewing the results and then logging in manually.
+**Finding:** about a minute and a half passed between the brute force hitting the valid password and the interactive login from the second host; consistent with the attacker reviewing the results and then logging in manually.
 
 **Answer: `92.17`**
 
-#### Q19 — Unique passwords attempted
+#### Q19: Unique passwords attempted
 
 **Objective:** number of distinct passwords tried.
 
@@ -397,15 +397,15 @@ index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*pass
 
 **Answer: `412`**
 
-### Phase 3 — Exploitation: code execution on the web server
+### Phase 3: Exploitation: code execution on the web server
 
-#### Q9 — Uploaded executable
+#### Q9: Uploaded executable
 
 **Objective:** name the executable the attacker uploaded.
 
 **Reasoning:** a file upload to a web application is an HTTP POST with a multipart body. Look for `.exe` in POSTs to the web server, then prove the file actually **ran** with endpoint telemetry.
 
-**Step 1 — candidate executables in uploads** (Splunk-verified)
+**Step 1; candidate executables in uploads** (Splunk-verified)
 
 ```spl
 index=botsv1 sourcetype=suricata (dest=imreallynotbatman.com OR dest=192.168.250.70) http.http_method=POST .exe
@@ -418,9 +418,9 @@ Appending `| stats count BY fileinfo.filename` gives:
 | `/_vti_bin/shtml.exe` | 2 |
 | `3791.exe` | 1 |
 
-`/_vti_bin/shtml.exe` is a FrontPage Server Extensions path that vulnerability scanners probe for — consistent with the Acunetix traffic, but I didn't open those two events. `3791.exe` is the file name that isn't a probe path, and Step 2 shows it actually ran.
+`/_vti_bin/shtml.exe` is a FrontPage Server Extensions path that vulnerability scanners probe for; consistent with the Acunetix traffic, but I didn't open those two events. `3791.exe` is the file name that isn't a probe path, and Step 2 shows it actually ran.
 
-**Step 2 — confirm execution** (Splunk-verified)
+**Step 2; confirm execution** (Splunk-verified)
 
 ```spl
 index=botsv1 3791.exe sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1 CommandLine="3791.exe"
@@ -440,11 +440,11 @@ index=botsv1 3791.exe sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operat
 | ParentCommandLine | `cmd.exe /c "3791.exe 2>&1"` |
 | IntegrityLevel | High |
 
-**Finding:** the binary sits **inside the Joomla web root**, was started through `cmd.exe /c` with stderr redirected to stdout, and ran under the IIS service identity. A web application launching a shell that runs an executable it holds in its own web directory is not normal administration — it indicates remote code execution through the application.
+**Finding:** the binary sits **inside the Joomla web root**, was started through `cmd.exe /c` with stderr redirected to stdout, and ran under the IIS service identity. A web application launching a shell that runs an executable it holds in its own web directory is not normal administration; it indicates remote code execution through the application.
 
 **Answer: `3791.exe`**
 
-#### Q10 — MD5 of the executable
+#### Q10: MD5 of the executable
 
 **Objective:** MD5 hash of `3791.exe`.
 
@@ -468,9 +468,9 @@ Hash comparison is case-insensitive, so the lowercase form is accepted by the pl
 
 **Answer: `aae3f5a29935e6abcc2c2754d12a9af0`**
 
-### Phase 4 — Defacement and attacker infrastructure
+### Phase 4: Defacement and attacker infrastructure
 
-#### Q4 — Defacement file
+#### Q4: Defacement file
 
 **Objective:** name of the file that defaced the site.
 
@@ -493,7 +493,7 @@ index=botsv1 sourcetype=fgt_utm "192.168.250.70" NOT dest="192.168.250.70" categ
 
 **Answer: `poisonivy-is-coming-for-you-batman.jpeg`** (Platform-accepted)
 
-#### Q5 — Attack FQDN (dynamic DNS)
+#### Q5: Attack FQDN (dynamic DNS)
 
 **Objective:** the fully qualified domain name associated with the attack.
 
@@ -512,11 +512,11 @@ index=botsv1 sourcetype="fgt_utm" "prankglassinebracket.jumpingcrab.com"
 | 2016-08-10 22:13:46 | 192.168.250.70 | 23.22.63.114 | 23.22.63.114 | same | Malicious Websites |
 | 2016-08-10 22:19:10 | 192.168.250.70 | 23.22.63.114 | 23.22.63.114 | same | Malicious Websites |
 
-**Finding:** the FQDN is `prankglassinebracket.jumpingcrab.com`. The `:1337` is a port and `/poisonivy-...jpeg` is a path, neither part of the domain name. `jumpingcrab.com` is a dynamic DNS domain, letting an attacker repoint a hostname at a new IP without registering one. The non-standard port 1337 is itself a detection signal. The web server fetched the image three times over about 13 minutes (22:06, 22:13, 22:19) — repeated activity, not a single request.
+**Finding:** the FQDN is `prankglassinebracket.jumpingcrab.com`. The `:1337` is a port and `/poisonivy-...jpeg` is a path, neither part of the domain name. `jumpingcrab.com` is a dynamic DNS domain, letting an attacker repoint a hostname at a new IP without registering one. The non-standard port 1337 is itself a detection signal. The web server fetched the image three times over about 13 minutes (22:06, 22:13, 22:19); repeated activity, not a single request.
 
 **Answer: `prankglassinebracket.jumpingcrab.com`**
 
-#### Q6 — IP address of the pre-staged infrastructure
+#### Q6: IP address of the pre-staged infrastructure
 
 **Objective:** the IPv4 address Po1s0n1vy tied to domains pre-staged against Wayne Enterprises.
 
@@ -528,9 +528,9 @@ index=botsv1 sourcetype="fgt_utm" "prankglassinebracket.jumpingcrab.com"
 
 **Answer: `23.22.63.114`**
 
-### Phase 5 — Attribution and threat-intel enrichment
+### Phase 5: Attribution and threat-intel enrichment
 
-#### Q11 — Spear-phishing malware hash (OSINT)
+#### Q11: Spear-phishing malware hash (OSINT)
 
 **Objective:** SHA256 of the custom malware tied to the group's initial attack infrastructure.
 
@@ -538,9 +538,9 @@ index=botsv1 sourcetype="fgt_utm" "prankglassinebracket.jumpingcrab.com"
 
 **Answer: `9709473ab351387aab9e816eff3910b9f28a7a70202e250ed46dba8f820f34a8`** (OSINT; Platform-accepted. I did not record which of the three MD5s matched.)
 
-**CTI note:** this IP therefore serves three roles in one operation — brute-force source, defacement content host, and malware infrastructure. Pivoting on a single indicator reached all three.
+**CTI note:** this IP therefore serves three roles in one operation; brute-force source, defacement content host, and malware infrastructure. Pivoting on a single indicator reached all three.
 
-#### Q12 — Hex code associated with the malware
+#### Q12: Hex code associated with the malware
 
 **Method:** open the same sample's VirusTotal page and read the **Community** tab.
 
@@ -613,7 +613,7 @@ I did not map T1505.003 (Web Shell), because I have no evidence that a web shell
 
 ### 10.1 Detections
 
-**Brute force against a web login** — many login POSTs from one source in a short window:
+**Brute force against a web login**; many login POSTs from one source in a short window:
 
 ```spl
 index=* sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
@@ -622,7 +622,7 @@ index=* sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
 | where count > 20
 ```
 
-**Success after another source's guesses** — a password submitted by two different IPs:
+**Success after another source's guesses**; a password submitted by two different IPs:
 
 ```spl
 index=* sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
@@ -633,21 +633,21 @@ index=* sourcetype="stream:http" http_method=POST form_data="*username*passwd*"
 
 (In production, key on the *account* plus the authentication result, not the raw password, which many log sources don't retain.)
 
-**Web server spawning a shell** — a worker-process identity starting `cmd.exe` or running from the web root:
+**Web server spawning a shell**; a worker-process identity starting `cmd.exe` or running from the web root:
 
 ```spl
 index=* sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
   (ParentImage="*\\cmd.exe" OR Image="C:\\inetpub\\wwwroot\\*") User="NT AUTHORITY\\IUSR"
 ```
 
-**Server-initiated outbound traffic** — a web server should not browse the internet:
+**Server-initiated outbound traffic**; a web server should not browse the internet:
 
 ```spl
 index=* sourcetype="fgt_utm" srcip="192.168.250.70" NOT dstip="192.168.*"
 | stats count values(url) BY srcip dstip category
 ```
 
-**Scanner fingerprint** — known scanner headers:
+**Scanner fingerprint**; known scanner headers:
 
 ```spl
 index=* sourcetype="stream:http" src_headers="*Acunetix*"

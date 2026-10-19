@@ -291,17 +291,59 @@ export type StageType =
   | "rename"
   | "sort"
   | "fieldformat"
+  | "head"
+  | "reverse"
+  | "search"
+  | "where"
+  | "rex"
+  | "regex"
+  | "lookup"
   | "stats"
   | "addtotals"
+  | "streamstats"
+  | "eventstats"
+  | "transaction"
   | "top"
   | "rare"
   | "chart"
   | "timechart"
+  | "trendline"
+  | "timewrap"
   | "bin"
   | "eval"
   | "iplocation"
   | "geostats"
+  | "geom"
   | "gauge"
+
+// A handful of tiny built-in lookup tables, standing in for the CSV lookups
+// real Splunk reads from disk (e.g. the tutorial's `coldplay.csv`). Used by
+// both the `lookup` stage (join onto existing results) and the freeform
+// parser's explanation of why `inputlookup` isn't supported as a source.
+export interface LookupTable {
+  columns: string[]
+  rows: Row[]
+}
+
+export const LOOKUP_TABLES: Record<string, LookupTable> = {
+  "ports.csv": {
+    columns: ["port", "service", "risk"],
+    rows: [
+      { port: 22, service: "ssh", risk: "high" },
+      { port: 443, service: "https", risk: "low" },
+      { port: 3389, service: "rdp", risk: "high" },
+      { port: 8081, service: "http-alt", risk: "medium" },
+    ],
+  },
+  "ip_watchlist.csv": {
+    columns: ["ip", "label"],
+    rows: [
+      { ip: "192.0.2.150", label: "known-bad" },
+      { ip: "203.0.113.201", label: "partner-vpn" },
+      { ip: "198.51.100.44", label: "corp-office" },
+    ],
+  },
+}
 
 export interface StatFnEntry {
   id: string
@@ -335,64 +377,108 @@ export interface StepResult {
 }
 
 const STAGE_GROUPS: Record<StageType, string> = {
+  search: "Search & Filtering",
+  where: "Search & Filtering",
+  rex: "Search & Filtering",
+  regex: "Search & Filtering",
+  lookup: "Search & Filtering",
   fields: "Field Selection & Formatting",
   table: "Field Selection & Formatting",
   dedup: "Field Selection & Formatting",
   rename: "Field Selection & Formatting",
   sort: "Field Selection & Formatting",
   fieldformat: "Field Selection & Formatting",
+  head: "Field Selection & Formatting",
+  reverse: "Field Selection & Formatting",
   stats: "Aggregation & Statistics",
   addtotals: "Aggregation & Statistics",
+  streamstats: "Aggregation & Statistics",
+  eventstats: "Aggregation & Statistics",
+  transaction: "Aggregation & Statistics",
   top: "Transforming & Trend",
   rare: "Transforming & Trend",
   chart: "Transforming & Trend",
   timechart: "Transforming & Trend",
+  trendline: "Transforming & Trend",
+  timewrap: "Transforming & Trend",
   bin: "Time & eval",
   eval: "Time & eval",
   iplocation: "Geospatial & Visualization",
   geostats: "Geospatial & Visualization",
+  geom: "Geospatial & Visualization",
   gauge: "Geospatial & Visualization",
 }
 
-const TRANSFORMING: Set<StageType> = new Set(["table", "stats", "addtotals", "top", "rare", "chart", "timechart", "geostats"])
+// "transaction" is the only addition that collapses events into a summary
+// the way stats/chart/timechart/top/rare/geostats do. streamstats, eventstats,
+// trendline, and timewrap all add fields or restructure columns without
+// throwing away the per-event field set, which is why real Splunk doesn't
+// class them as transforming either.
+const TRANSFORMING: Set<StageType> = new Set(["table", "stats", "addtotals", "top", "rare", "chart", "timechart", "geostats", "transaction"])
 
 export const STAGE_TYPES: StageType[] = [
+  "search",
+  "where",
+  "rex",
+  "regex",
+  "lookup",
   "fields",
   "table",
   "dedup",
   "rename",
   "sort",
   "fieldformat",
+  "head",
+  "reverse",
   "stats",
   "addtotals",
+  "streamstats",
+  "eventstats",
+  "transaction",
   "top",
   "rare",
   "chart",
   "timechart",
+  "trendline",
+  "timewrap",
   "bin",
   "eval",
   "iplocation",
   "geostats",
+  "geom",
   "gauge",
 ]
 
 export const STAGE_LABELS: Record<StageType, string> = {
+  search: "search",
+  where: "where",
+  rex: "rex",
+  regex: "regex",
+  lookup: "lookup",
   fields: "fields",
   table: "table",
   dedup: "dedup",
   rename: "rename",
   sort: "sort",
   fieldformat: "fieldformat",
+  head: "head",
+  reverse: "reverse",
   stats: "stats",
   addtotals: "addtotals",
+  streamstats: "streamstats",
+  eventstats: "eventstats",
+  transaction: "transaction",
   top: "top",
   rare: "rare",
   chart: "chart",
   timechart: "timechart",
+  trendline: "trendline",
+  timewrap: "timewrap",
   bin: "bin",
   eval: "eval",
   iplocation: "iplocation",
   geostats: "geostats",
+  geom: "geom",
   gauge: "gauge",
 }
 
@@ -401,6 +487,7 @@ export function stageGroup(type: StageType): string {
 }
 
 export const STAGE_GROUP_ORDER = [
+  "Search & Filtering",
   "Field Selection & Formatting",
   "Aggregation & Statistics",
   "Transforming & Trend",
@@ -444,6 +531,23 @@ export function defaultConfig(type: StageType, fields: string[], rows: Row[]): a
       return { keys: [{ id: nextId("sk"), field: firstNumeric, dir: "desc" as const }] }
     case "fieldformat":
       return { field: firstNumericNonTime }
+    case "head":
+      return { n: 5 }
+    case "reverse":
+      return {}
+    case "search":
+      return { filters: [{ field: firstNonTime, op: "=" as const, value: String(distinctValues(rows, firstNonTime)[0] ?? "") }] }
+    case "where":
+      return { expr: firstNumericNonTime ? `${firstNumericNonTime}>0` : "" }
+    case "rex":
+      return { field: firstNonTime, pattern: "" }
+    case "regex":
+      return { field: firstNonTime, pattern: "", negate: false }
+    case "lookup": {
+      const tableName = Object.keys(LOOKUP_TABLES)[0]
+      const table = LOOKUP_TABLES[tableName]
+      return { table: tableName, lookupKey: table.columns[0], matchField: firstNonTime, outputs: table.columns.slice(1) }
+    }
     case "stats":
       return {
         fns: [{ id: nextId("fn"), fn: "count" as AggFn, field: undefined, alias: "count" }],
@@ -451,6 +555,14 @@ export function defaultConfig(type: StageType, fields: string[], rows: Row[]): a
       }
     case "addtotals":
       return { row: true, col: false, fieldname: "Total" }
+    case "streamstats":
+    case "eventstats":
+      return {
+        fns: [{ id: nextId("fn"), fn: "count" as AggFn, field: undefined, alias: type === "streamstats" ? "running_count" : "total_count" }],
+        by: [] as string[],
+      }
+    case "transaction":
+      return { field: firstNonTime }
     case "top":
     case "rare":
       return { field: firstNonTime, limit: 3, by: "" }
@@ -458,6 +570,10 @@ export function defaultConfig(type: StageType, fields: string[], rows: Row[]): a
       return { fn: "count" as AggFn, field: undefined, over: firstNonTime, by: "" }
     case "timechart":
       return { fn: "count" as AggFn, field: undefined, span: "1h", by: "" }
+    case "trendline":
+      return { window: 3, field: firstNumericNonTime, alias: `sma3_${firstNumericNonTime}` }
+    case "timewrap":
+      return { period: "1h" }
     case "bin":
       return { field: "_time", span: "1h" }
     case "eval":
@@ -470,6 +586,8 @@ export function defaultConfig(type: StageType, fields: string[], rows: Row[]): a
       return { field: "" }
     case "geostats":
       return { fn: "count" as AggFn, field: undefined, by: "" }
+    case "geom":
+      return { featureIdField: fields.includes("Country") ? "Country" : firstNonTime }
     case "gauge":
       return { field: firstNumericNonTime, t0: 0, t1: 50, t2: 150, t3: 300 }
     default:
@@ -594,6 +712,22 @@ export function stageToSpl(type: StageType, config: any): string {
       return `| sort ${config.keys.map((k: any) => `${k.dir === "desc" ? "-" : "+"}${k.field}`).join(" ")}`
     case "fieldformat":
       return `| fieldformat ${config.field} = tostring(${config.field}, "commas")`
+    case "head":
+      return `| head ${config.n}`
+    case "reverse":
+      return `| reverse`
+    case "search":
+      return `| search ${filtersToSpl(config.filters)}`
+    case "where":
+      return `| where ${config.expr}`
+    case "rex":
+      return `| rex field=${config.field} "${config.pattern}"`
+    case "regex":
+      return `| regex ${config.field}${config.negate ? "!=" : "="}"${config.pattern}"`
+    case "lookup": {
+      const outputs = config.outputs.join(" ")
+      return `| lookup ${config.table} ${config.lookupKey} as ${config.matchField} OUTPUTNEW ${outputs}`
+    }
     case "stats": {
       const fns = config.fns.map((f: StatFnEntry) => `${aggToSpl(f.fn, f.field)} as ${f.alias}`).join(", ")
       const by = config.by.length ? ` by ${config.by.join(", ")}` : ""
@@ -604,6 +738,14 @@ export function stageToSpl(type: StageType, config: any): string {
       if (config.row) parts.push(`fieldname="${config.fieldname}"`)
       return `| addtotals ${parts.join(" ")}`
     }
+    case "streamstats":
+    case "eventstats": {
+      const fns = config.fns.map((f: StatFnEntry) => `${aggToSpl(f.fn, f.field)} as ${f.alias}`).join(", ")
+      const by = config.by.length ? ` by ${config.by.join(", ")}` : ""
+      return `| ${type} ${fns}${by}`
+    }
+    case "transaction":
+      return `| transaction ${config.field}`
     case "top":
     case "rare": {
       const by = config.by ? ` by ${config.by}` : ""
@@ -617,6 +759,10 @@ export function stageToSpl(type: StageType, config: any): string {
       const by = config.by ? ` by ${config.by}` : ""
       return `| timechart span=${config.span} ${aggToSpl(config.fn, config.field)}${by}`
     }
+    case "trendline":
+      return `| trendline sma${config.window}(${config.field}) AS ${config.alias}`
+    case "timewrap":
+      return `| timewrap ${config.period}`
     case "bin":
       return config.field === "_time" ? `| bin span=${config.span} _time` : `| bin ${config.field} span=${config.span}`
     case "eval":
@@ -627,10 +773,75 @@ export function stageToSpl(type: StageType, config: any): string {
       const by = config.by ? ` by ${config.by}` : ""
       return `| geostats latfield=lat longfield=lon ${aggToSpl(config.fn, config.field)}${by}`
     }
+    case "geom":
+      return `| geom geo_countries featureIdField=${config.featureIdField}`
     case "gauge":
       return `| gauge ${config.field} ${config.t0} ${config.t1} ${config.t2} ${config.t3}`
   }
 }
+
+function compareNum(a: number, op: string, b: number): boolean {
+  switch (op) {
+    case "=":
+      return a === b
+    case "!=":
+      return a !== b
+    case ">":
+      return a > b
+    case "<":
+      return a < b
+    case ">=":
+      return a >= b
+    case "<=":
+      return a <= b
+    default:
+      return false
+  }
+}
+
+// A small `where` evaluator covering the forms used throughout the SPL
+// tutorial: len(field) OP n, match(field,"regex"), plain field OP value, each
+// optionally negated with NOT, ANDed together. No OR, matching the same
+// AND-only scope as the base search above.
+function evalWhereCondition(cond: string, row: Row): boolean {
+  const c = cond.trim()
+  let m: RegExpMatchArray | null
+  if ((m = c.match(/^len\(([\w.]+)\)\s*(=|!=|>=|<=|>|<)\s*(\d+(?:\.\d+)?)$/i))) {
+    const len = String(row[m[1]] ?? "").length
+    return compareNum(len, m[2], Number(m[3]))
+  }
+  if ((m = c.match(/^match\(([\w.]+)\s*,\s*"([^"]+)"\)$/i))) {
+    try {
+      return new RegExp(m[2]).test(String(row[m[1]] ?? ""))
+    } catch {
+      return false
+    }
+  }
+  if ((m = c.match(/^([\w.]+)\s*(=|!=|>=|<=|>|<)\s*"?([^"]*)"?$/))) {
+    const [, field, op, raw] = m
+    const left = row[field]
+    if (op === "=" || op === "!=") {
+      const eq = String(left) === raw
+      return op === "=" ? eq : !eq
+    }
+    const leftNum = Number(left)
+    const rightNum = Number(raw)
+    if (Number.isNaN(leftNum) || Number.isNaN(rightNum)) return false
+    return compareNum(leftNum, op, rightNum)
+  }
+  return false
+}
+
+function evalWhereExpr(expr: string, row: Row): boolean {
+  const parts = expr.split(/\s+AND\s+/i).map((p) => p.trim()).filter(Boolean)
+  if (!parts.length) return true
+  return parts.every((p) => {
+    const notMatch = p.match(/^NOT\s+(.+)$/i)
+    return notMatch ? !evalWhereCondition(notMatch[1], row) : evalWhereCondition(p, row)
+  })
+}
+
+const TIMEWRAP_UNIT_WORDS: Record<string, string> = { s: "second", m: "minute", h: "hour", d: "day", w: "week" }
 
 export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResult {
   switch (type) {
@@ -697,6 +908,79 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
           fn: (v: CellValue) => (typeof v === "number" ? v.toLocaleString("en-US") : String(v)),
         },
       }
+    case "head":
+      return { rows: rows.slice(0, Math.max(0, Number(config.n) || 0)) }
+    case "reverse":
+      return { rows: [...rows].reverse() }
+    case "search": {
+      const filters: Filter[] = config.filters
+      return {
+        rows: rows.filter((r) =>
+          filters.every((f) => {
+            // `field=*` is Splunk's wildcard-presence check: "this field exists
+            // and is non-empty", not a literal match against the string "*".
+            if (f.value === "*") {
+              const present = r[f.field] !== undefined && r[f.field] !== ""
+              return f.op === "=" ? present : !present
+            }
+            const matches = String(r[f.field]) === f.value
+            return f.op === "=" ? matches : !matches
+          }),
+        ),
+      }
+    }
+    case "where":
+      return { rows: rows.filter((r) => evalWhereExpr(config.expr, r)) }
+    case "rex": {
+      const field: string = config.field
+      const pattern: string = config.pattern
+      if (!pattern) return { rows, warning: "Enter a regex pattern with at least one named group, like passwd=(?<pw>[^&]+)." }
+      if (!/\(\?<\w+>/.test(pattern)) {
+        return { rows, warning: "This pattern has no named capture group (?<name>...), so rex has nothing to extract into a field." }
+      }
+      let re: RegExp
+      try {
+        re = new RegExp(pattern)
+      } catch {
+        return { rows, warning: "That regex pattern is invalid." }
+      }
+      return {
+        rows: rows.map((r) => {
+          const m = re.exec(String(r[field] ?? ""))
+          return m?.groups ? { ...r, ...m.groups } : r
+        }),
+      }
+    }
+    case "regex": {
+      const field: string = config.field
+      const pattern: string = config.pattern
+      if (!pattern) return { rows }
+      let re: RegExp
+      try {
+        re = new RegExp(pattern)
+      } catch {
+        return { rows, warning: "That regex pattern is invalid." }
+      }
+      const matches = (v: CellValue) => re.test(String(v ?? ""))
+      return { rows: rows.filter((r) => (config.negate ? !matches(r[field]) : matches(r[field]))) }
+    }
+    case "lookup": {
+      const table = LOOKUP_TABLES[config.table]
+      if (!table) return { rows, warning: `Unknown lookup table "${config.table}".` }
+      const matchField: string = config.matchField
+      const lookupKey: string = config.lookupKey
+      const outputs: string[] = config.outputs
+      return {
+        rows: rows.map((r) => {
+          const hit = table.rows.find((lr) => String(lr[lookupKey]) === String(r[matchField]))
+          if (!hit) return r
+          const out = { ...r }
+          // OUTPUTNEW only fills a field that doesn't already exist on the event.
+          for (const col of outputs) if (!(col in out)) out[col] = hit[col]
+          return out
+        }),
+      }
+    }
     case "stats": {
       const fns: StatFnEntry[] = config.fns
       const by: string[] = config.by
@@ -729,6 +1013,109 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
         if (config.row) totalRow[config.fieldname] = numeric.reduce((s, f) => s + (Number(totalRow[f]) || 0), 0)
         out = [...out, totalRow]
       }
+      return { rows: out }
+    }
+    case "streamstats": {
+      const fns: StatFnEntry[] = config.fns
+      const by: string[] = config.by
+      // Running accumulation, in current row order: each row's value is the
+      // aggregate over itself and every row that came before it in the same
+      // by-group, not the whole group at once (that's eventstats).
+      const seenSoFar = new Map<string, Row[]>()
+      return {
+        rows: rows.map((r) => {
+          const key = by.length ? by.map((f) => r[f]).join("||") : "__all__"
+          const soFar = seenSoFar.get(key) ?? []
+          soFar.push(r)
+          seenSoFar.set(key, soFar)
+          const out = { ...r }
+          for (const fn of fns) out[fn.alias] = computeAgg(fn.fn, fn.field, soFar)
+          return out
+        }),
+      }
+    }
+    case "eventstats": {
+      const fns: StatFnEntry[] = config.fns
+      const by: string[] = config.by
+      const groups = new Map<string, Row[]>()
+      for (const r of rows) {
+        const key = by.length ? by.map((f) => r[f]).join("||") : "__all__"
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(r)
+      }
+      return {
+        rows: rows.map((r) => {
+          const key = by.length ? by.map((f) => r[f]).join("||") : "__all__"
+          const groupRows = groups.get(key)!
+          const out = { ...r }
+          for (const fn of fns) out[fn.alias] = computeAgg(fn.fn, fn.field, groupRows)
+          return out
+        }),
+      }
+    }
+    case "transaction": {
+      const field: string = config.field
+      const groups = new Map<CellValue, Row[]>()
+      for (const r of rows) {
+        const key = r[field]
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(r)
+      }
+      const out: Row[] = []
+      for (const [key, groupRows] of groups) {
+        const hasTime = groupRows.length > 0 && "_time" in groupRows[0]
+        const row: Row = { [field]: key, eventcount: groupRows.length }
+        if (hasTime) {
+          const times = groupRows.map((r) => Number(r._time))
+          row.duration = round2(Math.max(...times) - Math.min(...times))
+        }
+        out.push(row)
+      }
+      return { rows: out }
+    }
+    case "trendline": {
+      const field: string = config.field
+      const window: number = config.window
+      const alias: string = config.alias
+      return {
+        rows: rows.map((r, i) => {
+          if (i < window - 1) return { ...r, [alias]: "" }
+          const slice = rows.slice(i - window + 1, i + 1)
+          const nums = slice.map((x) => Number(x[field])).filter((n) => !Number.isNaN(n))
+          const avg = nums.length ? round2(nums.reduce((a, b) => a + b, 0) / nums.length) : ""
+          return { ...r, [alias]: avg }
+        }),
+      }
+    }
+    case "timewrap": {
+      if (rows.length && !("_time" in rows[0])) {
+        return {
+          rows,
+          warning:
+            "timewrap needs the original _time field, typically right after timechart. Put it directly after timechart, before any stats, top, rare, chart, addtotals, or geostats command.",
+        }
+      }
+      if (!rows.length) return { rows }
+      const periodSeconds = spanToSeconds(config.period)
+      const unitLetter = config.period.match(/[smhdw]$/i)?.[0]?.toLowerCase() ?? "h"
+      const unitWord = TIMEWRAP_UNIT_WORDS[unitLetter] ?? "period"
+      const periodStart = (t: number) => Math.floor(t / periodSeconds) * periodSeconds
+      const latestPeriodStart = Math.max(...rows.map((r) => periodStart(Number(r._time))))
+      const valueFields = Object.keys(rows[0]).filter((f) => f !== "_time")
+      const merged = new Map<number, Row>()
+      for (const r of rows) {
+        const t = Number(r._time)
+        const thisPeriodStart = periodStart(t)
+        const periodsAgo = Math.round((latestPeriodStart - thisPeriodStart) / periodSeconds)
+        const alignedTime = latestPeriodStart + (t - thisPeriodStart)
+        const existing = merged.get(alignedTime) ?? { _time: alignedTime }
+        for (const f of valueFields) {
+          const outKey = periodsAgo === 0 ? f : `${periodsAgo}${unitWord}_before_${f}`
+          existing[outKey] = r[f]
+        }
+        merged.set(alignedTime, existing)
+      }
+      const out = Array.from(merged.values()).sort((a, b) => Number(a._time) - Number(b._time))
       return { rows: out }
     }
     case "top":
@@ -883,6 +1270,16 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
       }
       return { rows: out }
     }
+    case "geom": {
+      const field: string = config.featureIdField
+      return {
+        rows: rows.map((r) => {
+          const v = r[field]
+          if (v === undefined || v === "" || v === "Unknown") return { ...r, geom: "" }
+          return { ...r, geom: `[GeoJSON boundary for ${v}, ~90,000 characters -- never put this in a table]` }
+        }),
+      }
+    }
     case "gauge": {
       if (rows.length !== 1) {
         return {
@@ -988,8 +1385,19 @@ function referencedFields(type: StageType, config: any): string[] {
     case "iplocation":
     case "gauge":
     case "bin":
-      return [config.field]
+    case "rex":
+    case "regex":
+    case "transaction":
+    case "trendline":
+    case "geom":
+      return [config.field ?? config.featureIdField]
+    case "lookup":
+      return [config.matchField]
+    case "search":
+      return (config.filters ?? []).map((f: Filter) => f.field)
     case "stats":
+    case "streamstats":
+    case "eventstats":
       return [...(config.fns ?? []).map((f: StatFnEntry) => f.field).filter((f: unknown): f is string => Boolean(f)), ...(config.by ?? [])]
     case "top":
     case "rare":
@@ -1086,9 +1494,18 @@ function tokenizeTerms(text: string): string[] {
   const terms: string[] = []
   let current = ""
   let inQuote = false
+  let depth = 0
   for (const c of text) {
     if (c === '"') inQuote = !inQuote
-    if (c === " " && !inQuote) {
+    if (!inQuote) {
+      if (c === "(") depth++
+      if (c === ")") depth = Math.max(0, depth - 1)
+    }
+    // Inside quotes or parens, a space never splits terms: a grouped clause
+    // like "(http_method=GET OR http_method=POST)" must stay one token, or
+    // it gets shredded into "(http_method=GET", "OR", "http_method=POST)" --
+    // each of which then looks like a malformed field=value term on its own.
+    if (c === " " && !inQuote && depth === 0) {
       if (current) terms.push(current)
       current = ""
     } else {
@@ -1124,10 +1541,7 @@ function parseAggExpr(s: string): { fn: AggFn; field?: string } | null {
   return { fn, field }
 }
 
-function parseStatsCommand(args: string): { fns: StatFnEntry[]; by: string[] } | null {
-  const byMatch = args.match(/\bby\b([\s\S]*)$/i)
-  const fnsPart = byMatch ? args.slice(0, byMatch.index) : args
-  const by = byMatch ? parseFieldList(byMatch[1]) : []
+function parseStatsFnTerms(fnsPart: string): StatFnEntry[] | null {
   const fns: StatFnEntry[] = []
   const fnTerms = splitTopLevel(fnsPart, ",").map((s) => s.trim()).filter(Boolean)
   if (!fnTerms.length) return null
@@ -1142,7 +1556,45 @@ function parseStatsCommand(args: string): { fns: StatFnEntry[]; by: string[] } |
     const alias = aliasRaw?.trim().replace(/^"(.*)"$/, "$1") || aggToSpl(fn, field)
     fns.push({ id: nextId("fn"), fn, field, alias })
   }
-  return { fns, by }
+  return fns
+}
+
+function parseStatsCommand(args: string): { fns: StatFnEntry[]; by: string[] } | null {
+  const byMatch = args.match(/\bby\b([\s\S]*)$/i)
+  const fnsPart = byMatch ? args.slice(0, byMatch.index) : args
+  const by = byMatch ? parseFieldList(byMatch[1]) : []
+  const fns = parseStatsFnTerms(fnsPart)
+  return fns ? { fns, by } : null
+}
+
+// `tstats <fns> WHERE <constraints> BY <fields>`: functionally close enough to
+// `stats` for teaching purposes that it's mapped straight onto the same
+// "stats" stage. The WHERE constraints (almost always index=/sourcetype=,
+// already fixed by the dataset picker above) aren't re-applied. BY fields
+// that name dataset metadata (sourcetype, index, host, source) rather than a
+// real per-event field are dropped with an explanation, since this simulator
+// loads one dataset at a time instead of a real multi-sourcetype index.
+const TSTATS_META_FIELDS = new Set(["sourcetype", "index", "host", "source"])
+
+function parseTstats(args: string): { fns: StatFnEntry[]; by: string[]; issues: string[] } | null {
+  const byMatch = args.match(/\bby\b([\s\S]*)$/i)
+  const head = byMatch ? args.slice(0, byMatch.index) : args
+  const whereMatch = head.match(/\bwhere\b([\s\S]*)$/i)
+  const fnsPart = whereMatch ? head.slice(0, whereMatch.index) : head
+  const fns = parseStatsFnTerms(fnsPart)
+  if (!fns) return null
+  const rawBy = byMatch ? parseFieldList(byMatch[1]) : []
+  const issues: string[] = []
+  const by = rawBy.filter((f) => {
+    if (TSTATS_META_FIELDS.has(f.toLowerCase())) {
+      issues.push(
+        `"${f}" is dataset metadata here, not a per-event field (this simulator loads one dataset at a time, picked above, instead of a real multi-sourcetype index). It was dropped from "BY"; group by a real field instead.`,
+      )
+      return false
+    }
+    return true
+  })
+  return { fns, by, issues }
 }
 
 function parseTopRare(args: string): { field: string; limit: number; by: string } | null {
@@ -1304,10 +1756,75 @@ function parseEval(args: string): { defs: EvalDef[]; unparsed: string[] } {
   return { defs, unparsed }
 }
 
+function parseHead(args: string): { n: number } | null {
+  const m = args.trim().match(/^(?:limit\s*=\s*)?(\d+)$/i)
+  return m ? { n: Number(m[1]) } : null
+}
+
+function parseSearchFilters(args: string): { filters: Filter[]; issues: string[] } {
+  const filters: Filter[] = []
+  const issues: string[] = []
+  for (const term of tokenizeTerms(args)) {
+    if (!term) continue
+    const m = term.match(/^(NOT\s+)?([A-Za-z_][\w.]*)\s*(!=|=)\s*(.+)$/i)
+    if (!m) {
+      issues.push(`Couldn't parse "${term}" in "| search" -- only ANDed field=value terms (including field=* for "has a value") are supported.`)
+      continue
+    }
+    const [, notPrefix, field, opRaw, rawValue] = m
+    const value = rawValue.replace(/^"(.*)"$/, "$1")
+    let op: "=" | "!=" = opRaw === "!=" ? "!=" : "="
+    if (notPrefix) op = op === "=" ? "!=" : "="
+    filters.push({ field, op, value })
+  }
+  return { filters, issues }
+}
+
+function parseWhere(args: string): { expr: string } | null {
+  const expr = args.trim()
+  return expr ? { expr } : null
+}
+
+function parseRex(args: string): { field: string; pattern: string } | null {
+  const m = args.match(/^field\s*=\s*(\S+)\s+"((?:[^"\\]|\\.)*)"$/i)
+  return m ? { field: m[1], pattern: m[2] } : null
+}
+
+function parseRegexCmd(args: string): { field: string; pattern: string; negate: boolean } | null {
+  const m = args.match(/^(\S+?)\s*(!=|=)\s*"((?:[^"\\]|\\.)*)"$/)
+  return m ? { field: m[1], pattern: m[3], negate: m[2] === "!=" } : null
+}
+
+function parseLookup(args: string): { table: string; lookupKey: string; matchField: string; outputs: string[] } | null {
+  const m = args.match(/^(\S+)\s+(\S+)\s+as\s+(\S+)\s+OUTPUTNEW\s+([\s\S]+)$/i)
+  if (!m) return null
+  const [, table, lookupKey, matchField, outputsRaw] = m
+  const outputs = parseFieldList(outputsRaw)
+  return outputs.length ? { table, lookupKey, matchField, outputs } : null
+}
+
+function parseTrendline(args: string): { window: number; field: string; alias: string } | null {
+  const m = args.match(/^sma(\d+)\(([\w.]+)\)\s*(?:as\s+(\S+))?$/i)
+  if (!m) return null
+  const window = Number(m[1])
+  const field = m[2]
+  return { window, field, alias: m[3] ?? `sma${window}_${field}` }
+}
+
+function parseTimewrap(args: string): { period: string } | null {
+  const period = args.trim().split(/\s+/)[0]
+  return period ? { period } : null
+}
+
+function parseGeom(args: string): { featureIdField: string } | null {
+  const m = args.match(/\bfeatureIdField\s*=\s*(\S+)/i)
+  return m ? { featureIdField: m[1] } : null
+}
+
 interface ParsedCommand {
   type: StageType
   config: any
-  unparsed?: string[]
+  issues?: string[]
 }
 
 const COMMAND_PARSERS: Record<string, (args: string) => ParsedCommand | null> = {
@@ -1336,11 +1853,62 @@ const COMMAND_PARSERS: Record<string, (args: string) => ParsedCommand | null> = 
     const r = parseFieldformat(args)
     return r ? { type: "fieldformat", config: r } : null
   },
+  head: (args) => {
+    const r = parseHead(args)
+    return r ? { type: "head", config: r } : null
+  },
+  reverse: () => ({ type: "reverse", config: {} }),
+  search: (args) => {
+    const r = parseSearchFilters(args)
+    return r.filters.length || r.issues.length ? { type: "search", config: { filters: r.filters }, issues: r.issues.length ? r.issues : undefined } : null
+  },
+  where: (args) => {
+    const r = parseWhere(args)
+    return r ? { type: "where", config: r } : null
+  },
+  rex: (args) => {
+    const r = parseRex(args)
+    return r ? { type: "rex", config: r } : null
+  },
+  regex: (args) => {
+    const r = parseRegexCmd(args)
+    return r ? { type: "regex", config: r } : null
+  },
+  lookup: (args) => {
+    const r = parseLookup(args)
+    if (!r) return null
+    if (!LOOKUP_TABLES[r.table]) {
+      return {
+        type: "lookup",
+        config: r,
+        issues: [
+          `"${r.table}" isn't one of the lookup tables this simulator ships with (available: ${Object.keys(LOOKUP_TABLES).join(", ")}). The lookup stage was added but won't match anything until you pick one of those.`,
+        ],
+      }
+    }
+    return { type: "lookup", config: r }
+  },
   stats: (args) => {
     const r = parseStatsCommand(args)
     return r ? { type: "stats", config: r } : null
   },
   addtotals: (args) => ({ type: "addtotals", config: parseAddtotals(args) }),
+  streamstats: (args) => {
+    const r = parseStatsCommand(args)
+    return r ? { type: "streamstats", config: r } : null
+  },
+  eventstats: (args) => {
+    const r = parseStatsCommand(args)
+    return r ? { type: "eventstats", config: r } : null
+  },
+  transaction: (args) => {
+    const field = args.trim().split(/\s+/)[0]
+    return field ? { type: "transaction", config: { field } } : null
+  },
+  tstats: (args) => {
+    const r = parseTstats(args)
+    return r ? { type: "stats", config: { fns: r.fns, by: r.by }, issues: r.issues.length ? r.issues : undefined } : null
+  },
   top: (args) => {
     const r = parseTopRare(args)
     return r ? { type: "top", config: r } : null
@@ -1357,18 +1925,35 @@ const COMMAND_PARSERS: Record<string, (args: string) => ParsedCommand | null> = 
     const r = parseTimechart(args)
     return r ? { type: "timechart", config: r } : null
   },
+  trendline: (args) => {
+    const r = parseTrendline(args)
+    return r ? { type: "trendline", config: r } : null
+  },
+  timewrap: (args) => {
+    const r = parseTimewrap(args)
+    return r ? { type: "timewrap", config: r } : null
+  },
   bin: (args) => {
     const r = parseBin(args)
     return r ? { type: "bin", config: r } : null
   },
   eval: (args) => {
     const r = parseEval(args)
-    return { type: "eval", config: { defs: r.defs }, unparsed: r.unparsed }
+    const issues = r.unparsed.length
+      ? [
+          `In "| eval", couldn't parse: ${r.unparsed.join(", ")}. Supported forms: arithmetic (a op b), round(f,n), case(f op "v","then",1=1,"else"), concatenation (a . "sep" . b), strftime(_time,"fmt"), tostring(f,"commas").`,
+        ]
+      : undefined
+    return { type: "eval", config: { defs: r.defs }, issues }
   },
   iplocation: (args) => ({ type: "iplocation", config: parseIplocation(args) }),
   geostats: (args) => {
     const r = parseGeostats(args)
     return r ? { type: "geostats", config: r } : null
+  },
+  geom: (args) => {
+    const r = parseGeom(args)
+    return r ? { type: "geom", config: r } : null
   },
   gauge: (args) => {
     const r = parseGauge(args)
@@ -1405,7 +1990,7 @@ export function parseSplQuery(text: string, dataset: Dataset): ParsedQuery {
         if (/^\(|\)$/.test(term) || term.toUpperCase() === "OR") {
           issues.push(`Grouping and OR in the base search ("${term}") aren't supported here; only ANDed field=value terms are applied.`)
         } else {
-          issues.push(`Keyword term "${term}" was ignored — this simulator only matches field=value, not free text.`)
+          issues.push(`Keyword term "${term}" was ignored; this simulator only matches field=value, not free text.`)
         }
         continue
       }
@@ -1414,7 +1999,7 @@ export function parseSplQuery(text: string, dataset: Dataset): ParsedQuery {
       const lower = field.toLowerCase()
       if (lower === "index" || lower === "sourcetype") continue
       if (lower === "earliest" || lower === "latest") {
-        issues.push(`"${term}" was ignored — set the time range with the picker above instead.`)
+        issues.push(`"${term}" was ignored; set the time range with the picker above instead.`)
         continue
       }
       if (!dataset.fields.includes(field)) {
@@ -1433,21 +2018,25 @@ export function parseSplQuery(text: string, dataset: Dataset): ParsedQuery {
     if (!m) continue
     const cmd = m[1].toLowerCase()
     const args = m[2].trim()
+
+    if (cmd === "inputlookup") {
+      issues.push(
+        `"inputlookup" starts a brand new search from a lookup table instead of an index, which this simulator doesn't support; it always starts from the dataset picked above. Use "lookup" instead to enrich existing results from a table (available: ${Object.keys(LOOKUP_TABLES).join(", ")}).`,
+      )
+      continue
+    }
+
     const parser = COMMAND_PARSERS[cmd]
     if (!parser) {
-      issues.push(`"${cmd}" isn't a command this simulator implements (supported: ${STAGE_TYPES.join(", ")}). That part of the query was skipped.`)
+      issues.push(`"${cmd}" isn't a command this simulator implements (supported: ${STAGE_TYPES.join(", ")}, plus tstats as an alias for stats). That part of the query was skipped.`)
       continue
     }
     const result = parser(args)
     if (!result) {
-      issues.push(`Couldn't parse "| ${cmd} ${args}" — check the syntax against the examples in the tutorial. That command was skipped.`)
+      issues.push(`Couldn't parse "| ${cmd} ${args}"; check the syntax against the examples in the tutorial. That command was skipped.`)
       continue
     }
-    if (result.unparsed?.length) {
-      issues.push(
-        `In "| eval", couldn't parse: ${result.unparsed.join(", ")}. Supported forms: arithmetic (a op b), round(f,n), case(f op "v","then",1=1,"else"), concatenation (a . "sep" . b), strftime(_time,"fmt"), tostring(f,"commas").`,
-      )
-    }
+    if (result.issues?.length) issues.push(...result.issues)
     stages.push({ id: nextId(result.type), type: result.type, config: result.config })
   }
 

@@ -24,6 +24,7 @@ import {
   ALL_TIME,
   aggNeedsField,
   AGG_FN_LABELS,
+  LOOKUP_TABLES,
   type StageType,
   type PipelineStage,
   type Filter,
@@ -127,6 +128,60 @@ function IconBtn({ onClick, title, children, danger }: { onClick: () => void; ti
     >
       {children}
     </button>
+  )
+}
+
+function WhereOrSearchEditor({
+  type,
+  config,
+  fields,
+  rows,
+  onChange,
+}: {
+  type: "search" | "where"
+  config: any
+  fields: string[]
+  rows: Row[]
+  onChange: (next: any) => void
+}) {
+  if (type === "where") {
+    return (
+      <div className="space-y-1">
+        <Txt value={config.expr} onChange={(v) => onChange({ ...config, expr: v })} placeholder='len(pw)=6 AND user="admin"' className="w-full" />
+        <p className="text-[11px] text-[#9aa0a6]">
+          Supports: field OP value, len(field) OP n, match(field,"regex"), each optionally negated with NOT, joined with AND. No OR.
+        </p>
+      </div>
+    )
+  }
+  const fieldOptions = fields.map((f) => ({ value: f, label: f }))
+  return (
+    <div className="space-y-2">
+      {(config.filters as Filter[]).map((f, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Sel
+            value={f.field}
+            onChange={(v) => updateListItem(config, "filters", i, { ...f, field: v, value: String(distinctValues(rows, v)[0] ?? "") }, onChange)}
+            options={fieldOptions}
+          />
+          <Sel value={f.op} onChange={(v) => updateListItem(config, "filters", i, { ...f, op: v }, onChange)} options={[{ value: "=", label: "=" }, { value: "!=", label: "!=" }]} />
+          <Sel
+            value={f.value}
+            onChange={(v) => updateListItem(config, "filters", i, { ...f, value: v }, onChange)}
+            options={[{ value: "*", label: "* (has a value)" }, ...distinctValues(rows, f.field).map((v) => ({ value: String(v), label: String(v) }))]}
+          />
+          <IconBtn title="Remove" danger onClick={() => removeListItem(config, "filters", i, onChange)}>
+            <X className="w-3.5 h-3.5" />
+          </IconBtn>
+        </div>
+      ))}
+      <button
+        onClick={() => addListItem(config, "filters", { field: fields[0] ?? "", op: "=", value: String(distinctValues(rows, fields[0])[0] ?? "") }, onChange)}
+        className="flex items-center gap-1 text-xs text-[#0a84c4] hover:underline"
+      >
+        <Plus className="w-3.5 h-3.5" /> Add filter
+      </button>
+    </div>
   )
 }
 
@@ -283,7 +338,76 @@ function StageConfigEditor({
     case "fieldformat":
       return <Sel value={config.field} onChange={(v) => onChange({ ...config, field: v })} options={numericOptions.length ? numericOptions : fieldOptions} />
 
+    case "head":
+      return (
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-[#5c6773] font-mono">keep the first</span>
+          <Num value={config.n} onChange={(v) => onChange({ ...config, n: v })} />
+          <span className="text-xs text-[#5c6773] font-mono">results</span>
+        </div>
+      )
+
+    case "reverse":
+      return <p className="text-xs text-[#9aa0a6]">No options -- flips the current result order end to end.</p>
+
+    case "search":
+    case "where":
+      return <WhereOrSearchEditor type={type} config={config} fields={fields} rows={rows} onChange={onChange} />
+
+    case "rex":
+      return (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-[#5c6773] font-mono">field=</span>
+          <Sel value={config.field} onChange={(v) => onChange({ ...config, field: v })} options={fieldOptions} />
+          <span className="text-xs text-[#5c6773] font-mono">pattern</span>
+          <Txt value={config.pattern} onChange={(v) => onChange({ ...config, pattern: v })} placeholder='passwd=(?<pw>[^&]+)' className="flex-1 min-w-[220px]" />
+        </div>
+      )
+
+    case "regex":
+      return (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Sel value={config.field} onChange={(v) => onChange({ ...config, field: v })} options={fieldOptions} />
+          <Pill active={!config.negate} onClick={() => onChange({ ...config, negate: false })}>matches</Pill>
+          <Pill active={!!config.negate} onClick={() => onChange({ ...config, negate: true })}>doesn't match</Pill>
+          <Txt value={config.pattern} onChange={(v) => onChange({ ...config, pattern: v })} placeholder="^\d+$" className="flex-1 min-w-[160px]" />
+        </div>
+      )
+
+    case "lookup": {
+      const tableNames = Object.keys(LOOKUP_TABLES)
+      const table = LOOKUP_TABLES[config.table] ?? LOOKUP_TABLES[tableNames[0]]
+      const keyOptions = table.columns.map((c) => ({ value: c, label: c }))
+      const outputCols = table.columns.filter((c) => c !== config.lookupKey)
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-[#5c6773] font-mono">table</span>
+            <Sel value={config.table} onChange={(v) => onChange({ ...config, table: v, lookupKey: LOOKUP_TABLES[v].columns[0], outputs: LOOKUP_TABLES[v].columns.slice(1) })} options={tableNames.map((n) => ({ value: n, label: n }))} />
+            <span className="text-xs text-[#5c6773] font-mono">key</span>
+            <Sel value={config.lookupKey} onChange={(v) => onChange({ ...config, lookupKey: v })} options={keyOptions} />
+            <span className="text-xs text-[#5c6773] font-mono">as</span>
+            <Sel value={config.matchField} onChange={(v) => onChange({ ...config, matchField: v })} options={fieldOptions} />
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wide text-[#5c6773] font-mono mr-1">outputnew</span>
+            {outputCols.map((c) => (
+              <Pill
+                key={c}
+                active={config.outputs.includes(c)}
+                onClick={() => onChange({ ...config, outputs: config.outputs.includes(c) ? config.outputs.filter((x: string) => x !== c) : [...config.outputs, c] })}
+              >
+                {c}
+              </Pill>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
     case "stats":
+    case "streamstats":
+    case "eventstats":
       return (
         <div className="space-y-3">
           <div className="space-y-2">
@@ -365,6 +489,9 @@ function StageConfigEditor({
         </div>
       )
 
+    case "transaction":
+      return <Sel value={config.field} onChange={(v) => onChange({ ...config, field: v })} options={fieldOptions} />
+
     case "chart":
       return (
         <div className="flex items-center gap-3 flex-wrap">
@@ -396,6 +523,20 @@ function StageConfigEditor({
           </div>
         </div>
       )
+
+    case "trendline":
+      return (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-[#5c6773] font-mono">sma</span>
+          <Num value={config.window} onChange={(v) => onChange({ ...config, window: v })} className="w-14" />
+          <Sel value={config.field} onChange={(v) => onChange({ ...config, field: v })} options={numericOptions.length ? numericOptions : fieldOptions} />
+          <span className="text-xs text-[#5c6773] font-mono">as</span>
+          <Txt value={config.alias} onChange={(v) => onChange({ ...config, alias: v })} className="w-28" />
+        </div>
+      )
+
+    case "timewrap":
+      return <Sel value={config.period} onChange={(v) => onChange({ ...config, period: v })} options={SPAN_OPTIONS} />
 
     case "bin":
       return (
@@ -464,6 +605,9 @@ function StageConfigEditor({
           </div>
         </div>
       )
+
+    case "geom":
+      return <Sel value={config.featureIdField} onChange={(v) => onChange({ ...config, featureIdField: v })} options={fieldOptions} />
 
     case "gauge":
       return (
@@ -732,7 +876,7 @@ export function SplPipelineBuilder() {
         <span className="text-xs text-[#5c6773] ml-2">{dataset.description}</span>
       </div>
 
-      {/* Search bar — freely editable: write or paste your own SPL and click Run */}
+      {/* Search bar, freely editable: write or paste your own SPL and click Run */}
       <div className="bg-white px-4 py-3 border-b border-[#d8dadd] space-y-2">
         <div className="flex items-start gap-2 flex-wrap">
           <Search className="w-4 h-4 text-[#5c6773] mt-1.5 shrink-0" />
@@ -800,7 +944,7 @@ export function SplPipelineBuilder() {
               {timePreset !== "custom" && " (“now” = this dataset's most recent event, for the simulation)"}
             </>
           )}
-          {dirty && <span className="text-amber-600"> &middot; edited — click Run to apply</span>}
+          {dirty && <span className="text-amber-600"> &middot; edited, click Run to apply</span>}
         </div>
         {queryIssues.length > 0 && (
           <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
@@ -813,7 +957,7 @@ export function SplPipelineBuilder() {
           </div>
         )}
         <p className="text-[11px] text-[#9aa0a6]">
-          Write or paste SPL directly, or use the guided commands below — both stay in sync. This runs against the small sample
+          Write or paste SPL directly, or use the guided commands below; both stay in sync. This runs against the small sample
           datasets above, not real Splunk, so field names (not index/sourcetype) are what connect a query to data here.
         </p>
       </div>

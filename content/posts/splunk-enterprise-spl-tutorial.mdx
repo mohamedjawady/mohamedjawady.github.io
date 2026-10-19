@@ -18,11 +18,11 @@ If you want the full investigation report with every question, evidence screensh
 **Lab.** Sign in to a BOTSv1 Splunk instance, open the **Search** app, and set the time picker to **All time**. The data is from August 2016, so any relative time range like "last 24 hours" returns nothing.
 
 **Each lesson has the same shape:**
-1. **Goal** — the question the lesson answers.
-2. **Concept** — the idea in a few sentences.
-3. **Query** — copy it into the search bar and run it.
-4. **Reading the output** — what to notice in the real result.
-5. **Try it** — a short exercise with the answer given.
+1. **Goal**; the question the lesson answers.
+2. **Concept**; the idea in a few sentences.
+3. **Query**; copy it into the search bar and run it.
+4. **Reading the output**; what to notice in the real result.
+5. **Try it**; a short exercise with the answer given.
 
 **Conventions used throughout**
 - Times are UTC.
@@ -80,7 +80,7 @@ The same idea with `IN`:
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" http_method IN (POST, TRACE, CONNECT) | stats count BY http_method
 ```
 
-**Reading the output:** 15,562 events: POST 15,560, CONNECT 1, TRACE 1. The single `CONNECT` and `TRACE` requests are unusual enough to investigate later — they turn out to matter in Part 2.
+**Reading the output:** 15,562 events: POST 15,560, CONNECT 1, TRACE 1. The single `CONNECT` and `TRACE` requests are unusual enough to investigate later; they turn out to matter in Part 2.
 
 > **Wildcards:** a trailing wildcard (`evil*`) is cheap. A leading wildcard (`*evil`) forces a slower scan because Splunk cannot use its term index to narrow the search first. Anchor with `index`, `sourcetype` and exact fields before reaching for a wildcard.
 
@@ -98,7 +98,7 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" http_method IN (P
 index=botsv1 sourcetype="stream:http" | stats count BY src_ip | table src_ip count _raw
 ```
 
-**Reading the output:** 39,010 events became 1,763 rows, one per source IP. The `_raw` column is blank for every row, because `stats` aggregated the events away — `_raw` never existed in the output table to begin with.
+**Reading the output:** 39,010 events became 1,763 rows, one per source IP. The `_raw` column is blank for every row, because `stats` aggregated the events away; `_raw` never existed in the output table to begin with.
 
 **Rule:** do per-event work (`eval`, `where`, `rex`, `search`) before aggregation, not after.
 
@@ -120,7 +120,7 @@ The diagram below makes this concrete: click through each stage to see exactly w
 - `sort 0 -_time` sorts newest first. The sign controls direction. The `0` removes the default 10,000-row limit.
 - `dedup field` keeps the first event for each value of the field, so sort first if you want "first" to mean something specific.
 - `rename` changes a field's name, and the old name stops existing from that point in the pipeline onward.
-- `fieldformat` changes how a value is *displayed*, not its underlying type — sorting still works numerically.
+- `fieldformat` changes how a value is *displayed*, not its underlying type; sorting still works numerically.
 
 **4a. Newest event per source**
 
@@ -136,7 +136,7 @@ index=botsv1 sourcetype="stream:http" | sort 0 -_time | dedup src_ip | table _ti
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | stats count BY src_ip | rename src_ip AS "Source IP" | where src_ip="40.80.148.42"
 ```
 
-**Reading the output:** no error, no results. After `rename`, `src_ip` no longer exists, so the `where` filter matches nothing — and Splunk never tells you it silently dropped everything. Rename last in the pipeline, not before you still need the old name.
+**Reading the output:** no error, no results. After `rename`, `src_ip` no longer exists, so the `where` filter matches nothing, and Splunk never tells you it silently dropped everything. Rename last in the pipeline, not before you still need the old name.
 
 **4c. Display formatting without changing the type**
 
@@ -220,7 +220,7 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | stats count lis
 index=botsv1 sourcetype="stream:http" src_ip="23.22.63.114" http_method=POST form_data="*username*passwd*" | rex field=form_data "passwd=(?<pw>[^&]+)" | stats first(pw) AS first_pw last(pw) AS last_pw earliest(pw) AS earliest_pw latest(pw) AS latest_pw
 ```
 
-**Reading the output:** `earliest_pw` is `12345678` and `latest_pw` is `rock` — the real first and last attempts by time. `first_pw` (`anthony`) and `last_pw` (`flyers`) are neither of those. `first()` and `last()` follow the order events arrive in the pipeline, which is **not** guaranteed to be time order. Use `earliest()` and `latest()` whenever you mean "by time".
+**Reading the output:** `earliest_pw` is `12345678` and `latest_pw` is `rock`; the real first and last attempts by time. `first_pw` (`anthony`) and `last_pw` (`flyers`) are neither of those. `first()` and `last()` follow the order events arrive in the pipeline, which is **not** guaranteed to be time order. Use `earliest()` and `latest()` whenever you mean "by time".
 
 **8b. Running counts and totals per event**
 
@@ -228,7 +228,7 @@ index=botsv1 sourcetype="stream:http" src_ip="23.22.63.114" http_method=POST for
 index=botsv1 sourcetype="stream:http" src_ip="23.22.63.114" http_method=POST form_data="*username*passwd*" | rex field=form_data "passwd=(?<pw>[^&]+)" | sort 0 _time | streamstats count AS attempt_no | eventstats count AS total | where attempt_no<=3 | table _time pw attempt_no total
 ```
 
-**Reading the output:** `streamstats` adds a running number in event order (1, 2, 3...). `eventstats` adds the overall total (412) to every single event without collapsing them into a table. The three earliest attempts here are 6 to 15 milliseconds apart — machine speed, not a human typing.
+**Reading the output:** `streamstats` adds a running number in event order (1, 2, 3...). `eventstats` adds the overall total (412) to every single event without collapsing them into a table. The three earliest attempts here are 6 to 15 milliseconds apart; machine speed, not a human typing.
 
 **8c. Duration between events**
 
@@ -236,7 +236,7 @@ index=botsv1 sourcetype="stream:http" src_ip="23.22.63.114" http_method=POST for
 index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*" | rex field=form_data "passwd=(?<Password>[^&]+)" | search Password=batman | transaction Password | table _time duration eventcount Password
 ```
 
-**Reading the output:** `duration` is 92.169084 seconds across 2 events. `transaction` is convenient, but slow at scale. For large data, compute the same value with `stats min(_time) max(_time)` and subtract — it is the method used throughout Part 2.
+**Reading the output:** `duration` is 92.169084 seconds across 2 events. `transaction` is convenient, but slow at scale. For large data, compute the same value with `stats min(_time) max(_time)` and subtract; it is the method used throughout Part 2.
 
 > **Try it:** What was the 3rd password the brute-forcer tried?
 >
@@ -256,13 +256,13 @@ index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*pass
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | chart count over src_ip by http_method
 ```
 
-**Reading the output:** `40.80.148.42` is the only source using `CONNECT`, `OPTIONS`, `PROPFIND` and `TRACE` — the footprint of an automated scanner, not a human browsing the site. The `NULL` column counts events with no method at all.
+**Reading the output:** `40.80.148.42` is the only source using `CONNECT`, `OPTIONS`, `PROPFIND` and `TRACE`; the footprint of an automated scanner, not a human browsing the site. The `NULL` column counts events with no method at all.
 
 ```spl
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" earliest="08/10/2016:21:30:00" latest="08/10/2016:22:30:00" | timechart span=15m count by src_ip limit=5
 ```
 
-**Reading the output:** `23.22.63.114` is silent in the 21:30 bucket, spikes to 1,295 events in the 21:45 bucket (a brute force in progress), then drops to 39 and 96. `40.80.148.42` stays steady at several thousand per bucket the entire time — consistent with a scanner that doesn't care what time it is.
+**Reading the output:** `23.22.63.114` is silent in the 21:30 bucket, spikes to 1,295 events in the 21:45 bucket (a brute force in progress), then drops to 39 and 96. `40.80.148.42` stays steady at several thousand per bucket the entire time; consistent with a scanner that doesn't care what time it is.
 
 ### Lesson 10: top and rare
 
@@ -272,7 +272,7 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" earliest="08/10/2
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | top limit=1 uri_path by src_ip
 ```
 
-**Reading the output:** each source has a distinct signature. `23.22.63.114` hits `/joomla/administrator/index.php` in 86.43 percent of its requests — the admin login page. `40.80.148.42` hits `/joomla/index.php/component/search/` in 79.38 percent — scanner probes against the search form.
+**Reading the output:** each source has a distinct signature. `23.22.63.114` hits `/joomla/administrator/index.php` in 86.43 percent of its requests; the admin login page. `40.80.148.42` hits `/joomla/index.php/component/search/` in 79.38 percent; scanner probes against the search form.
 
 ```spl
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | rare limit=3 http_method
@@ -300,7 +300,7 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" earliest="08/10/2
 
 **Goal:** group continuous values into fixed-size buckets before counting them.
 
-**Concept:** `bin` replaces a value with the label of its bucket. It counts nothing on its own — always follow it with `stats`.
+**Concept:** `bin` replaces a value with the label of its bucket. It counts nothing on its own; always follow it with `stats`.
 
 ```spl
 index=botsv1 sourcetype="stream:http" src_ip="23.22.63.114" http_method=POST form_data="*username*passwd*" | bin span=1m _time | stats count BY _time
@@ -334,9 +334,9 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | bin bytes span=
 index=botsv1 sourcetype="stream:http" earliest=-24h | stats count
 ```
 
-**Reading the output:** zero events, and the reason is visible in the status line: the computed window is 10/17/26 to 1/19/38 — "yesterday to the far future" relative to *today*, which contains no 2016 events at all. Setting only `earliest` leaves `latest` open-ended at "now". If a search on historical data returns zero, check the time range before anything else.
+**Reading the output:** zero events, and the reason is visible in the status line: the computed window is 10/17/26 to 1/19/38; "yesterday to the far future" relative to *today*, which contains no 2016 events at all. Setting only `earliest` leaves `latest` open-ended at "now". If a search on historical data returns zero, check the time range before anything else.
 
-> `-1h` subtracts an hour. `-1h@h` subtracts an hour, then **snaps** to the start of that hour. In both time modifiers and `span=`, `m` means minutes and `mon` means months — easy to confuse under pressure.
+> `-1h` subtracts an hour. `-1h@h` subtracts an hour, then **snaps** to the start of that hour. In both time modifiers and `span=`, `m` means minutes and `mon` means months; easy to confuse under pressure.
 
 ### Lesson 14: Time functions in eval
 
@@ -350,10 +350,10 @@ index=botsv1 sourcetype="stream:http" src_ip="23.22.63.114" http_method=POST for
 
 | Function | Result here |
 |---|---|
-| `strftime(_time, fmt)` | `Aug 10, 09:46 PM` — epoch to readable text |
-| `strptime(text, fmt)` | `1470865521` — text to epoch |
-| `relative_time(_time, "@h")` | `2016-08-10 21:00:00` — snapped to the hour |
-| `relative_time(_time, "-1d@d")` | `2016-08-09 00:00:00` — start of the previous day |
+| `strftime(_time, fmt)` | `Aug 10, 09:46 PM`; epoch to readable text |
+| `strptime(text, fmt)` | `1470865521`; text to epoch |
+| `relative_time(_time, "@h")` | `2016-08-10 21:00:00`; snapped to the hour |
+| `relative_time(_time, "-1d@d")` | `2016-08-09 00:00:00`; start of the previous day |
 | `now()` minus `_time` | 3,721 days since the event |
 
 Rule: do arithmetic on `_time` while it is still numeric, and apply `strftime` only at the very end, since it returns text that can no longer be subtracted or compared numerically.
@@ -370,7 +370,7 @@ Rule: do arithmetic on `_time` while it is still numeric, and apply `strftime` o
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | eval class=case(status>=500,"5xx server error",status>=400,"4xx client error",status>=300,"3xx redirect",status>=200,"2xx ok",1=1,"other") | stats count BY class | sort - count
 ```
 
-**Reading the output:** `case` stops at the first true condition, so list the most specific tests first and `1=1` last as the catch-all default. 3xx redirects are the largest class here (11,473). The 42 events in `other` have **no** `status` field at all — a missing field makes every single comparison false, so they fall through to the default.
+**Reading the output:** `case` stops at the first true condition, so list the most specific tests first and `1=1` last as the catch-all default. 3xx redirects are the largest class here (11,473). The 42 events in `other` have **no** `status` field at all; a missing field makes every single comparison false, so they fall through to the default.
 
 **15b. coalesce: fill a missing value**
 
@@ -378,7 +378,7 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | eval class=case
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" http_method=POST | eval ref=coalesce(http_referrer,"(none)") | stats count BY ref | sort - count | head 8
 ```
 
-**Reading the output:** `coalesce` returns the first non-null argument, so missing referrers display as `(none)` (6,442 events) instead of silently vanishing from the table. One referrer stands out: a URL containing `component=com_extplorer&tmpl=component`, appearing 16 times. Joomla's extplorer component is a file manager — a possible route for uploading a file. That's a lead worth chasing, not a conclusion on its own.
+**Reading the output:** `coalesce` returns the first non-null argument, so missing referrers display as `(none)` (6,442 events) instead of silently vanishing from the table. One referrer stands out: a URL containing `component=com_extplorer&tmpl=component`, appearing 16 times. Joomla's extplorer component is a file manager; a possible route for uploading a file. That's a lead worth chasing, not a conclusion on its own.
 
 **15c. Concatenation, arithmetic, if, upper**
 
@@ -432,7 +432,7 @@ The pattern is `passwd=(?<pw>[^&]+)`.
 | `(?<pw> ... )` | capture group, saved as the field `pw` |
 | `[^&]+` | one or more characters that are not `&` |
 
-`[^&]+` is safer than `\w+`, which stops at the first symbol and would truncate a password such as `p@ss!`. Use **one `rex` per field** — the position of `passwd` inside the body varies from request to request, so you cannot assume a fixed offset.
+`[^&]+` is safer than `\w+`, which stops at the first symbol and would truncate a password such as `p@ss!`. Use **one `rex` per field**; the position of `passwd` inside the body varies from request to request, so you cannot assume a fixed offset.
 
 **16c. Filter with where**
 
@@ -440,7 +440,7 @@ The pattern is `passwd=(?<pw>[^&]+)`.
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" http_method=POST form_data="*username*passwd*" | rex field=form_data "username=(?<user>[^&]+)" | rex field=form_data "passwd=(?<pw>[^&]+)" | where len(pw)=6 AND user="admin" | stats count dc(pw) AS distinct_pw BY src_ip
 ```
 
-**Reading the output:** 214 attempts, 213 from `23.22.63.114` and 1 from `40.80.148.42`. `where len(pw)=6` calls a function — something `search` by itself cannot do.
+**Reading the output:** 214 attempts, 213 from `23.22.63.114` and 1 from `40.80.148.42`. `where len(pw)=6` calls a function; something `search` by itself cannot do.
 
 **16d. Filter with regex**
 
@@ -466,7 +466,7 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" http_method=POST 
 
 > **Try it:** Which six-character password in the brute-force list is a Coldplay song?
 >
-> **Answer:** `yellow` — see the full walkthrough in Part 2.
+> **Answer:** `yellow`; see the full walkthrough in Part 2.
 
 ## Part 9: Geography and visualization prep
 
@@ -496,7 +496,7 @@ index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | iplocation src_
 index=botsv1 sourcetype="stream:http" dest_ip="192.168.250.70" | stats count BY src_ip | iplocation src_ip | geom geo_countries featureIdField=Country | eval geom_len=len(geom) | table src_ip Country count geom_len
 ```
 
-**Reading the output:** `geom` adds the country outline as GeoJSON — here 90,644 characters long for the United States. Never put that field directly into a `table`; it's meant for the map visualization, not for reading. The private IP has no `Country`, so it gets no `geom` either.
+**Reading the output:** `geom` adds the country outline as GeoJSON; here 90,644 characters long for the United States. Never put that field directly into a `table`; it's meant for the map visualization, not for reading. The private IP has no `Country`, so it gets no `geom` either.
 
 **17d. gauge**
 
@@ -524,7 +524,7 @@ index=botsv1 imreallynotbatman.com | stats count BY src_ip | sort - count | head
 index=botsv1 sourcetype="stream:http" src_headers="*Acunetix*" | stats count BY src_ip | sort - count
 ```
 
-All 15,895 requests carrying Acunetix headers come from one source. The scanner announces itself in its own request headers — the cheapest, highest-confidence detection in this entire dataset.
+All 15,895 requests carrying Acunetix headers come from one source. The scanner announces itself in its own request headers; the cheapest, highest-confidence detection in this entire dataset.
 
 ### Step 3: Who is guessing passwords?
 
@@ -556,11 +556,11 @@ A successful guess gets *submitted again* by whoever uses it, so look for the pa
 index=botsv1 sourcetype="stream:http" http_method=POST form_data="*username*passwd*" | rex field=form_data "passwd=(?<Password>[^&]+)" | stats count values(src_ip) AS src_ips BY Password | sort - count | head 5
 ```
 
-`batman` is the only password with two submissions, from two different IPs. It was tried by the brute-forcer and then used from the scanner's address — the attacker found the password with one host and logged in from another.
+`batman` is the only password with two submissions, from two different IPs. It was tried by the brute-forcer and then used from the scanner's address; the attacker found the password with one host and logged in from another.
 
 ### Step 7: How long between discovery and login?
 
-92.17 seconds between the two `batman` submissions — about a minute and a half, consistent with someone reading the brute-force output and then logging in by hand.
+92.17 seconds between the two `batman` submissions; about a minute and a half, consistent with someone reading the brute-force output and then logging in by hand.
 
 ### Step 8: How big was the attack?
 
@@ -582,7 +582,7 @@ index=botsv1 sourcetype=fgt_utm "192.168.250.70" NOT dest="192.168.250.70" categ
 
 The web server fetched a defacement image from the attacker's own host, three times. A web server that *initiates* outbound connections to a site the firewall already classes as malicious is a strong signal on its own.
 
-**What this miniature investigation shows:** a scanner found the site, a second host brute-forced the admin login, the scanner host then logged in with the guessed password, a binary ran on the server, and the server pulled a defacement image from the attacker. Every one of those five steps, with the full evidence, query breakdowns, timeline, indicators of compromise, ATT&CK mapping and detection logic, is written up in full in [Part 2: BOTSv1 — Web Site Defacement (Po1s0n1vy)](/posts/botsv1-poisonivy-defacement-investigation).
+**What this miniature investigation shows:** a scanner found the site, a second host brute-forced the admin login, the scanner host then logged in with the guessed password, a binary ran on the server, and the server pulled a defacement image from the attacker. Every one of those five steps, with the full evidence, query breakdowns, timeline, indicators of compromise, ATT&CK mapping and detection logic, is written up in full in [Part 2: BOTSv1; Web Site Defacement (Po1s0n1vy)](/posts/botsv1-poisonivy-defacement-investigation).
 
 ### Try it yourself
 
@@ -668,7 +668,7 @@ Run the queries from the lessons above, or write your own, then check the answer
 > Answer: the 21:45 bucket, with 1,295 events (Lesson 9).
 
 > **8. What does the most requested path tell you about each source?**
-> Answer: `23.22.63.114` mostly hits the admin login (86.43 percent). `40.80.148.42` mostly hits the search component (79.38 percent) — a scanner pattern. `192.168.2.50` requests `/` (48.13 percent) (Lesson 10).
+> Answer: `23.22.63.114` mostly hits the admin login (86.43 percent). `40.80.148.42` mostly hits the search component (79.38 percent); a scanner pattern. `192.168.2.50` requests `/` (48.13 percent) (Lesson 10).
 
 > **9. How many numeric-only passwords were tried?**
 > Answer: 33 (Lesson 16).
@@ -680,4 +680,4 @@ Run the queries from the lessons above, or write your own, then check the answer
 
 - Read [Part 2](/posts/botsv1-poisonivy-defacement-investigation) for the full investigation report: every question, every piece of evidence, the consolidated timeline, indicators of compromise, MITRE ATT&CK mapping, and draft detection logic.
 - Try the same Part 10 pattern against the Cerber ransomware scenario elsewhere in BOTSv1 (DNS, registry and Sysmon data).
-- Not covered here: `spath`, `mvexpand`, `join`, `append`, `xyseries`, data models and accelerated searches — all reasonable next steps once the fundamentals above are solid.
+- Not covered here: `spath`, `mvexpand`, `join`, `append`, `xyseries`, data models and accelerated searches; all reasonable next steps once the fundamentals above are solid.

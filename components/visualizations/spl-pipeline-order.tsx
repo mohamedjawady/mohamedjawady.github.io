@@ -32,7 +32,7 @@ const stages: PipelineStageInfo[] = [
     runsOn: "Indexers (distributed)",
     fieldsNote: "Full raw event + every indexed and extracted field",
     detail:
-      "Everything before the first pipe is retrieval, not transformation. Splunk uses index, sourcetype, and the time range to decide which buckets and .tsidx files to even open, then applies the remaining field=value terms as it reads events off disk. This is why a vague base search (no index, no sourcetype, no time bound) is slow: it has to open far more data before it can discard any of it. Nothing here can be undone later — an event excluded by the base search never exists for the rest of the pipeline.",
+      "Everything before the first pipe is retrieval, not transformation. Splunk uses index, sourcetype, and the time range to decide which buckets and .tsidx files to even open, then applies the remaining field=value terms as it reads events off disk. This is why a vague base search (no index, no sourcetype, no time bound) is slow: it has to open far more data before it can discard any of it. Nothing here can be undone later; an event excluded by the base search never exists for the rest of the pipeline.",
     fieldsBefore: [],
     fieldsAfter: ["_time", "_raw", "host", "source", "sourcetype", "src_ip", "dest_ip", "http_method", "uri_path", "status", "form_data", "…every other extracted field"],
   },
@@ -45,9 +45,9 @@ const stages: PipelineStageInfo[] = [
     bgClass: "bg-emerald-50 dark:bg-emerald-950/20",
     borderClass: "border-emerald-300 dark:border-emerald-700",
     runsOn: "Search head (streaming, event-by-event)",
-    fieldsNote: "Still every field — these only add, filter, or reorder events",
+    fieldsNote: "Still every field; these only add, filter, or reorder events",
     detail:
-      "eval, rex, where, search, sort, dedup, fields, and rename are non-transforming: each one looks at one event at a time (or, for sort/dedup, the whole set) and passes events through, not a summary. rex and eval can only ADD fields, never remove the ones already there. This is also the \"streaming\" phase: on a distributed deployment, commands like eval, where, and rex can run partly on the indexers themselves, before results even reach the search head, which is a major reason they're cheap. dedup and sort are not streaming — they need to see every event at once, so they must run on the search head.",
+      "eval, rex, where, search, sort, dedup, fields, and rename are non-transforming: each one looks at one event at a time (or, for sort/dedup, the whole set) and passes events through, not a summary. rex and eval can only ADD fields, never remove the ones already there. This is also the \"streaming\" phase: on a distributed deployment, commands like eval, where, and rex can run partly on the indexers themselves, before results even reach the search head, which is a major reason they're cheap. dedup and sort are not streaming: they need to see every event at once, so they must run on the search head.",
     fieldsBefore: ["_time", "_raw", "src_ip", "dest_ip", "http_method", "form_data", "bytes", "…"],
     fieldsAfter: ["_time", "_raw", "src_ip", "dest_ip", "http_method", "form_data", "bytes", "pw", "kb", "…"],
   },
@@ -62,7 +62,7 @@ const stages: PipelineStageInfo[] = [
     runsOn: "Search head (collapses the event stream)",
     fieldsNote: "Only the fields this command explicitly names survive",
     detail:
-      "stats, chart, timechart, top, rare, and table are transforming: they replace the event stream with a results table containing only the fields they were told to produce. This is the single most common source of \"my field disappeared\" bugs. _raw, _time (unless grouped on), and every extracted field not named in the BY clause or the function list are gone the instant this command runs — not hidden, gone. There is no command that restores them afterward; the only fix is to capture what you need (with eval, or by naming it in BY) before this stage runs.",
+      "stats, chart, timechart, top, rare, and table are transforming: they replace the event stream with a results table containing only the fields they were told to produce. This is the single most common source of \"my field disappeared\" bugs. _raw, _time (unless grouped on), and every extracted field not named in the BY clause or the function list are gone the instant this command runs: not hidden, gone. There is no command that restores them afterward; the only fix is to capture what you need (with eval, or by naming it in BY) before this stage runs.",
     fieldsBefore: ["_time", "_raw", "src_ip", "dest_ip", "http_method", "form_data", "bytes", "pw", "kb", "…"],
     fieldsAfter: ["http_method", "count", "distinct_src"],
   },
@@ -77,7 +77,7 @@ const stages: PipelineStageInfo[] = [
     runsOn: "Search head, on the collapsed table",
     fieldsNote: "Operates only on the transforming command's output fields",
     detail:
-      "Once a transforming command has run, every later command — even a non-transforming one like rename, sort, or fieldformat — only has the reduced field set to work with. This is why \"rename field X, then where field=X\" fails silently after a stats: the rename already happened, but if X was never in the stats output in the first place, there was nothing to rename, and no error is raised. Always ask \"did the last transforming command keep this field?\" before debugging anything downstream of one.",
+      "Once a transforming command has run, every later command, even a non-transforming one like rename, sort, or fieldformat, only has the reduced field set to work with. This is why \"rename field X, then where field=X\" fails silently after a stats: the rename already happened, but if X was never in the stats output in the first place, there was nothing to rename, and no error is raised. Always ask \"did the last transforming command keep this field?\" before debugging anything downstream of one.",
     fieldsBefore: ["http_method", "count", "distinct_src"],
     fieldsAfter: ["http_method", "count", "Unique Sources"],
   },
@@ -147,7 +147,7 @@ export function SplPipelineOrder() {
                       <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Fields going in</div>
                       <div className="flex flex-wrap gap-1.5">
                         {activeStage.fieldsBefore.length === 0 ? (
-                          <span className="text-xs text-muted-foreground italic">(nothing yet — this is the start)</span>
+                          <span className="text-xs text-muted-foreground italic">(nothing yet, this is the start)</span>
                         ) : (
                           activeStage.fieldsBefore.map((f) => (
                             <Badge key={f} variant="outline" className="text-xs font-mono">
@@ -180,7 +180,7 @@ export function SplPipelineOrder() {
               <p className="text-sm leading-relaxed">
                 Retrieval happens once, at the base search. Non-transforming commands only ever add to or filter what
                 came out of retrieval. The moment a transforming command runs, the field set resets to exactly what
-                that command named — and every command after it inherits that smaller set, forever. Debugging a search
+                that command named, and every command after it inherits that smaller set, forever. Debugging a search
                 is almost always a matter of finding which side of that line a missing field fell on.
               </p>
             </div>

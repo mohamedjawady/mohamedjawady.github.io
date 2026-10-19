@@ -227,6 +227,18 @@ export interface Filter {
 export function applyFilters(rows: Row[], filters: Filter[]): Row[] {
   return rows.filter((r) =>
     filters.every((f) => {
+      // field === "*" is a bare keyword term (no field name given at all), matched
+      // the way Splunk's free-text search works: against every field's value, not
+      // just one named field. value === "*" is the unrelated, narrower "field=*"
+      // syntax meaning "this one named field has any non-empty value".
+      if (f.field === "*") {
+        const hit = Object.values(r).some((v) => String(v).toLowerCase().includes(f.value.toLowerCase()))
+        return f.op === "=" ? hit : !hit
+      }
+      if (f.value === "*") {
+        const present = r[f.field] !== undefined && r[f.field] !== ""
+        return f.op === "=" ? present : !present
+      }
       const matches = String(r[f.field]) === f.value
       return f.op === "=" ? matches : !matches
     }),
@@ -234,7 +246,7 @@ export function applyFilters(rows: Row[], filters: Filter[]): Row[] {
 }
 
 export function filtersToSpl(filters: Filter[]): string {
-  return filters.map((f) => `${f.field}${f.op}${f.value}`).join(" ")
+  return filters.map((f) => (f.field === "*" ? `"${f.value}"` : `${f.field}${f.op}${f.value}`)).join(" ")
 }
 
 // ---------------------------------------------------------------------------
@@ -318,8 +330,7 @@ export type StageType =
 
 // A handful of tiny built-in lookup tables, standing in for the CSV lookups
 // real Splunk reads from disk (e.g. the tutorial's `coldplay.csv`). Used by
-// both the `lookup` stage (join onto existing results) and the freeform
-// parser's explanation of why `inputlookup` isn't supported as a source.
+// the `lookup` stage to join onto existing results.
 export interface LookupTable {
   columns: string[]
   rows: Row[]
@@ -912,23 +923,8 @@ export function applyStage(type: StageType, config: any, rows: Row[]): ApplyResu
       return { rows: rows.slice(0, Math.max(0, Number(config.n) || 0)) }
     case "reverse":
       return { rows: [...rows].reverse() }
-    case "search": {
-      const filters: Filter[] = config.filters
-      return {
-        rows: rows.filter((r) =>
-          filters.every((f) => {
-            // `field=*` is Splunk's wildcard-presence check: "this field exists
-            // and is non-empty", not a literal match against the string "*".
-            if (f.value === "*") {
-              const present = r[f.field] !== undefined && r[f.field] !== ""
-              return f.op === "=" ? present : !present
-            }
-            const matches = String(r[f.field]) === f.value
-            return f.op === "=" ? matches : !matches
-          }),
-        ),
-      }
-    }
+    case "search":
+      return { rows: applyFilters(rows, config.filters) }
     case "where":
       return { rows: rows.filter((r) => evalWhereExpr(config.expr, r)) }
     case "rex": {
@@ -1394,7 +1390,9 @@ function referencedFields(type: StageType, config: any): string[] {
     case "lookup":
       return [config.matchField]
     case "search":
-      return (config.filters ?? []).map((f: Filter) => f.field)
+      // "*" is the bare-keyword sentinel (matched against every field), never
+      // an actual field name, so it must never be treated as a stale reference.
+      return (config.filters ?? []).map((f: Filter) => f.field).filter((f: string) => f !== "*")
     case "stats":
     case "streamstats":
     case "eventstats":
@@ -1768,7 +1766,13 @@ function parseSearchFilters(args: string): { filters: Filter[]; issues: string[]
     if (!term) continue
     const m = term.match(/^(NOT\s+)?([A-Za-z_][\w.]*)\s*(!=|=)\s*(.+)$/i)
     if (!m) {
-      issues.push(`Couldn't parse "${term}" in "| search" -- only ANDed field=value terms (including field=* for "has a value") are supported.`)
+      if (/^\(|\)$/.test(term) || term.toUpperCase() === "OR") {
+        issues.push(`Grouping and OR in "| search" ("${term}") aren't supported here; only ANDed field=value terms are applied.`)
+        continue
+      }
+      const notPrefix = /^NOT\s+/i.test(term)
+      const value = term.replace(/^NOT\s+/i, "").replace(/^"(.*)"$/, "$1")
+      filters.push({ field: "*", op: notPrefix ? "!=" : "=", value })
       continue
     }
     const [, notPrefix, field, opRaw, rawValue] = m
@@ -1977,9 +1981,9 @@ export function parseSplQuery(text: string, dataset: Dataset): ParsedQuery {
   // A leading `|` (e.g. starting straight with `| stats ...`) just means "no
   // base-search filters, pipe the whole dataset in" -- segments[0] is simply
   // empty in that case, which tokenizeTerms turns into zero filters below. A
-  // genuinely unsupported generating command (tstats, inputlookup, ...) as
-  // that first command is instead caught later, by the same "isn't a command
-  // this simulator implements" check every other pipeline stage goes through.
+  // generating command this simulator doesn't support as the first command is
+  // instead caught later, by the same "isn't a command this simulator
+  // implements" check every other pipeline stage goes through.
   const commandSegments = segments.slice(1)
   const baseSearch = segments[0] ?? ""
   {
@@ -1989,9 +1993,13 @@ export function parseSplQuery(text: string, dataset: Dataset): ParsedQuery {
       if (!m) {
         if (/^\(|\)$/.test(term) || term.toUpperCase() === "OR") {
           issues.push(`Grouping and OR in the base search ("${term}") aren't supported here; only ANDed field=value terms are applied.`)
-        } else {
-          issues.push(`Keyword term "${term}" was ignored; this simulator only matches field=value, not free text.`)
+          continue
         }
+        // A bare keyword (quoted or not, no field=value shape): Splunk's
+        // free-text search, matched here against every field's value.
+        const notPrefix = /^NOT\s+/i.test(term)
+        const value = term.replace(/^NOT\s+/i, "").replace(/^"(.*)"$/, "$1")
+        filters.push({ field: "*", op: notPrefix ? "!=" : "=", value })
         continue
       }
       const [, notPrefix, field, opRaw, rawValue] = m
@@ -2018,13 +2026,6 @@ export function parseSplQuery(text: string, dataset: Dataset): ParsedQuery {
     if (!m) continue
     const cmd = m[1].toLowerCase()
     const args = m[2].trim()
-
-    if (cmd === "inputlookup") {
-      issues.push(
-        `"inputlookup" starts a brand new search from a lookup table instead of an index, which this simulator doesn't support; it always starts from the dataset picked above. Use "lookup" instead to enrich existing results from a table (available: ${Object.keys(LOOKUP_TABLES).join(", ")}).`,
-      )
-      continue
-    }
 
     const parser = COMMAND_PARSERS[cmd]
     if (!parser) {

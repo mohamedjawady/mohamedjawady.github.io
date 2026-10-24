@@ -1,0 +1,135 @@
+---
+title: "How EDR Actually Works: ETW, Kernel Callbacks, and the Telemetry Pipeline"
+description: "What an EDR agent actually sees, where its sensors physically sit in the OS, and why usermode hooks, ETW, and kernel callbacks each fail differently. A defender's-side look at the same ground this site's Windows Protected Processes series covers from the attacker's side."
+date: "2026-10-24"
+author: "Mohamed Habib Jaouadi"
+tags: ["edr", "windows-internals", "etw", "detection-engineering", "soc", "evasion", "sysmon"]
+banner: "/banners/posts/edr-telemetry.jpg"
+bannerAlt: "A security camera on a pole, dramatically lit against a pure black night sky"
+visibility: "public"
+---
+
+Every EDR vendor's marketing says roughly the same thing: "full visibility into process, file, network, and registry activity." What that visibility actually *is*, mechanically, is almost never explained, and it matters, because the three places a sensor can physically sit in Windows have three different threat models, three different failure modes, and three different techniques that defeat them. If you write detections, you need to know which layer your log source comes from. If you investigate incidents, you need to know what a gap in that log source does and doesn't prove. This post is the mechanics: what's actually running, where, and what breaks it.
+
+It's the defender's-side companion to this site's [Windows Protected Processes series](/posts/windows-protected-processes-part1), which covers the same OS internals from the attacker's side, and to the [BYOVD investigation notes](/posts/vba-byovd-loader-chain-investigation), which is what the kernel-callback bypass described below looks like in a real intrusion.
+
+## The problem a sensor has to solve
+
+An EDR agent has to answer one question continuously, for every process on the box: what is this code doing? It cannot just scan files on disk, because the interesting behavior (process injection, credential access, lateral movement) happens in memory, in real time, and a file that's never written to disk never gets scanned at all. So the agent needs to sit somewhere in the path between "a program wants to do something" and "the OS does it", and observe the request as it passes through.
+
+There are exactly three places to put that observation point, and they correspond to three different levels of the OS stack:
+
+1. **Usermode, inside the target process itself**: patch the functions a program calls before they reach the kernel.
+2. **Event Tracing for Windows (ETW)**: subscribe to events the kernel already emits, or provider-specific instrumentation points.
+3. **The kernel itself**: register a callback that fires on specific kernel objects and operations, running with the kernel's own privilege.
+
+Every real EDR product uses a combination of all three, because each one sees something the others miss, and each one is bypassed differently. The diagram below is interactive: click through each layer for exactly what it captures, why vendors still use it despite its weaknesses, and the specific technique that defeats it.
+
+<EdrTelemetryPipeline />
+
+## Usermode hooking: the first generation, and why it's still around
+
+The oldest and still most common technique is **inline hooking**: the EDR's agent, running as a DLL loaded into every monitored process, overwrites the first few bytes of a function like `ntdll!NtCreateFile` or `ntdll!NtAllocateVirtualMemory` with a jump to its own code. The hook inspects the arguments (file path, process handle, allocation size and protection), decides whether to log, block, or pass through, then jumps back to the original function to let the real syscall happen.
+
+```cpp
+// Conceptual shape of an inline hook, not a literal vendor implementation.
+// The EDR's DLL is loaded into the target process early (via AppInit_DLLs,
+// a minifilter-driven injection, or the process creation callback below)
+// and patches the function prologue before the application's own code runs.
+
+BYTE original_bytes[5];
+BYTE jmp_to_hook[5] = { 0xE9, /* relative offset to HookedNtCreateFile */ };
+
+VOID InstallHook(PVOID target_function) {
+    memcpy(original_bytes, target_function, 5);   // save for unhooking / passthrough
+    WriteProcessMemory(GetCurrentProcess(), target_function, jmp_to_hook, 5, NULL);
+}
+
+NTSTATUS HookedNtCreateFile(/* same signature as the real NtCreateFile */) {
+    // Inspect arguments: file path, desired access, share mode...
+    LogToAgent(/* process, path, access mask */);
+    // Restore original bytes, call through, re-apply hook, return result.
+    return CallOriginal(original_bytes, /* same args */);
+}
+```
+
+This is cheap to deploy and gives the richest context of any layer, since it sees the *arguments a program actually constructed*, not just a raw syscall number. The weakness is structural, not a bug: the hook lives inside the same process, at the same privilege level, as the code it's watching. Anything with the ability to read a clean copy of `ntdll.dll` (from disk, or by mapping a fresh section) can resolve the real syscall numbers and issue the `syscall` instruction directly, skipping the hooked wrapper entirely. This is the whole premise behind the "direct syscall" technique family, Hell's Gate and its many descendants: not a kernel exploit, just reading past a usermode patch that was never going to survive contact with usermode code that knows it's there.
+
+> **Try it yourself:** this exact weakness, patching a usermode function and later detecting whether the patch is still present, is the same mechanism the [Windows Protected Processes series](/posts/windows-protected-processes-part1) walks through for PPL bypass detection, just one layer up the stack.
+
+## ETW: events from the kernel, consumed in usermode
+
+**Event Tracing for Windows** is a generic, high-performance logging framework built into the kernel: *providers* emit structured events, *sessions* buffer them, and *consumers* subscribe. It long predates EDR as a product category (it's how Performance Monitor and countless diagnostic tools work), which is exactly why it's a good sensor substrate: it's already there, already fast, and already trusted by the OS.
+
+The provider that matters most for security products is **Microsoft-Windows-Threat-Intelligence** (often called ETW-TI), introduced for Windows Defender and now consumed by most modern EDRs. Unlike a general-purpose ETW provider, it's kernel-only: there's no usermode code path that generates these events, which means there's no usermode hook to install or bypass. It exposes exactly the things a usermode hook can't safely see: remote thread creation into another process, memory protection changes (`VirtualProtect` making a region executable), and suspicious memory allocation patterns, the fingerprints of process injection and reflective loading.
+
+The defeat technique here is narrower than it sounds. The most widely documented one doesn't touch the kernel provider at all: it patches the **usermode forwarding stub**, historically `ntdll!EtwEventWrite`, so that a specific process's own calls into the ETW forwarding path become a no-op.
+
+```cpp
+// Conceptual illustration of the classic ETW patch, not weaponized code.
+// EtwEventWrite's prologue is overwritten so the function returns
+// immediately (STATUS_SUCCESS) without forwarding the event to the
+// session buffer. This silences *this process's* usermode-forwarded
+// telemetry; it does nothing to the kernel-only ETW-TI provider, which
+// never goes through this stub in the first place.
+
+BYTE patch[1] = { 0xC3 };  // RET
+WriteProcessMemory(GetCurrentProcess(), EtwEventWriteAddr, patch, 1, NULL);
+```
+
+This needs only usermode code execution in the target process, which is why it's such a common step in mature loaders: it's cheap, it's local to one process, and it specifically targets the layer that's easiest to reach. It does nothing to kernel-generated events the process never had a hand in forwarding, which is the whole reason vendors pushed ETW-TI into the kernel in the first place.
+
+## Kernel callbacks: the strongest layer, and its one real weakness
+
+The third layer is the EDR's own kernel driver, loaded at boot and registering callbacks directly against kernel objects:
+
+| API | Fires on | Typical use |
+|---|---|---|
+| `PsSetCreateProcessNotifyRoutineEx` | Process creation and exit | Build the process tree, block execution by returning a failure status |
+| `PsSetLoadImageNotifyRoutine` | DLL and driver image loads | Catch reflective loads and unsigned drivers before they finish mapping |
+| `PsSetCreateThreadNotifyRoutine` | Thread creation | Flag threads created with a remote start address (classic injection shape) |
+| `CmRegisterCallbackEx` | Registry operations | Catch persistence writes (Run keys, service creation) as they happen |
+| `ObRegisterCallbacks` | Handle operations on registered object types | Strip access rights from a handle being opened, before the open completes |
+| `FltRegisterFilter` (minifilter) | File system I/O | Scan or block file writes and renames inline |
+
+`ObRegisterCallbacks` is worth sitting with, because it's the one that turns detection into prevention. When a process calls `OpenProcess` targeting LSASS to read credentials, the EDR's callback fires *during the handle creation*, before the open returns to the caller, and can mask off `PROCESS_VM_READ` from the requested access mask. The calling process gets a handle, but one that can't actually read memory. The attempt doesn't get flagged after the fact by a log entry; it fails outright, at the API boundary, with no detection logic required downstream. This is also most of the mechanism behind [Protected Process Light](/posts/windows-protected-processes-part1) protecting LSASS by default on modern Windows, the same object-manager choke point, just enforced by the OS itself instead of a third-party driver.
+
+```c
+// Real, documented WDK signature (not hypothetical): this is what an
+// EDR's own kernel driver registers at load time.
+NTSTATUS ObRegisterCallbacks(
+    _In_  POB_CALLBACK_REGISTRATION CallbackRegistration,
+    _Out_ PVOID *RegistrationHandle
+);
+// The registration includes a PostOperation callback invoked after Windows
+// decides what access to grant and before the handle is returned to the
+// caller, which is the window where access can still be stripped.
+```
+
+This layer runs at the kernel's own privilege level, so no amount of usermode cleverness, direct syscalls included, touches it. The practical bypass needs kernel code execution, and Driver Signature Enforcement exists specifically to make that hard to get. The real-world answer to DSE is **BYOVD**: load a *legitimately signed* third-party driver that happens to expose a vulnerable IOCTL (arbitrary kernel read/write is the common shape), and use that driver's own signature to get code running in the kernel, where it can walk the kernel's internal callback list and unlink the EDR's entry directly. The [investigation notes on an obfuscated VBA macro chain](/posts/vba-byovd-loader-chain-investigation) on this site trace exactly this pattern end to end, from the initial macro to a vulnerable driver being dropped and abused.
+
+## The pipeline after the sensor
+
+Capturing an event is the easy half. What happens next determines whether it becomes a block, an alert, or nothing:
+
+1. **Local buffering and correlation.** The agent holds recent events (process tree, handle operations, loaded images) in a local ring buffer, because a single event almost never means anything alone; a `VirtualAllocEx` into a remote process is unremarkable on its own, but `VirtualAllocEx` followed by `WriteProcessMemory` followed by `CreateRemoteThread` into the same target, within milliseconds, is classic injection. This correlation has to happen locally and fast if the product wants to block in real time, which is why kernel callbacks that can return a failure status (stopping the operation before it completes) are the only layer capable of true prevention; everything ETW-sourced is necessarily after-the-fact, because the event is only emitted once the kernel operation has already happened.
+2. **Cloud correlation.** Events that aren't locally conclusive get shipped to the vendor's backend, where they're correlated against the rest of the fleet, enriched with threat intelligence, and scored by detection logic too expensive to run on every endpoint continuously. This is slower (seconds to minutes, not microseconds) but sees patterns no single machine could: the same hash appearing across a hundred hosts in an hour, for instance.
+3. **Alerting and the analyst.** What a SOC analyst sees in the console is the output of both stages, usually with the raw telemetry available for drill-down. This is also where [the gap between an event, an alert, and an incident](/posts/events-alerts-incidents-soc-filter) actually gets decided, upstream of anything an analyst does by hand.
+
+## What this means for detection engineering
+
+The practical takeaway isn't "EDR is beatable, give up." It's narrower and more useful: **every evasion technique targets one specific layer, and leaves the others intact.** A usermode direct-syscall technique defeats inline hooks but does nothing to ETW-TI or kernel callbacks. Patching `EtwEventWrite` silences usermode-forwarded ETW for one process but leaves kernel callbacks (and the kernel-only ETW-TI provider) completely unaware anything happened. Only a successful BYOVD kernel compromise threatens all three at once, and that's a far higher bar than most intrusions ever clear.
+
+| Layer | Attacker needs | Defeats | Doesn't touch |
+|---|---|---|---|
+| Usermode hooks | Usermode code execution, syscall numbers | Argument-level visibility into hooked functions | ETW-TI, kernel callbacks |
+| ETW (usermode-forwarded) | Usermode code execution in the target process | That process's own forwarded telemetry | Kernel callbacks, ETW-TI (kernel-only) |
+| Kernel callbacks / ETW-TI | Kernel code execution (typically via BYOVD) | Everything, if it succeeds | Nothing, but this is the hardest bar to clear |
+
+This is exactly why mature detection content correlates across sensor layers instead of trusting any single one, and why "the EDR didn't alert" is weak evidence of nothing having happened; it's evidence that *the specific layer the attacker targeted* didn't alert. The [Visibility for Defenders](/posts/visibility-for-defenders-collection-points-and-blind-spots) post on this site makes the same argument at the collection-strategy level: know which blind spots your sources share, because an attacker who maps your sensor stack will aim for the layer that blinds the most sources at once with the least privilege required.
+
+## Where to go next
+
+- [Windows Protected Processes](/posts/windows-protected-processes-part1): the attacker's-side mechanics of the same kernel objects (LSASS, handle access, PPL) discussed here from the defender's side.
+- [Investigation Notes: VBA Macro to BYOVD](/posts/vba-byovd-loader-chain-investigation): a real intrusion that ends exactly where this post's kernel-callback section does, a vulnerable signed driver used to blind the endpoint.
+- [Visibility for Defenders](/posts/visibility-for-defenders-collection-points-and-blind-spots): what to do once you've accepted that every sensor has a blind spot, at the collection-strategy level rather than the OS-internals level.

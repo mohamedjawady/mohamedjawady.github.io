@@ -121,7 +121,7 @@ That last detail is the whole story of AMSI's threat model. The provider DLL is 
 
 What AMSI gives you in exchange is something no kernel sensor can reconstruct: the **deobfuscated content at the moment of execution**. Four layers of base64 and string concatenation still have to be resolved before the interpreter can run them, and AMSI sees the resolved form. That is why AMSI telemetry is disproportionately valuable for hunting despite being the most fragile sensor in the stack, and why losing it is a real loss rather than a redundancy.
 
-Two detection notes. First, the registered provider list is a small, stable set on a healthy host, so enumerating it (the `reg query` above) and alerting on changes is cheap and worthwhile. Second, Defender reports its own AMSI detections as Windows Defender event IDs 1116 and 1117, which means AMSI findings reach the event log without any EDR integration at all. Red Canary's write-up on AMSI as a data source is the best practical treatment of what to do with that stream.
+Two detection notes. First, the registered provider list is a small, stable set on a healthy host, so enumerating it (the `reg query` above) and alerting on changes is cheap and worthwhile. Second, AMSI scanning is itself a telemetry source you can subscribe to directly: the `Microsoft-Antimalware-Scan-Interface` ETW provider emits event ID 1101 carrying the scanned content alongside the verdict, so the deobfuscated script text is reachable without any EDR integration at all. Astle and Graeber's write-up on AMSI as a data source is the best practical treatment of what to do with that stream.
 
 ## Layer 2: ETW, events from the kernel
 
@@ -382,7 +382,7 @@ The practical takeaway isn't "EDR is beatable, give up." It's narrower and more 
 | Surface | Attacker needs | Defeats | Doesn't touch | Detect it with |
 |---|---|---|---|---|
 | Usermode hooks | Usermode code execution in the process | Argument-level visibility into hooked functions | ETW-TI, kernel callbacks, WFP | Call stack telemetry, prologue integrity |
-| AMSI | Usermode code execution in the process | Script and assembly content inspection | Everything else | Provider enumeration, Defender 1116/1117, event gaps |
+| AMSI | Usermode code execution in the process | Script and assembly content inspection | Everything else | Provider enumeration, AMSI ETW event 1101, event gaps |
 | ETW (usermode-forwarded) | Usermode code execution in the process | That process's own forwarded telemetry | Kernel callbacks, ETW-TI | Sysmon 25, per-process volume gaps |
 | Network reporting (WFP) | Administrative rights | Delivery of telemetry to the backend | Every sensor, which all keep working | Security event 5447, agent check-in gaps |
 | Kernel callbacks / ETW-TI | Kernel code execution, typically via BYOVD | Everything, if it succeeds | Nothing, but this is the hardest bar | Sysmon 6, blocklist, HVCI, agent health |
@@ -422,12 +422,12 @@ Primary documentation:
 - Microsoft Security Blog: [Introducing Kernel Data Protection](https://www.microsoft.com/en-us/security/blog/2020/07/08/introducing-kernel-data-protection-a-new-platform-security-technology-for-preventing-data-corruption/).
 - Windows Experience Blog: [The Windows Resiliency Initiative](https://blogs.windows.com/windowsexperience/2025/06/26/the-windows-resiliency-initiative-building-resilience-for-a-future-ready-enterprise/).
 
-Research worth reading in full:
+Further reading:
 
 - Matt Hand, *Evading EDR* (No Starch Press): the book-length treatment of this entire surface, and the best single reference on ETW-TI and minifilter internals.
-- Elastic Security Labs on call stacks as a detection substrate: [Upping the Ante](https://www.elastic.co/security-labs/upping-the-ante-detecting-in-memory-threats-with-kernel-call-stacks), [Doubling Down](https://www.elastic.co/security-labs/doubling-down-etw-callstacks), and [Peeling Back the Curtain](https://www.elastic.co/security-labs/peeling-back-the-curtain-with-call-stacks).
+- Elastic Security Labs on call stacks as a detection substrate: [Upping the Ante](https://www.elastic.co/security-labs/threat-command/upping-the-ante-detecting-in-memory-threats-with-kernel-call-stacks), [Doubling Down](https://www.elastic.co/security-labs/threat-command/doubling-down-etw-callstacks), and [Peeling Back the Curtain](https://www.elastic.co/security-labs/threat-command/peeling-back-the-curtain-with-call-stacks).
 - Sophos: [Remove All The Callbacks](https://www.sophos.com/en-us/blog/blackbyte-ransomware-returns), on BlackByte's BYOVD callback removal.
-- Red Canary: [Better know a data source: Antimalware Scan Interface](https://redcanary.com/blog/threat-detection/better-know-a-data-source/amsi/).
+- Jimmy Astle and Matt Graeber: [Better know a data source: Antimalware Scan Interface](https://www.zscaler.com/blogs/cybersecurity-best-practices/amsi), originally published by Red Canary and now hosted by Zscaler.
 - Splunk Research: [Windows Filtering Platform Filter Added To Block EDR Process](https://research.splunk.com/endpoint/8bb64b2a-299e-4ddc-a7e1-037bdc5b904a/).
 - [LOLDrivers](https://www.loldrivers.io/): the live index of known-vulnerable signed drivers.
 - The [EDR Telemetry Project](https://github.com/tsale/EDR-Telemetry): a feature-by-feature comparison of what products actually collect. Its scoring methodology has drawn substantive criticism, so read it as a structured question list to put to a vendor rather than as a ranking.

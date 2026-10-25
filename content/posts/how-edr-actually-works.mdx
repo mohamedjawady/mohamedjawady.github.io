@@ -6,7 +6,7 @@ author: "Mohamed Habib Jaouadi"
 tags: ["edr", "windows-internals", "etw", "detection-engineering", "soc", "evasion", "sysmon", "byovd", "amsi"]
 banner: "/banners/posts/edr-telemetry.jpg"
 bannerAlt: "A security camera on a pole, dramatically lit against a pure black night sky"
-visibility: "public"
+visibility: "private"
 ---
 
 Every EDR vendor's marketing says roughly the same thing: "full visibility into process, file, network, and registry activity." What that visibility actually *is*, mechanically, is almost never explained, and it matters, because each place a sensor can physically sit in Windows has its own threat model, its own failure mode, and its own technique that defeats it. If you write detections, you need to know which layer your log source comes from. If you investigate incidents, you need to know what a gap in that log source does and doesn't prove. This post is the mechanics: what's actually running, where, what the documented limits are, and how to detect someone attacking each piece.

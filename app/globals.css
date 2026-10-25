@@ -344,9 +344,13 @@ button:focus-visible {
   transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* `none` rather than translateY(0): any non-none transform makes the element a
+   stacking context, which traps hover previews inside their own paragraph and
+   lets later siblings paint over them. Transitions treat none as identity, so
+   the reveal still animates. */
 .reveal-on-scroll.is-visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
 }
 
 @keyframes slide-up-reveal {
